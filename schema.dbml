@@ -1,20 +1,32 @@
-// Dental Clinic SaaS - Database Schema
+// نظام إدارة عيادات الأسنان (Multi-tenant)
+// انسخ محتوى هذا الملف والصقه مباشرة في محرر dbdiagram.io
+// أو استورده كملف .dbml
+
+Table admin_users {
+  id uuid [pk]
+  name varchar
+  email varchar [unique]
+  password_hash varchar
+  is_active boolean
+  created_at timestamp
+
+  Note: 'Super admin - خارج نطاق أي tenant تمامًا، route/guard منفصل'
+}
 
 Table tenants {
   id uuid [pk]
-  name varchar [not null]
-  subdomain varchar [unique, not null]
-  locale varchar [not null, default: 'ar', note: 'ar = افتراضي, en = ثانوي']
-  status varchar [not null, note: 'trial, active, suspended']
-  created_at timestamp [default: `now()`]
+  name varchar
+  subdomain varchar [unique]
+  locale varchar [default: 'ar', note: 'default: ar']
+  status varchar
+  created_at timestamp
 }
 
 Table subscriptions {
   id uuid [pk]
-  tenant_id uuid [not null, ref: > tenants.id]
-  plan_type varchar [not null]
-  status varchar [not null, note: 'trial, active, expired']
-  is_founding_member boolean [not null, default: false]
+  tenant_id uuid [ref: > tenants.id]
+  plan_type varchar
+  status varchar [note: 'trial, active, expired']
   start_date date
   end_date date
   marked_paid_at timestamp
@@ -23,91 +35,149 @@ Table subscriptions {
 
 Table users {
   id uuid [pk]
-  tenant_id uuid [not null, ref: > tenants.id]
-  name varchar [not null]
-  email varchar [unique, not null]
+  tenant_id uuid [ref: > tenants.id]
+  name varchar
+  email varchar [unique]
   phone varchar
-  password_hash varchar [not null]
-  role varchar [not null, note: 'owner, doctor, receptionist']
-  locale varchar [note: 'null = يرث لغة العيادة الافتراضية']
-  is_active boolean [not null, default: true]
-  created_at timestamp [default: `now()`]
+  password_hash varchar
+  role varchar [note: 'owner, doctor, receptionist']
+  locale varchar [note: 'null = يرث لغة العيادة']
+  is_active boolean
+  created_at timestamp
 }
 
 Table patients {
   id uuid [pk]
-  tenant_id uuid [not null, ref: > tenants.id]
-  full_name varchar [not null]
+  tenant_id uuid [ref: > tenants.id]
+  full_name varchar
   phone varchar
   date_of_birth date
   gender varchar
   medical_history jsonb
   notes text
-  created_at timestamp [default: `now()`]
+  created_at timestamp
+
+  indexes {
+    medical_history [type: gin, note: 'بحث داخل محتوى الـ JSON']
+  }
 }
 
 Table appointments {
   id uuid [pk]
-  tenant_id uuid [not null, ref: > tenants.id]
-  patient_id uuid [not null, ref: > patients.id]
-  doctor_id uuid [not null, ref: > users.id]
+  tenant_id uuid [ref: > tenants.id]
+  patient_id uuid [ref: > patients.id]
+  doctor_id uuid [ref: > users.id, note: 'الطبيب الذي كشف فعليًا - يُحدَّث عند تغيّر الطبيب']
   created_by uuid [ref: > users.id]
-  scheduled_at timestamp [not null]
+  scheduled_at timestamp
   duration_minutes int
-  status varchar [not null, note: 'scheduled, completed, cancelled, no_show']
+  status varchar [note: 'scheduled, completed, cancelled, no_show']
   notes text
-  created_at timestamp [default: `now()`]
+  created_at timestamp
+
+  indexes {
+    (tenant_id, patient_id) [name: 'idx_appt_tenant_patient']
+    (tenant_id, scheduled_at) [name: 'idx_appt_tenant_scheduled']
+  }
 }
 
 Table tooth_records {
   id uuid [pk]
-  tenant_id uuid [not null, ref: > tenants.id]
-  patient_id uuid [not null, ref: > patients.id]
+  tenant_id uuid [ref: > tenants.id]
+  patient_id uuid [ref: > patients.id]
   appointment_id uuid [ref: > appointments.id]
   recorded_by uuid [ref: > users.id]
-  tooth_number varchar [not null, note: 'ترقيم FDI']
-  condition varchar [not null]
+  tooth_number varchar [note: 'FDI, 11-48']
+  condition varchar [note: 'healthy, decayed, filled, missing, crown, root_canal, needs_extraction, impacted']
   treatment_status varchar [note: 'planned, in_progress, completed']
   notes text
-  created_at timestamp [default: `now()`]
+  created_at timestamp
+
+  indexes {
+    (tenant_id, patient_id, tooth_number) [name: 'idx_tooth_tenant_patient_number']
+    (tenant_id, patient_id, created_at) [name: 'idx_tooth_tenant_patient_created']
+  }
+
+  Note: 'جدول تاريخي - لا يوجد unique constraint على (patient_id, tooth_number) عمدًا'
 }
 
 Table services {
   id uuid [pk]
-  tenant_id uuid [not null, ref: > tenants.id]
-  name_ar varchar [not null]
+  tenant_id uuid [ref: > tenants.id]
+  name_ar varchar
   name_en varchar
   default_price decimal
-  is_active boolean [not null, default: true]
+  is_active boolean
+  is_other boolean [note: 'true فقط لصف (أخرى/Other) الثابت']
 }
 
 Table invoices {
   id uuid [pk]
-  tenant_id uuid [not null, ref: > tenants.id]
-  patient_id uuid [not null, ref: > patients.id]
+  tenant_id uuid [ref: > tenants.id]
+  patient_id uuid [ref: > patients.id]
   appointment_id uuid [ref: > appointments.id]
   created_by uuid [ref: > users.id]
-  total_amount decimal [not null]
-  status varchar [not null, note: 'paid, unpaid, partial']
-  created_at timestamp [default: `now()`]
+  total_amount decimal
+  status varchar [note: 'paid, unpaid, partial - يُفضَّل اشتقاقه من مجموع payments']
+  created_at timestamp
+
+  indexes {
+    (tenant_id, patient_id) [name: 'idx_invoices_tenant_patient']
+  }
 }
 
 Table invoice_items {
   id uuid [pk]
-  invoice_id uuid [not null, ref: > invoices.id]
-  service_id uuid [ref: > services.id]
-  description varchar
-  price decimal [not null]
-  quantity int [not null, default: 1]
+  invoice_id uuid [ref: > invoices.id]
+  service_id uuid [ref: > services.id, not null, note: 'NOT NULL - يشير لصف Other للحالات النادرة']
+  description varchar [note: 'الوصف الفعلي - إلزامي عمليًا عند استخدام Other']
+  price decimal
+  quantity int
+}
+
+Table payments {
+  id uuid [pk]
+  tenant_id uuid [ref: > tenants.id]
+  invoice_id uuid [ref: > invoices.id]
+  amount decimal
+  paid_at timestamp
+  method varchar [note: 'cash, transfer, card...']
+  received_by uuid [ref: > users.id]
+  notes text
+
+  indexes {
+    (tenant_id, invoice_id) [name: 'idx_payments_tenant_invoice']
+  }
+}
+
+Table audit_logs {
+  id uuid [pk]
+  tenant_id uuid [ref: > tenants.id]
+  user_id uuid [ref: > users.id, note: 'nullable - لعمليات super admin']
+  action varchar [note: 'created, updated, deleted, restored']
+  auditable_type varchar [note: 'اسم الموديل']
+  auditable_id uuid [note: 'id الصف المتأثر']
+  old_values jsonb
+  new_values jsonb
+  created_at timestamp
+
+  indexes {
+    (tenant_id, auditable_type, auditable_id) [name: 'idx_audit_tenant_auditable']
+  }
+
+  Note: 'append-only - لا تعديل أو حذف على صفوفه. يُفعَّل فقط على الموديلات الحساسة عبر Trait موحّد'
 }
 
 Table xray_attachments {
   id uuid [pk]
-  tenant_id uuid [not null, ref: > tenants.id]
-  patient_id uuid [not null, ref: > patients.id]
+  tenant_id uuid [ref: > tenants.id]
+  patient_id uuid [ref: > patients.id]
   appointment_id uuid [ref: > appointments.id]
-  file_url varchar [not null]
+  file_url varchar
   file_type varchar
   uploaded_by uuid [ref: > users.id]
-  created_at timestamp [default: `now()`]
+  created_at timestamp
+
+  indexes {
+    (tenant_id, patient_id) [name: 'idx_xray_tenant_patient']
+  }
 }

@@ -32,58 +32,46 @@ Build the complete backend foundation for a multi-tenant dental clinic managemen
 - [x] `0001_01_01_000003_create_services_table.php`
 - [x] `0001_01_01_000004_create_appointments_table.php`
 - [x] `0001_01_01_000005_create_tooth_records_table.php`
+- [x] `0001_01_01_000006_create_invoices_table.php`
+- [x] `0001_01_01_000007_create_invoice_items_table.php`
+- [x] `0001_01_01_000008_create_payments_table.php`
+- [x] `0001_01_01_000009_create_xray_attachments_table.php`
+- [x] `0001_01_01_000010_create_audit_logs_table.php`
 - [x] Sanctum's `personal_access_tokens` table created via install command
+
+### Phase 3 — Eloquent Models (Complete)
+
+- [x] [app/Models/Concerns/BelongsToTenant.php](file:///d:/Backend%20Projects/Dental%20Project/dental-saas-api/app/Models/Concerns/BelongsToTenant.php)
+- [x] [app/Models/Concerns/Auditable.php](file:///d:/Backend%20Projects/Dental%20Project/dental-saas-api/app/Models/Concerns/Auditable.php)
+- [x] [app/Models/AdminUser.php](file:///d:/Backend%20Projects/Dental%20Project/dental-saas-api/app/Models/AdminUser.php)
+- [x] [app/Models/User.php](file:///d:/Backend%20Projects/Dental%20Project/dental-saas-api/app/Models/User.php)
+- [x] `app/Models/Tenant.php`
+- [x] `app/Models/Subscription.php`
+- [x] `app/Models/Patient.php`
+- [x] `app/Models/Appointment.php`
+- [x] `app/Models/ToothRecord.php`
+- [x] `app/Models/Service.php`
+- [x] `app/Models/Invoice.php`
+- [x] `app/Models/InvoiceItem.php`
+- [x] `app/Models/Payment.php`
+- [x] `app/Models/XrayAttachment.php`
+- [x] `app/Models/AuditLog.php`
+
+### Phase 4 — Middleware & Multi-Tenancy Infrastructure (Complete)
+
+- [x] [app/Http/Middleware/EnsureTenantAccess.php](file:///d:/Backend%20Projects/Dental%20Project/dental-saas-api/app/Http/Middleware/EnsureTenantAccess.php)
+- [x] [app/Http/Middleware/EnsureUserRole.php](file:///d:/Backend%20Projects/Dental%20Project/dental-saas-api/app/Http/Middleware/EnsureUserRole.php)
+- [x] [app/Http/Middleware/SetLocale.php](file:///d:/Backend%20Projects/Dental%20Project/dental-saas-api/app/Http/Middleware/SetLocale.php)
 
 ---
 
 ## Pending Work to Execute
 
-### Phase 2 — Database Migrations (Remaining)
 
-#### [NEW] `database/migrations/0001_01_01_000006_create_invoices_table.php`
-- `invoices`: UUID pk, tenant_id FK, patient_id FK, appointment_id FK nullable, created_by FK, total_amount decimal(10,2), status, created_at, updated_at
-
-#### [NEW] `database/migrations/0001_01_01_000007_create_invoice_items_table.php`
-- `invoice_items`: UUID pk, invoice_id FK, service_id FK (NOT NULL), description nullable, price decimal(10,2), quantity int, created_at, updated_at
-
-#### [NEW] `database/migrations/0001_01_01_000008_create_payments_table.php`
-- `payments`: UUID pk, tenant_id FK, invoice_id FK, amount decimal(10,2), paid_at timestamp, method, received_by FK, notes, created_at, updated_at
-
-#### [NEW] `database/migrations/0001_01_01_000009_create_xray_attachments_table.php`
-- `xray_attachments`: UUID pk, tenant_id FK, patient_id FK, appointment_id FK nullable, file_url, file_type, uploaded_by FK, created_at, updated_at
-
-#### [NEW] `database/migrations/0001_01_01_000010_create_audit_logs_table.php`
-- `audit_logs`: UUID pk, tenant_id FK, user_id FK nullable, action, auditable_type, auditable_id UUID, old_values jsonb nullable, new_values jsonb nullable, created_at, updated_at
 
 ---
 
-### Phase 3 — Eloquent Models (12 Models)
 
-#### [NEW] [app/Models/Concerns/BelongsToTenant.php](file:///d:/Backend%20Projects/Dental%20Project/dental-saas-api/app/Models/Concerns/BelongsToTenant.php)
-#### [NEW] [app/Models/Concerns/Auditable.php](file:///d:/Backend%20Projects/Dental%20Project/dental-saas-api/app/Models/Concerns/Auditable.php)
-#### [NEW] [app/Models/AdminUser.php](file:///d:/Backend%20Projects/Dental%20Project/dental-saas-api/app/Models/AdminUser.php)
-#### [MODIFY] [app/Models/User.php](file:///d:/Backend%20Projects/Dental%20Project/dental-saas-api/app/Models/User.php)
-#### [NEW] `app/Models/Tenant.php`
-#### [NEW] `app/Models/Subscription.php`
-#### [NEW] `app/Models/Patient.php`
-#### [NEW] `app/Models/Appointment.php`
-#### [NEW] `app/Models/ToothRecord.php`
-#### [NEW] `app/Models/Service.php`
-#### [NEW] `app/Models/Invoice.php`
-#### [NEW] `app/Models/InvoiceItem.php`
-#### [NEW] `app/Models/Payment.php`
-#### [NEW] `app/Models/XrayAttachment.php`
-#### [NEW] `app/Models/AuditLog.php`
-
----
-
-### Phase 4 — Middleware & Multi-Tenancy Infrastructure
-
-#### [NEW] [app/Http/Middleware/EnsureTenantAccess.php](file:///d:/Backend%20Projects/Dental%20Project/dental-saas-api/app/Http/Middleware/EnsureTenantAccess.php)
-#### [NEW] [app/Http/Middleware/EnsureUserRole.php](file:///d:/Backend%20Projects/Dental%20Project/dental-saas-api/app/Http/Middleware/EnsureUserRole.php)
-#### [NEW] [app/Http/Middleware/SetLocale.php](file:///d:/Backend%20Projects/Dental%20Project/dental-saas-api/app/Http/Middleware/SetLocale.php)
-
----
 
 ### Phase 5 — Base API Structure & Auth Endpoints
 

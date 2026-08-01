@@ -1,0 +1,51 @@
+<?php
+
+namespace App\Models;
+
+use App\Models\Concerns\BelongsToTenant;
+use Illuminate\Database\Eloquent\Concerns\HasUuids;
+use Illuminate\Database\Eloquent\Model;
+
+class Patient extends Model
+{
+    use HasUuids, BelongsToTenant;
+
+    protected $fillable = [
+        'tenant_id',
+        'full_name',
+        'phone',
+        'date_of_birth',
+        'gender',
+        'medical_history',
+        'notes',
+    ];
+
+    protected function casts(): array
+    {
+        return [
+            'date_of_birth' => 'date',
+            'medical_history' => 'array',
+        ];
+    }
+
+    // Relationships
+    public function appointments()
+    {
+        return $this->hasMany(Appointment::class);
+    }
+
+    public function toothRecords()
+    {
+        return $this->hasMany(ToothRecord::class);
+    }
+
+    public function invoices()
+    {
+        return $this->hasMany(Invoice::class);
+    }
+
+    public function xrayAttachments()
+    {
+        return $this->hasMany(XrayAttachment::class);
+    }
+}

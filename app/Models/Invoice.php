@@ -9,7 +9,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class Invoice extends Model
 {
-    use HasUuids, BelongsToTenant, Auditable;
+    use Auditable, BelongsToTenant, HasUuids;
 
     protected $fillable = [
         'tenant_id',
@@ -57,6 +57,7 @@ class Invoice extends Model
     public function getRemainingAmountAttribute()
     {
         $paid = $this->payments()->sum('amount');
+
         return $this->total_amount - $paid;
     }
 }

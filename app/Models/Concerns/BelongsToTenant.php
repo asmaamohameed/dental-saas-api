@@ -2,6 +2,7 @@
 
 namespace App\Models\Concerns;
 
+use App\Models\Tenant;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 
@@ -14,7 +15,7 @@ trait BelongsToTenant
     {
         static::addGlobalScope('tenant', function (Builder $builder) {
             if (auth()->check() && auth()->user()->tenant_id) {
-                $builder->where($builder->getModel()->getTable() . '.tenant_id', auth()->user()->tenant_id);
+                $builder->where($builder->getModel()->getTable().'.tenant_id', auth()->user()->tenant_id);
             }
         });
 
@@ -30,6 +31,6 @@ trait BelongsToTenant
      */
     public function tenant()
     {
-        return $this->belongsTo(\App\Models\Tenant::class);
+        return $this->belongsTo(Tenant::class);
     }
 }

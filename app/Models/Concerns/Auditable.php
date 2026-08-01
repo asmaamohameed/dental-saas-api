@@ -17,12 +17,12 @@ trait Auditable
         static::updated(function (Model $model) {
             $oldValues = Arr::only($model->getOriginal(), array_keys($model->getChanges()));
             $newValues = $model->getChanges();
-            
+
             // Remove timestamps if we don't care about them in audit logs
             Arr::forget($oldValues, ['updated_at']);
             Arr::forget($newValues, ['updated_at']);
-            
-            if (!empty($newValues)) {
+
+            if (! empty($newValues)) {
                 $model->logAuditAction('updated', $oldValues, $newValues);
             }
         });
@@ -35,7 +35,7 @@ trait Auditable
     protected function logAuditAction(string $action, ?array $oldValues = null, ?array $newValues = null): void
     {
         // Don't log if running from console/seeders without a user, unless we want to track system changes
-        if (!auth()->check()) {
+        if (! auth()->check()) {
             return;
         }
 

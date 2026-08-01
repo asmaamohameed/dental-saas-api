@@ -9,7 +9,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class XrayAttachment extends Model
 {
-    use HasUuids, BelongsToTenant, Auditable;
+    use Auditable, BelongsToTenant, HasUuids;
 
     protected $fillable = [
         'tenant_id',

@@ -16,11 +16,11 @@ class SetLocale
     {
         // Default to checking the Accept-Language header first
         $locale = $request->header('Accept-Language');
-        
+
         // Override with user's specific locale preference if authenticated
         if ($request->user() && $request->user()->locale) {
             $locale = $request->user()->locale;
-        } 
+        }
         // Or fallback to the tenant's default locale
         elseif ($request->user() && $request->user()->tenant_id) {
             // Avoid N+1 by checking if tenant relation is loaded, though it's typically fine for a single lookup per request.

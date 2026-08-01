@@ -15,13 +15,13 @@ class EnsureTenantAccess
     {
         $user = $request->user();
 
-        if (!$user || !$user->tenant_id) {
+        if (! $user || ! $user->tenant_id) {
             return response()->json(['message' => 'Unauthorized or missing tenant context.'], 403);
         }
 
         $tenant = $user->tenant;
-        
-        if (!$tenant || $tenant->status !== 'active') {
+
+        if (! $tenant || $tenant->status !== 'active') {
             return response()->json(['message' => 'Tenant account is inactive or suspended.'], 403);
         }
 

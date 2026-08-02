@@ -9,7 +9,6 @@ use Illuminate\Http\Resources\Json\JsonResource;
 /**
  * @mixin Tenant
  */
-
 class TenantResource extends JsonResource
 {
     public function toArray(Request $request): array

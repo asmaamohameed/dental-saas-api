@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Models\Tenant;
 use Closure;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -20,6 +21,7 @@ class EnsureTenantAccess
             return response()->json(['message' => 'Unauthorized or missing tenant context.'], 403);
         }
 
+        /** @var Tenant|null $tenant */
         $tenant = $user->tenant;
 
         if (! $tenant || $tenant->status !== 'active') {

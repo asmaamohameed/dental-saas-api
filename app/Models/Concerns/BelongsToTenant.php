@@ -5,6 +5,7 @@ namespace App\Models\Concerns;
 use App\Models\Tenant;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 trait BelongsToTenant
 {
@@ -29,7 +30,7 @@ trait BelongsToTenant
     /**
      * Get the tenant that owns the model.
      */
-    public function tenant()
+    public function tenant(): BelongsTo
     {
         return $this->belongsTo(Tenant::class);
     }

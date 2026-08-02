@@ -6,6 +6,8 @@ use App\Models\Concerns\BelongsToTenant;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
@@ -63,18 +65,23 @@ class User extends Authenticatable
     }
 
     // Relationships
-    public function appointments()
+    public function appointments(): HasMany
     {
         return $this->hasMany(Appointment::class, 'doctor_id');
     }
 
-    public function auditLogs()
+    public function auditLogs(): HasMany
     {
         return $this->hasMany(AuditLog::class);
     }
 
-    public function toothRecords()
+    public function toothRecords(): HasMany
     {
         return $this->hasMany(ToothRecord::class, 'recorded_by');
+    }
+
+    public function tenant(): BelongsTo
+    {
+        return $this->belongsTo(Tenant::class);
     }
 }

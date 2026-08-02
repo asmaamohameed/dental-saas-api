@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Models\Concerns\BelongsToTenant;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Patient extends Model
 {
@@ -29,22 +30,22 @@ class Patient extends Model
     }
 
     // Relationships
-    public function appointments()
+    public function appointments(): HasMany
     {
         return $this->hasMany(Appointment::class);
     }
 
-    public function toothRecords()
+    public function toothRecords(): HasMany
     {
         return $this->hasMany(ToothRecord::class);
     }
 
-    public function invoices()
+    public function invoices(): HasMany
     {
         return $this->hasMany(Invoice::class);
     }
 
-    public function xrayAttachments()
+    public function xrayAttachments(): HasMany
     {
         return $this->hasMany(XrayAttachment::class);
     }

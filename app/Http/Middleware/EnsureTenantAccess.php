@@ -13,6 +13,7 @@ class EnsureTenantAccess
      */
     public function handle(Request $request, Closure $next): Response
     {
+
         $user = $request->user();
 
         if (! $user || ! $user->tenant_id) {

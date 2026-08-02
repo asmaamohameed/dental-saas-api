@@ -1,50 +1,68 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Models\Concerns;
 
 use App\Models\AuditLog;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Arr;
+use Illuminate\Support\Facades\Auth;
+
 
 trait Auditable
 {
+    /**
+     * Attributes that should never be written to the audit log
+     * (secrets, tokens, or anything irrelevant to auditing).
+     */
+    protected static array $auditExcept = ['password', 'remember_token'];
+
     protected static function bootAuditable(): void
     {
-        static::created(function (Model $model) {
-            $model->logAuditAction('created', null, $model->getAttributes());
+        static::created(static function (Model $model): void {
+            $model->recordAudit('created', null, $model->getAttributes());
         });
 
-        static::updated(function (Model $model) {
-            $oldValues = Arr::only($model->getOriginal(), array_keys($model->getChanges()));
-            $newValues = $model->getChanges();
+        static::updated(static function (Model $model): void {
+            $changes = $model->getChanges();
 
-            // Remove timestamps if we don't care about them in audit logs
-            Arr::forget($oldValues, ['updated_at']);
-            Arr::forget($newValues, ['updated_at']);
+            // Timestamps (and any excluded attrs) shouldn't trigger/pollute the log.
+            Arr::forget($changes, array_merge(['updated_at'], static::$auditExcept));
 
-            if (! empty($newValues)) {
-                $model->logAuditAction('updated', $oldValues, $newValues);
+            if ($changes === []) {
+                return;
             }
+
+            $original = Arr::only($model->getOriginal(), array_keys($changes));
+
+            $model->recordAudit('updated', $original, $changes);
         });
 
-        static::deleted(function (Model $model) {
-            $model->logAuditAction('deleted', $model->getAttributes(), null);
+        static::deleted(static function (Model $model): void {
+            $model->recordAudit('deleted', $model->getAttributes(), null);
         });
     }
 
-    protected function logAuditAction(string $action, ?array $oldValues = null, ?array $newValues = null): void
+    protected function recordAudit(string $action, ?array $oldValues, ?array $newValues): void
     {
-        // Don't log if running from console/seeders without a user, unless we want to track system changes
-        if (! auth()->check()) {
+        $user = Auth::user();
+
+        // No authenticated user => console/system action. Skip explicitly
+        // rather than silently guessing at a "system" identity.
+        if (! $user) {
             return;
         }
 
-        AuditLog::create([
-            'tenant_id' => $this->tenant_id ?? (auth()->user()->tenant_id ?? null),
-            'user_id' => auth()->id(),
+        $oldValues = $oldValues ? Arr::except($oldValues, static::$auditExcept) : $oldValues;
+        $newValues = $newValues ? Arr::except($newValues, static::$auditExcept) : $newValues;
+
+        AuditLog::query()->create([
+            'tenant_id' => $this->tenant_id ?? $user->tenant_id ?? null,
+            'user_id' => $user->getAuthIdentifier(),
             'action' => $action,
-            'auditable_type' => get_class($this),
-            'auditable_id' => $this->id,
+            'auditable_type' => $this->getMorphClass(),
+            'auditable_id' => $this->getKey(),
             'old_values' => $oldValues,
             'new_values' => $newValues,
         ]);

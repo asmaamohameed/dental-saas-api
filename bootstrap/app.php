@@ -3,9 +3,17 @@
 use App\Http\Middleware\EnsureTenantAccess;
 use App\Http\Middleware\EnsureUserRole;
 use App\Http\Middleware\SetLocale;
+use Illuminate\Auth\AuthenticationException;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
+use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
+use Illuminate\Http\Request;
+use Illuminate\Http\Response;
+use Illuminate\Support\Facades\Route;
+use Illuminate\Validation\ValidationException;
+use Symfony\Component\HttpKernel\Exception\HttpException;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -28,5 +36,42 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
-        //
+        $exceptions->render(function (Throwable $e, Request $request) {
+            if ($request->is('api/*') || $request->is('admin/*') || $request->wantsJson()) {
+                $status = 500;
+                $message = 'An unexpected error occurred.';
+                $errors = null;
+
+                if ($e instanceof ValidationException) {
+                    $status = 422;
+                    $message = $e->getMessage();
+                    $errors = $e->errors();
+                } elseif ($e instanceof ModelNotFoundException) {
+                    $status = 404;
+                    $message = 'Resource not found.';
+                } elseif ($e instanceof AuthenticationException) {
+                    $status = 401;
+                    $message = 'Unauthenticated.';
+                } elseif ($e instanceof HttpException) {
+                    $status = $e->getStatusCode();
+                    $message = $e->getMessage() ?: Response::$statusTexts[$status] ?? 'HTTP Error';
+                } elseif ($e instanceof QueryException) {
+                    $status = 500;
+                    $message = 'Database error.';
+                } else {
+                    $message = config('app.debug') ? $e->getMessage() : $message;
+                }
+
+                $response = [
+                    'status' => 'error',
+                    'message' => $message,
+                ];
+
+                if (! is_null($errors)) {
+                    $response['errors'] = $errors;
+                }
+
+                return response()->json($response, $status);
+            }
+        });
     })->create();

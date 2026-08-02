@@ -1,10 +1,18 @@
 <?php
 
+use App\Http\Controllers\Admin\Auth\LoginController;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
-Route::prefix('admin')->middleware(['api'])->group(function () {
-    // Admin routes will go here
-    Route::get('/ping', function () {
-        return response()->json(['message' => 'Admin API works!']);
+Route::prefix('auth')->group(function () {
+    Route::post('login', LoginController::class);
+});
+
+Route::middleware('auth:sanctum')->group(function () {
+    Route::get('/ping', function (Request $request) {
+        return response()->json([
+            'message' => 'Admin API works!',
+            'admin' => $request->user(),
+        ]);
     });
 });

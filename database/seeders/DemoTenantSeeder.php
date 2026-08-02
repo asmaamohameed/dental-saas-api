@@ -20,19 +20,19 @@ class DemoTenantSeeder extends Seeder
     {
         // 1. Create Tenant
         $tenant = Tenant::firstOrCreate([
-            'domain' => 'smileclinic',
+            'subdomain' => 'smileclinic',
         ], [
             'name' => 'Smile Clinic',
-            'is_active' => true,
+            'status' => 'active',
         ]);
 
         // 2. Create Subscription
         Subscription::firstOrCreate([
             'tenant_id' => $tenant->id,
         ], [
-            'plan_name' => 'Premium',
-            'starts_at' => Carbon::now()->subDays(10),
-            'ends_at' => Carbon::now()->addYear(),
+            'plan_type' => 'Premium',
+            'start_date' => Carbon::now()->subDays(10)->toDateString(),
+            'end_date' => Carbon::now()->addYear()->toDateString(),
             'status' => 'active',
         ]);
 
@@ -61,11 +61,9 @@ class DemoTenantSeeder extends Seeder
 
         // 4. Create Patients
         $patient = Patient::firstOrCreate([
-            'email' => 'patient@example.com',
-        ], [
             'tenant_id' => $tenant->id,
-            'first_name' => 'Alice',
-            'last_name' => 'Johnson',
+            'full_name' => 'Alice Johnson',
+        ], [
             'phone' => '+1122334455',
             'date_of_birth' => '1990-05-15',
             'gender' => 'female',
@@ -74,12 +72,12 @@ class DemoTenantSeeder extends Seeder
 
         // 5. Create Services
         $service = Service::firstOrCreate([
-            'name' => 'Teeth Cleaning',
+            'name_ar' => 'تنظيف أسنان',
             'tenant_id' => $tenant->id,
         ], [
-            'description' => 'Standard ultrasonic cleaning and polishing',
-            'price' => 150.00,
-            'duration_minutes' => 30,
+            'name_en' => 'Teeth Cleaning',
+            'default_price' => 150.00,
+            'is_active' => true,
         ]);
 
         // 6. Create Appointment
@@ -89,6 +87,7 @@ class DemoTenantSeeder extends Seeder
             'doctor_id' => $doctor->id,
         ], [
             'scheduled_at' => Carbon::now()->addDays(2)->setHour(10)->setMinute(0)->setSecond(0),
+            'duration_minutes' => 30,
             'status' => 'scheduled',
             'notes' => 'Regular checkup and cleaning',
         ]);
@@ -99,23 +98,17 @@ class DemoTenantSeeder extends Seeder
             'patient_id' => $patient->id,
             'appointment_id' => $appointment->id,
         ], [
-            'subtotal' => 150.00,
-            'tax' => 15.00,
-            'discount' => 0.00,
-            'total' => 165.00,
+            'total_amount' => 150.00,
             'status' => 'unpaid',
-            'issued_at' => Carbon::now(),
-            'due_at' => Carbon::now()->addDays(30),
         ]);
 
         InvoiceItem::firstOrCreate([
             'invoice_id' => $invoice->id,
             'service_id' => $service->id,
         ], [
-            'description' => $service->name,
+            'description' => $service->name_en,
             'quantity' => 1,
-            'unit_price' => $service->price,
-            'total_price' => $service->price,
+            'price' => $service->default_price,
         ]);
     }
 }

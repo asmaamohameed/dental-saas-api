@@ -4,13 +4,28 @@
 > النسخة الجاهزة للاستيراد المباشر في dbdiagram.io موجودة في `/docs/schema.dbml`
 > أي تعديل مستقبلي في الجداول لازم ينعكس هنا أولاً قبل الـ migration.
 
+## سجل التعديلات (Changelog)
+
+| التاريخ | التعديل |
+|---|---|
+| هذه النسخة | إضافة `ADMIN_USERS` (super admin منفصل، route/guard مختلف عن باقي النظام) |
+| هذه النسخة | حذف `subscriptions.is_founding_member` |
+| هذه النسخة | إلغاء `PATIENT_REVIEWS` وكل ما يتعلق بها (تم التراجع عنها) |
+| هذه النسخة | إضافة `AUDIT_LOGS` (تسجيل تاريخي كامل للتعديلات على الجداول الحساسة - القيم القديمة والجديدة) |
+| هذه النسخة | إضافة `PAYMENTS` (دعم الدفع على أكثر من دفعة بمبلغ متغير) |
+| هذه النسخة | `invoice_items.service_id` أصبح `NOT NULL` - يوجد صف ثابت "أخرى/Other" في `services` يُستخدم للحالات النادرة، والوصف الفعلي يُكتب في `invoice_items.description` |
+| هذه النسخة | توضيح سياسة: `appointments.doctor_id` يُحدَّث دائمًا للدكتور الذي كشف فعليًا (وليس بالضرورة من تم الحجز معه أصلًا) |
+
 ## القرارات المعمارية المنعكسة في التصميم
 
 - **Multi-tenancy**: عزل عبر `tenant_id` في كل جدول بيانات + Laravel Global Scopes.
+- **Super Admin منفصل تمامًا عن tenants**: `ADMIN_USERS` جدول مستقل خارج نطاق أي `tenant_id`، بـ guard وroute group مختلفين تمامًا (مثال: كل الـ routes تحت `/admin/*` أو subdomain منفصل مستقبلًا)، عشان مفيش تداخل أو تسريب صلاحيات بين "مدير عيادة" و"مدير المنصة".
 - **السجل الطبي العام**: حقل مرن (`medical_history` jsonb) للملاحظات العامة والحساسية والتاريخ المرضي العام.
 - **سجل الأسنان التفصيلي (Odontogram)**: جدول تاريخي منفصل `tooth_records` - كل صف يمثل ملاحظة/إجراء على سن معين (ترقيم FDI) في زيارة معينة، يحتفظ بتاريخ العلاج الكامل مش الحالة الحالية بس.
-- **الفوترة**: هجينة - بند من قائمة أسعار ثابتة (`service_id` موجود) أو بند حر يكتبه الطبيب وقتها (`service_id` = null).
-- **علاقة الطبيب بالمريض**: غير مقيدة - أي طبيب في العيادة يقدر يشوف أي مريض. الربط بالطبيب موجود فقط على مستوى الموعد وسجل السن.
+- **الفوترة**: كل بند فاتورة مرتبط إلزاميًا بخدمة من `services` (`service_id NOT NULL`). الحالات النادرة/غير المُسعّرة مسبقًا تُسجَّل تحت خدمة ثابتة اسمها "أخرى/Other"، والوصف الفعلي للإجراء يُكتب في `invoice_items.description` - بهذا تبقى كل التقارير موحّدة بدون استثناءات على `NULL`.
+- **الدفع بأقساط متغيرة**: جدول `payments` منفصل يسجّل كل دفعة فعلية (مبلغ + تاريخ + طريقة دفع) مرتبطة بفاتورة، فيصبح `invoices.status` وحساب المتبقي قابلين للاشتقاق (computed) من مجموع الدفعات بدل تحديد يدوي جامد.
+- **Audit Log**: جدول `audit_logs` منفصل (append-only) يسجّل كل عملية إنشاء/تعديل/حذف على الجداول الحساسة (الفواتير، الدفعات، سجل الأسنان، المواعيد)، مع حفظ القيم قبل وبعد التعديل (`old_values`/`new_values` كـ jsonb) - هذا اختيار متعمد بديل عن أعمدة `created_by/updated_by` البسيطة، لأنه يوفر تاريخًا كاملاً للتغييرات وليس آخر تعديل فقط.
+- **علاقة الطبيب بالمريض**: غير مقيدة - أي طبيب في العيادة يقدر يشوف أي مريض. الربط بالطبيب موجود فقط على مستوى الموعد وسجل السن. **سياسة تشغيلية مهمة**: `appointments.doctor_id` يعكس دائمًا الطبيب الذي كشف على المريض فعليًا في الموعد، حتى لو اختلف عن الطبيب الذي تم الحجز معه أصلًا وقت إنشاء الموعد - يُحدَّث الحقل وقت/بعد الكشف الفعلي.
 - **اللغتان (عربي أساسي / إنجليزي ثانوي)**:
   - `tenants.locale` قيمته الافتراضية `ar`.
   - `users.locale` حقل اختياري يسمح لعضو فريق معين يفضّل لغة مختلفة عن لغة العيادة الافتراضية؛ لو فاضي بيرث لغة العيادة.
@@ -22,6 +37,14 @@
 
 ```mermaid
 erDiagram
+    ADMIN_USERS {
+        uuid id PK
+        string name
+        string email UK
+        string password_hash
+        boolean is_active
+        timestamp created_at
+    }
     TENANTS ||--o{ SUBSCRIPTIONS : has
     TENANTS ||--o{ USERS : employs
     TENANTS ||--o{ PATIENTS : registers
@@ -30,7 +53,9 @@ erDiagram
     TENANTS ||--o{ INVOICES : issues
     TENANTS ||--o{ XRAY_ATTACHMENTS : stores
     TENANTS ||--o{ TOOTH_RECORDS : stores
+    TENANTS ||--o{ AUDIT_LOGS : logs
     USERS ||--o{ APPOINTMENTS : "doctor of"
+    USERS ||--o{ AUDIT_LOGS : performs
     USERS ||--o{ TOOTH_RECORDS : records
     PATIENTS ||--o{ APPOINTMENTS : books
     PATIENTS ||--o{ TOOTH_RECORDS : has
@@ -40,6 +65,7 @@ erDiagram
     PATIENTS ||--o{ INVOICES : owes
     PATIENTS ||--o{ XRAY_ATTACHMENTS : has
     INVOICES ||--o{ INVOICE_ITEMS : contains
+    INVOICES ||--o{ PAYMENTS : "paid via"
     SERVICES ||--o{ INVOICE_ITEMS : "priced from"
 
     TENANTS {
@@ -55,7 +81,6 @@ erDiagram
         uuid tenant_id FK
         string plan_type
         string status
-        boolean is_founding_member
         date start_date
         date end_date
         timestamp marked_paid_at
@@ -115,6 +140,7 @@ erDiagram
         string name_en
         decimal default_price
         boolean is_active
+        boolean is_other "true فقط لصف (أخرى/Other) الثابت"
     }
     INVOICES {
         uuid id PK
@@ -129,10 +155,20 @@ erDiagram
     INVOICE_ITEMS {
         uuid id PK
         uuid invoice_id FK
-        uuid service_id FK
-        string description
+        uuid service_id FK "NOT NULL - يشير لصف Other للحالات النادرة"
+        string description "الوصف الفعلي - إلزامي عمليًا عند استخدام Other"
         decimal price
         int quantity
+    }
+    PAYMENTS {
+        uuid id PK
+        uuid tenant_id FK
+        uuid invoice_id FK
+        decimal amount
+        timestamp paid_at
+        string method
+        uuid received_by FK
+        text notes
     }
     XRAY_ATTACHMENTS {
         uuid id PK
@@ -144,6 +180,17 @@ erDiagram
         uuid uploaded_by FK
         timestamp created_at
     }
+    AUDIT_LOGS {
+        uuid id PK
+        uuid tenant_id FK
+        uuid user_id FK "nullable - لعمليات super admin"
+        string action "created, updated, deleted, restored"
+        string auditable_type "اسم الموديل"
+        uuid auditable_id "id الصف المتأثر"
+        jsonb old_values
+        jsonb new_values
+        timestamp created_at
+    }
 ```
 
 ## نسخة DBML (للاستيراد المباشر في dbdiagram.io)
@@ -153,9 +200,14 @@ erDiagram
 ## ملاحظات على الحقول
 
 - **`appointments.status`**: `scheduled`, `completed`, `cancelled`, `no_show`.
+- **`appointments.doctor_id`**: يمثّل الطبيب الذي كشف فعليًا - يُحدَّث عند تغيّر الطبيب عن الحجز الأصلي (لا يوجد عمود منفصل لـ "الطبيب المحجوز معه أصلًا" في هذه المرحلة).
 - **`subscriptions.status`**: `trial`, `active`, `expired` - يتحدث يدوياً من الـ admin dashboard الداخلي.
-- **`users.role`**: `owner`, `doctor`, `receptionist`.
-- **`invoices.status`**: `paid`, `unpaid`, `partial`.
+- **`users.role`**: `owner`, `doctor`, `receptionist` (خاص بفريق العيادة - منفصل تمامًا عن `admin_users`).
+- **`admin_users`**: لا يوجد له `tenant_id` إطلاقًا - خارج نطاق أي عيادة، ويُدار عبر route group/guard مستقل (مثال: middleware باسم `admin` منفصل عن middleware الـ tenant العادي).
+- **`invoices.status`**: `paid`, `unpaid`, `partial` - يُفضَّل أن يُشتق (computed) من مجموع `payments.amount` المرتبطة بالفاتورة بدل التحديد اليدوي.
+- **`invoice_items.service_id`**: **NOT NULL دائمًا**. للحالات النادرة/غير المُسعّرة مسبقًا، يُستخدم صف الخدمة الثابت الذي `is_other = true` (اسمه "أخرى/Other")، ويُكتب اسم/تفاصيل الإجراء الفعلي في `invoice_items.description`.
+- **`payments.amount`**: مبلغ الدفعة الفعلية (متغير من دفعة لأخرى) - مجموع كل دفعات فاتورة معينة يُقارن بـ `invoices.total_amount` لحساب المتبقي.
+- **`audit_logs`**: جدول append-only - لا يوجد تعديل أو حذف على صفوفه إطلاقًا. يُفعَّل فقط على الموديلات الحساسة (`Invoice`, `Payment`, `ToothRecord`, `Appointment`) عبر Trait موحّد، وليس على كل الجداول، تجنبًا لتضخم الجدول بلا داعٍ. `user_id` قابل لأن يكون فارغًا لتغطية عمليات تتم من طرف `admin_users`.
 - **`tooth_records.tooth_number`**: ترميز FDI (رقمين، مثال `11` إلى `48`).
 - **`tooth_records.condition`**: `healthy`, `decayed`, `filled`, `missing`, `crown`, `root_canal`, `needs_extraction`, `impacted` - تُطبَّق كـ validation rule وليس enum جامد في قاعدة البيانات.
 - **`tooth_records.treatment_status`**: `planned`, `in_progress`, `completed`.
@@ -168,6 +220,8 @@ erDiagram
 | appointments | `(tenant_id, patient_id)` | سرعة جلب سجل مواعيد مريض معين |
 | appointments | `(tenant_id, scheduled_at)` | سرعة شاشة "مواعيد اليوم" |
 | invoices | `(tenant_id, patient_id)` | سرعة جلب فواتير مريض معين |
+| payments | `(tenant_id, invoice_id)` | سرعة جمع كل الدفعات الخاصة بفاتورة معينة |
+| audit_logs | `(tenant_id, auditable_type, auditable_id)` | سرعة جلب تاريخ كل التعديلات على صف معين |
 | xray_attachments | `(tenant_id, patient_id)` | سرعة جلب أشعة مريض معين |
 | tooth_records | `(tenant_id, patient_id, tooth_number)` | سرعة جلب تاريخ سن معين لمريض معين |
 | tooth_records | `(tenant_id, patient_id, created_at)` | سرعة بناء الحالة الحالية لكل أسنان المريض |
@@ -179,3 +233,5 @@ erDiagram
 - إضافة نظام تنبيهات SMS/WhatsApp لاحقاً (جدول تذكيرات منفصل مرتبط بـ appointments).
 - تفعيل PostgreSQL Native Partitioning على `appointments` و`tooth_records` عند الحاجة.
 - إضافة Row-Level Security (RLS) كطبقة أمان ثانية عند التوسع لعدد أكبر من العيادات.
+- نظام feature-entitlement (`features`, `plan_features`, `tenant_features`) مبني فوق `subscriptions.plan_type` - إضافي بالكامل، لا يمس الجداول الحالية.
+- دعم subdomain حقيقي لكل tenant (`tenants.subdomain` جاهز فعليًا) - مؤجَّل، والتحول له لاحقًا مجرد تعديل middleware لا تعديل بيانات.

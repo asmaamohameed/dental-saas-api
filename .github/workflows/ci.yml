@@ -7,7 +7,7 @@ on:
 
 jobs:
   code-style:
-    name: "CI / Code Style (Pint)"
+    name: "Code Style (Pint)"
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -24,7 +24,7 @@ jobs:
         run: vendor/bin/pint --test
 
   static-analysis:
-    name: "CI / Static Analysis"
+    name: "Static Analysis"
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -41,7 +41,7 @@ jobs:
         run: vendor/bin/phpstan analyse --memory-limit=1G
 
   tests:
-    name: "CI / Tests (PHPUnit)"
+    name: "Tests (PHPUnit)"
     runs-on: ubuntu-latest
     services:
       postgres:

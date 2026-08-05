@@ -34,10 +34,7 @@ trait BelongsToTenant
             $user = auth()->user();
 
             if ($user && $user->tenant_id) {
-                // نستخدم isset أو أسلوب الوصول الآمن لـ PHPStan
-                if (! isset($model->attributes['tenant_id']) || empty($model->attributes['tenant_id'])) {
-                    $model->setAttribute('tenant_id', $user->tenant_id);
-                }
+                $model->setAttribute('tenant_id', $user->tenant_id);
             }
         });
     }

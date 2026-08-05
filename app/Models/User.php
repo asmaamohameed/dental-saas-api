@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\UserRole;
 use App\Models\Concerns\BelongsToTenant;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
@@ -61,6 +62,7 @@ class User extends Authenticatable
         return [
             'email_verified_at' => 'datetime',
             'is_active' => 'boolean',
+            'role' => UserRole::class,
         ];
     }
 

@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\TenantStatus;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
@@ -12,7 +13,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property string $name
  * @property string $subdomain
  * @property string $locale
- * @property string $status
+ * @property TenantStatus $status
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  */
@@ -26,6 +27,13 @@ class Tenant extends Model
         'locale',
         'status',
     ];
+
+    protected function casts(): array
+    {
+        return [
+            'status' => TenantStatus::class,
+        ];
+    }
 
     // Relationships
     public function subscriptions(): HasMany

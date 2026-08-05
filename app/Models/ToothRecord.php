@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\ToothTreatmentStatus;
 use App\Models\Concerns\Auditable;
 use App\Models\Concerns\BelongsToTenant;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
@@ -22,6 +23,14 @@ class ToothRecord extends Model
         'treatment_status',
         'notes',
     ];
+
+    protected function casts(): array
+    {
+        return [
+            'tooth_number' => 'integer',
+            'treatment_status' => ToothTreatmentStatus::class,
+        ];
+    }
 
     // Relationships
     public function patient(): BelongsTo

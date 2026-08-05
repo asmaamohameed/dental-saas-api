@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\SubscriptionStatus;
 use App\Models\Concerns\BelongsToTenant;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
@@ -26,6 +27,7 @@ class Subscription extends Model
             'start_date' => 'date',
             'end_date' => 'date',
             'marked_paid_at' => 'datetime',
+            'status' => SubscriptionStatus::class,
         ];
     }
 }

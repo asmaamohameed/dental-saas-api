@@ -10,6 +10,10 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
+/**
+ * @property-read Patient|null $patient
+ * @property-read User|null $doctor
+ */
 class Appointment extends Model
 {
     use Auditable, BelongsToTenant, HasUuids;

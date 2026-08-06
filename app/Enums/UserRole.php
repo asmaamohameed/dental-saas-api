@@ -7,4 +7,21 @@ enum UserRole: string
     case OWNER = 'owner';
     case DOCTOR = 'doctor';
     case RECEPTIONIST = 'receptionist';
+
+    public function can(string $ability): bool
+    {
+        return match ($this) {
+            self::OWNER => true,
+            self::DOCTOR => in_array($ability, [
+                'appointment.view', 'appointment.create', 'appointment.update', 'appointment.updateStatus',
+                'patient.view', 'patient.create', 'patient.update',
+                'toothRecord.manage', 'invoice.view',
+            ]),
+            self::RECEPTIONIST => in_array($ability, [
+                'appointment.view', 'appointment.create', 'appointment.update', 'appointment.updateStatus', 'appointment.delete',
+                'patient.view', 'patient.create', 'patient.update',
+                'toothRecord.view', 'invoice.view', 'invoice.create', 'invoice.update',
+            ]),
+        };
+    }
 }

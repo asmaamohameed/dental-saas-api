@@ -3,12 +3,15 @@
 namespace App\Models;
 
 use App\Models\Concerns\BelongsToTenant;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Service extends Model
 {
-    use BelongsToTenant, HasUuids;
+    use BelongsToTenant, HasFactory, HasUuids;
 
     protected $fillable = [
         'tenant_id',
@@ -27,4 +30,20 @@ class Service extends Model
             'is_other' => 'boolean',
         ];
     }
+
+    public function invoiceItems(): HasMany
+    {
+        return $this->hasMany(InvoiceItem::class);
+    }
+
+    public function scopeActive(Builder $query): Builder
+    {
+        return $query->where('is_active', true);
+    }
+
+    public function scopeNotOther(Builder $query): Builder
+    {
+        return $query->where('is_other', false);
+    }
 }
+

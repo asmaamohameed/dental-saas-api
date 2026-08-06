@@ -33,6 +33,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'tenant' => EnsureTenantAccess::class,
             'role' => EnsureUserRole::class,
             'locale' => SetLocale::class,
+            'admin' => \App\Http\Middleware\EnsureAdminAccess::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

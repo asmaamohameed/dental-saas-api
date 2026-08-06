@@ -1,0 +1,70 @@
+version: "3.9"
+
+services:
+  # 🟦 PHP / Laravel Service
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: laravel_app
+    restart: unless-stopped
+    working_dir: /var/www/html
+    volumes:
+      - ./:/var/www/html
+    depends_on:
+      - postgres
+    networks:
+      - laravel
+
+  # 🟦 PostgreSQL Database Service
+  postgres:
+    image: postgres:16
+    container_name: laravel_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: laravel
+      POSTGRES_USER: laravel
+      POSTGRES_PASSWORD: "secret"
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - laravel
+
+  # 🟦 Nginx Web Server Service
+  nginx:
+    image: nginx:latest
+    container_name: laravel_nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    volumes:
+      - ./:/var/www/html
+      - ./docker/nginx/default.conf:/etc/nginx/conf.d/default.conf
+    depends_on:
+      - app
+    networks:
+      - laravel
+
+  # 🟦 Node.js for Frontend (React/Vite) Service
+  node:
+    image: node:22
+    container_name: react_node
+    restart: unless-stopped
+    working_dir: /app
+    volumes:
+      - ./frontend:/app
+    ports:
+      - "5173:5173"
+    tty: true
+    networks:
+      - laravel
+
+# 🟦 Volume for PostgreSQL Data
+volumes:
+  postgres_data:
+
+# 🟦 Network for Communication
+networks:
+  laravel:

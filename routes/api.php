@@ -5,6 +5,7 @@ use App\Http\Controllers\Api\V1\Auth\LoginController;
 use App\Http\Controllers\Api\V1\Auth\LogoutController;
 use App\Http\Controllers\Api\V1\Auth\ProfileController;
 use App\Http\Controllers\Api\V1\PatientController;
+use App\Http\Controllers\Api\V1\ToothRecordController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('v1')->group(function () {
@@ -25,6 +26,13 @@ Route::prefix('v1')->group(function () {
                 'update' => 'can:update,patient',
                 'destroy' => 'can:delete,patient',
             ]);
+
+        Route::get('patients/{patient}/tooth-records', [ToothRecordController::class, 'index'])
+            ->middleware('can:viewAny,patient,App\Models\ToothRecord');
+        Route::post('patients/{patient}/tooth-records', [ToothRecordController::class, 'store'])
+            ->middleware('can:create,patient,App\Models\ToothRecord');
+        Route::get('patients/{patient}/odontogram', [ToothRecordController::class, 'odontogram'])
+            ->middleware('can:viewAny,patient,App\Models\ToothRecord');
 
         Route::prefix('appointments')->group(function () {
             Route::get('/', [AppointmentController::class, 'index'])

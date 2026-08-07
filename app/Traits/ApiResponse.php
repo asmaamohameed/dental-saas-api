@@ -6,11 +6,6 @@ use Illuminate\Http\JsonResponse;
 
 trait ApiResponse
 {
-    /**
-     * Build a success response
-     *
-     * @param  mixed  $data
-     */
     protected function successResponse($data = null, ?string $message = null, int $code = 200): JsonResponse
     {
         $response = ['status' => 'success'];
@@ -27,10 +22,21 @@ trait ApiResponse
     }
 
     /**
-     * Build an error response
-     *
-     * @param  mixed  $errors
+     * Build a success response for a paginated resource collection.
      */
+    protected function paginatedResponse($resourceCollection, ?string $message = null, int $code = 200): JsonResponse
+    {
+        return $this->successResponse([
+            'items' => $resourceCollection->collection,
+            'meta' => [
+                'current_page' => $resourceCollection->currentPage(),
+                'last_page' => $resourceCollection->lastPage(),
+                'per_page' => $resourceCollection->perPage(),
+                'total' => $resourceCollection->total(),
+            ],
+        ], $message, $code);
+    }
+
     protected function errorResponse(string $message, int $code = 400, $errors = null): JsonResponse
     {
         $response = [

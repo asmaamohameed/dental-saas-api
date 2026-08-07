@@ -14,10 +14,15 @@ Route::prefix('v1')->group(function () {
     Route::prefix('auth')->group(function () {
         Route::post('login', LoginController::class);
 
-        Route::middleware('auth:sanctum')->group(function () {
+    Route::post('auth/login', LoginController::class);
+
+    Route::middleware(['auth:sanctum', 'tenant'])->group(function () {
+        Route::prefix('auth')->group(function () {
             Route::post('logout', LogoutController::class);
             Route::get('me', [ProfileController::class, 'show']);
         });
+
+        Route::apiResource('patients', PatientController::class);
     });
 
     // Tenant feature routes

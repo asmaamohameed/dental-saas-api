@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\AppointmentStatus;
 use App\Models\Concerns\Auditable;
 use App\Models\Concerns\BelongsToTenant;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
@@ -29,6 +30,7 @@ class Appointment extends Model
         return [
             'scheduled_at' => 'datetime',
             'duration_minutes' => 'integer',
+            'status' => AppointmentStatus::class,
         ];
     }
 

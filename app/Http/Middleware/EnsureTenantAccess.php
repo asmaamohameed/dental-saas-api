@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Enums\TenantStatus;
 use App\Models\Tenant;
 use Closure;
 use Illuminate\Http\Request;
@@ -24,7 +25,7 @@ class EnsureTenantAccess
         /** @var Tenant|null $tenant */
         $tenant = $user->tenant;
 
-        if (! $tenant || $tenant->status !== 'active') {
+        if (! $tenant || $tenant->status !== TenantStatus::ACTIVE) {
             return response()->json(['message' => 'Tenant account is inactive or suspended.'], 403);
         }
 

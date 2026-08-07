@@ -14,7 +14,6 @@ class AuditLog extends Model
     use BelongsToTenant, HasUuids;
 
     protected $fillable = [
-        'tenant_id',
         'user_id',
         'action',
         'auditable_type',

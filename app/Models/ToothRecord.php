@@ -14,7 +14,6 @@ class ToothRecord extends Model
     use Auditable, BelongsToTenant, HasUuids;
 
     protected $fillable = [
-        'tenant_id',
         'patient_id',
         'appointment_id',
         'recorded_by',

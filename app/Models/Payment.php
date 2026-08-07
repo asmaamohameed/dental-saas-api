@@ -13,7 +13,6 @@ class Payment extends Model
     use Auditable, BelongsToTenant, HasUuids;
 
     protected $fillable = [
-        'tenant_id',
         'invoice_id',
         'amount',
         'paid_at',

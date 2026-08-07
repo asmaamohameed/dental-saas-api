@@ -19,7 +19,6 @@ class Appointment extends Model
     use Auditable, BelongsToTenant, HasUuids;
 
     protected $fillable = [
-        'tenant_id',
         'patient_id',
         'doctor_id',
         'created_by',

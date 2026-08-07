@@ -15,6 +15,7 @@ enum UserRole: string
             self::DOCTOR => in_array($ability, [
                 'appointment.view', 'appointment.create', 'appointment.update', 'appointment.updateStatus',
                 'patient.view', 'patient.create', 'patient.update',
+                'patient.viewMedicalHistory',
                 'toothRecord.manage', 'invoice.view',
             ]),
             self::RECEPTIONIST => in_array($ability, [

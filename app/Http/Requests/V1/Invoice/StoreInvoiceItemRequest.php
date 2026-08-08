@@ -15,7 +15,11 @@ class StoreInvoiceItemRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'service_id' => ['required', 'uuid', 'exists:services,id'],
+            'service_id' => [
+                'required', 
+                'uuid', 
+                \Illuminate\Validation\Rule::exists('services', 'id')->where('tenant_id', auth()->user()->tenant_id)
+            ],
             'description' => ['nullable', 'string', 'max:500'],
             'price' => ['required', 'numeric', 'min:0'],
             'quantity' => ['required', 'integer', 'min:1'],
@@ -27,7 +31,7 @@ class StoreInvoiceItemRequest extends FormRequest
         $validator->after(function ($validator) {
             $serviceId = $this->input('service_id');
             if ($serviceId) {
-                $service = Service::find($serviceId);
+                $service = Service::where('tenant_id', auth()->user()->tenant_id)->find($serviceId);
                 if ($service && $service->is_other && empty($this->input('description'))) {
                     $validator->errors()->add('description', 'Description is required when selecting the "Other" service.');
                 }

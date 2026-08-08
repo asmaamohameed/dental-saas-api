@@ -59,14 +59,21 @@ class ServiceTest extends TestCase
             'is_active' => true,
         ];
 
-        $response = $this->actingAs($this->receptionist)->postJson('/api/v1/services', $payload);
+        $response1 = $this->actingAs($this->receptionist)->postJson('/api/v1/services', $payload);
+        $response1->assertStatus(201)->assertJsonPath('data.name_ar', 'خلع سن');
 
-        $response->assertStatus(201)
-            ->assertJsonPath('data.name_ar', 'خلع سن');
+        $payload['name_ar'] = 'حشو';
+        $response2 = $this->actingAs($this->owner)->postJson('/api/v1/services', $payload);
+        $response2->assertStatus(201)->assertJsonPath('data.name_ar', 'حشو');
 
         $this->assertDatabaseHas('services', [
             'tenant_id' => $this->tenant->id,
             'name_ar' => 'خلع سن',
+        ]);
+        
+        $this->assertDatabaseHas('services', [
+            'tenant_id' => $this->tenant->id,
+            'name_ar' => 'حشو',
         ]);
     }
 

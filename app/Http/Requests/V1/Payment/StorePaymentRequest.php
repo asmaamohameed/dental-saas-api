@@ -16,7 +16,7 @@ class StorePaymentRequest extends FormRequest
     {
         return [
             'amount' => ['required', 'numeric', 'min:0.01'],
-            'paid_at' => ['nullable', 'date'],
+            'paid_at' => ['nullable', 'date', 'before_or_equal:now'],
             'method' => ['required', 'string', 'in:cash,card,transfer,other'],
             'notes' => ['nullable', 'string', 'max:500'],
         ];

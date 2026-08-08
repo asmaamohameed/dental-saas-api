@@ -28,78 +28,114 @@ class InvoiceItemController extends Controller
 
     public function store(StoreInvoiceItemRequest $request, Invoice $invoice): JsonResponse
     {
-        if ($invoice->status === 'paid') {
-            return $this->errorResponse('Cannot add items to a fully paid invoice.', 422);
+        DB::beginTransaction();
+        try {
+            $lockedInvoice = Invoice::lockForUpdate()->find($invoice->id);
+
+            if ($lockedInvoice->status === 'paid') {
+                DB::rollBack();
+                return $this->errorResponse('Cannot add items to a fully paid invoice.', 422);
+            }
+
+            $item = $lockedInvoice->items()->create($request->validated());
+
+            $newTotal = $lockedInvoice->items()->selectRaw('SUM(price * quantity) as total')->value('total') ?? 0;
+            $lockedInvoice->update(['total_amount' => $newTotal]);
+
+            $this->invoiceService->recalculateStatus($lockedInvoice);
+
+            DB::commit();
+
+            return $this->successResponse(
+                new InvoiceItemResource($item->load('service')),
+                'Invoice item added successfully.',
+                201
+            );
+        } catch (\Exception $e) {
+            DB::rollBack();
+            throw $e;
         }
-
-        $item = DB::transaction(function () use ($request, $invoice) {
-            $createdItem = $invoice->items()->create($request->validated());
-
-            $newTotal = $invoice->items()->get()->sum(fn ($i) => $i->price * $i->quantity);
-            $invoice->update(['total_amount' => $newTotal]);
-
-            $this->invoiceService->recalculateStatus($invoice);
-
-            return $createdItem->load('service');
-        });
-
-        return $this->successResponse(
-            new InvoiceItemResource($item),
-            'Invoice item added successfully.',
-            201
-        );
     }
 
     public function update(UpdateInvoiceItemRequest $request, Invoice $invoice, InvoiceItem $item): JsonResponse
     {
-        if ($invoice->status === 'paid') {
-            return $this->errorResponse('Cannot modify items of a fully paid invoice.', 422);
-        }
-
         if ($item->invoice_id !== $invoice->id) {
             return $this->errorResponse('Item does not belong to this invoice.', 404);
         }
 
-        $updatedItem = DB::transaction(function () use ($request, $invoice, $item) {
+        DB::beginTransaction();
+        try {
+            $lockedInvoice = Invoice::lockForUpdate()->find($invoice->id);
+
+            if ($lockedInvoice->status === 'paid') {
+                DB::rollBack();
+                return $this->errorResponse('Cannot modify items of a fully paid invoice.', 422);
+            }
+
             $item->update($request->validated());
 
-            $newTotal = $invoice->items()->get()->sum(fn ($i) => $i->price * $i->quantity);
-            $invoice->update(['total_amount' => $newTotal]);
+            $newTotal = $lockedInvoice->items()->selectRaw('SUM(price * quantity) as total')->value('total') ?? 0;
+            
+            $totalPayments = $lockedInvoice->payments()->sum('amount');
+            if ($newTotal < $totalPayments) {
+                DB::rollBack();
+                return $this->errorResponse('New total cannot be less than paid amount.', 422);
+            }
 
-            $this->invoiceService->recalculateStatus($invoice);
+            $lockedInvoice->update(['total_amount' => $newTotal]);
+            $this->invoiceService->recalculateStatus($lockedInvoice);
 
-            return $item->load('service');
-        });
+            DB::commit();
 
-        return $this->successResponse(
-            new InvoiceItemResource($updatedItem),
-            'Invoice item updated successfully.'
-        );
+            return $this->successResponse(
+                new InvoiceItemResource($item->load('service')),
+                'Invoice item updated successfully.'
+            );
+        } catch (\Exception $e) {
+            DB::rollBack();
+            throw $e;
+        }
     }
 
     public function destroy(Invoice $invoice, InvoiceItem $item): JsonResponse
     {
-        if ($invoice->status === 'paid') {
-            return $this->errorResponse('Cannot delete items from a fully paid invoice.', 422);
-        }
-
         if ($item->invoice_id !== $invoice->id) {
             return $this->errorResponse('Item does not belong to this invoice.', 404);
         }
 
-        if ($invoice->items()->count() <= 1) {
-            return $this->errorResponse('Invoice must contain at least one item.', 422);
-        }
+        DB::beginTransaction();
+        try {
+            $lockedInvoice = Invoice::lockForUpdate()->find($invoice->id);
 
-        DB::transaction(function () use ($invoice, $item) {
+            if ($lockedInvoice->status === 'paid') {
+                DB::rollBack();
+                return $this->errorResponse('Cannot delete items from a fully paid invoice.', 422);
+            }
+
+            if ($lockedInvoice->items()->count() <= 1) {
+                DB::rollBack();
+                return $this->errorResponse('Invoice must contain at least one item.', 422);
+            }
+
             $item->delete();
 
-            $newTotal = $invoice->items()->get()->sum(fn ($i) => $i->price * $i->quantity);
-            $invoice->update(['total_amount' => $newTotal]);
+            $newTotal = $lockedInvoice->items()->selectRaw('SUM(price * quantity) as total')->value('total') ?? 0;
+            
+            $totalPayments = $lockedInvoice->payments()->sum('amount');
+            if ($newTotal < $totalPayments) {
+                DB::rollBack();
+                return $this->errorResponse('New total cannot be less than paid amount.', 422);
+            }
 
-            $this->invoiceService->recalculateStatus($invoice);
-        });
+            $lockedInvoice->update(['total_amount' => $newTotal]);
+            $this->invoiceService->recalculateStatus($lockedInvoice);
 
-        return $this->successResponse(null, 'Invoice item deleted successfully.');
+            DB::commit();
+
+            return $this->successResponse(null, 'Invoice item deleted successfully.');
+        } catch (\Exception $e) {
+            DB::rollBack();
+            throw $e;
+        }
     }
 }

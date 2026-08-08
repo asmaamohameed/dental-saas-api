@@ -15,10 +15,10 @@ class StoreInvoiceRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'patient_id' => ['required', 'uuid', 'exists:patients,id'],
-            'appointment_id' => ['nullable', 'uuid', 'exists:appointments,id'],
+            'patient_id' => ['required', 'uuid', \Illuminate\Validation\Rule::exists('patients', 'id')->where('tenant_id', auth()->user()->tenant_id)],
+            'appointment_id' => ['nullable', 'uuid', \Illuminate\Validation\Rule::exists('appointments', 'id')->where('tenant_id', auth()->user()->tenant_id)],
             'items' => ['required', 'array', 'min:1'],
-            'items.*.service_id' => ['required', 'uuid', 'exists:services,id'],
+            'items.*.service_id' => ['required', 'uuid', \Illuminate\Validation\Rule::exists('services', 'id')->where('tenant_id', auth()->user()->tenant_id)],
             'items.*.description' => ['nullable', 'string', 'max:500'],
             'items.*.price' => ['required', 'numeric', 'min:0'],
             'items.*.quantity' => ['required', 'integer', 'min:1'],
@@ -30,8 +30,8 @@ class StoreInvoiceRequest extends FormRequest
         $validator->after(function ($validator) {
             $items = $this->input('items', []);
             foreach ($items as $index => $item) {
-                if (! empty($item['service_id'])) {
-                    $service = Service::find($item['service_id']);
+                if (!empty($item['service_id'])) {
+                    $service = Service::where('tenant_id', auth()->user()->tenant_id)->find($item['service_id']);
                     if ($service && $service->is_other && empty($item['description'])) {
                         $validator->errors()->add(
                             "items.{$index}.description",

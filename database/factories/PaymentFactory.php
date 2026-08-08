@@ -19,11 +19,15 @@ class PaymentFactory extends Factory
     {
         return [
             'tenant_id' => Tenant::factory(),
-            'invoice_id' => Invoice::factory(),
+            'invoice_id' => function (array $attributes) {
+                return Invoice::factory()->create(['tenant_id' => $attributes['tenant_id']]);
+            },
             'amount' => 100.00,
             'paid_at' => now(),
             'method' => 'cash',
-            'received_by' => User::factory(),
+            'received_by' => function (array $attributes) {
+                return User::factory()->create(['tenant_id' => $attributes['tenant_id']]);
+            },
             'notes' => fake()->sentence(),
         ];
     }

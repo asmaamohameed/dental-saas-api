@@ -1,7 +1,7 @@
 version: "3.9"
 
 services:
-  # 🟦 PHP / Laravel Service
+
   app:
     build:
       context: .
@@ -16,7 +16,6 @@ services:
     networks:
       - laravel
 
-  # 🟦 PostgreSQL Database Service
   postgres:
     image: postgres:16
     container_name: laravel_postgres
@@ -32,7 +31,6 @@ services:
     networks:
       - laravel
 
-  # 🟦 Nginx Web Server Service
   nginx:
     image: nginx:latest
     container_name: laravel_nginx
@@ -47,24 +45,22 @@ services:
     networks:
       - laravel
 
-  # 🟦 Node.js for Frontend (React/Vite) Service
-  node:
-    image: node:22
-    container_name: react_node
+  # 🟦 Adminer Service
+  adminer:
+    image: adminer
+    container_name: laravel_adminer
     restart: unless-stopped
-    working_dir: /app
-    volumes:
-      - ./frontend:/app
     ports:
-      - "5173:5173"
-    tty: true
+      - "8080:8080"
+    depends_on:
+      - postgres
     networks:
       - laravel
 
-# 🟦 Volume for PostgreSQL Data
+
 volumes:
   postgres_data:
 
-# 🟦 Network for Communication
+
 networks:
   laravel:

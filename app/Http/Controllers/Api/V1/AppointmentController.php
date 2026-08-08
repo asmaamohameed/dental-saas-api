@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api\V1;
 
+use App\Enums\AppointmentStatus;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\V1\Appointment\StoreAppointmentRequest;
 use App\Http\Requests\V1\Appointment\UpdateAppointmentRequest;
@@ -55,6 +56,7 @@ class AppointmentController extends Controller
     {
         $data = $request->validated();
         $data['created_by'] = auth()->id();
+        $data['status'] = AppointmentStatus::SCHEDULED;
 
         $appointment = Appointment::create($data);
         $appointment->load(['patient', 'doctor']);

@@ -13,14 +13,14 @@ enum UserRole: string
         return match ($this) {
             self::OWNER => true,
             self::DOCTOR => in_array($ability, [
-                'appointment.view', 'appointment.create', 'appointment.update', 'appointment.updateStatus',
-                'patient.view', 'patient.create', 'patient.update',
+                'appointment.view', 'appointment.create', 'appointment.update', 'appointment.updateStatus', 'appointment.delete',
+                'patient.view', 'patient.create', 'patient.update', 'patient.delete',
                 'patient.viewMedicalHistory',
                 'toothRecord.manage', 'toothRecord.view', 'invoice.view',
             ]),
             self::RECEPTIONIST => in_array($ability, [
                 'appointment.view', 'appointment.create', 'appointment.update', 'appointment.updateStatus', 'appointment.delete',
-                'patient.view', 'patient.create', 'patient.update',
+                'patient.view', 'patient.create', 'patient.update', 'patient.delete',
                 'toothRecord.view', 'invoice.view', 'invoice.create', 'invoice.update',
             ]),
         };

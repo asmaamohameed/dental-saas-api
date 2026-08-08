@@ -1,5 +1,6 @@
 <?php
 
+use App\Enums\UserRole;
 use App\Http\Controllers\Api\V1\AppointmentController;
 use App\Http\Controllers\Api\V1\Auth\LoginController;
 use App\Http\Controllers\Api\V1\Auth\LogoutController;
@@ -18,14 +19,19 @@ Route::prefix('v1')->group(function () {
             Route::get('me', [ProfileController::class, 'show']);
         });
 
-        Route::apiResource('patients', PatientController::class)
-            ->middleware([
-                'index' => 'can:viewAny,App\Models\Patient',
-                'store' => 'can:create,App\Models\Patient',
-                'show' => 'can:view,patient',
-                'update' => 'can:update,patient',
-                'destroy' => 'can:delete,patient',
-            ]);
+        Route::apiResource('patients', PatientController::class)->except(['index', 'store'])
+            ->middleware(['can:view,patient']);
+
+        Route::get('patients', [PatientController::class, 'index'])
+            ->middleware('can:viewAny,App\Models\Patient')->name('patients.index');
+        Route::post('patients', [PatientController::class, 'store'])
+            ->middleware('can:create,App\Models\Patient')->name('patients.store');
+        Route::get('patients/{patient}', [PatientController::class, 'show'])
+            ->middleware('can:view,patient')->name('patients.show');
+        Route::put('patients/{patient}', [PatientController::class, 'update'])
+            ->middleware('can:update,patient')->name('patients.update');
+        Route::delete('patients/{patient}', [PatientController::class, 'destroy'])
+            ->middleware(['can:delete,patient', 'role:'.UserRole::OWNER->value])->name('patients.destroy');
 
         Route::get('patients/{patient}/tooth-records', [ToothRecordController::class, 'index'])
             ->middleware('can:viewAny,patient,App\Models\ToothRecord');

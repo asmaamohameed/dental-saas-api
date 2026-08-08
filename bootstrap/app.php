@@ -59,7 +59,9 @@ return Application::configure(basePath: dirname(__DIR__))
                     $message = $e->getMessage() ?: Response::$statusTexts[$status] ?? 'HTTP Error';
                 } elseif ($e instanceof QueryException) {
                     $status = 500;
-                    $message = 'Database error.';
+                    $message = config('app.debug')
+                        ? $e->getMessage()
+                        : 'Database error.';
                 } else {
                     $message = config('app.debug') ? $e->getMessage() : $message;
                 }

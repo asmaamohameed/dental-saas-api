@@ -8,10 +8,10 @@
 // use App\Models\Tenant;
 // use App\Models\User;
 // use Illuminate\Foundation\Testing\RefreshDatabase;
-// use Tests\TestCase;
+use Tests\TestCase;
 
-// class InvoiceTest extends TestCase
-// {
+class InvoiceTest extends TestCase
+{
 //     use RefreshDatabase;
 
 //     private Tenant $tenant;
@@ -126,4 +126,4 @@
 //             ->assertJsonPath('data.total_billed', 500)
 //             ->assertJsonPath('data.total_invoices_count', 1);
 //     }
-// }
+}

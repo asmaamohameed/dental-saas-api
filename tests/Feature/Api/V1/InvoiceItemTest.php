@@ -1,6 +1,6 @@
 <?php
 
-// namespace Tests\Feature\Api\V1;
+namespace Tests\Feature\Api\V1;
 
 // use App\Models\Invoice;
 // use App\Models\InvoiceItem;
@@ -9,10 +9,10 @@
 // use App\Models\Tenant;
 // use App\Models\User;
 // use Illuminate\Foundation\Testing\RefreshDatabase;
-// use Tests\TestCase;
+use Tests\TestCase;
 
-// class InvoiceItemTest extends TestCase
-// {
+class InvoiceItemTest extends TestCase
+{
 //     use RefreshDatabase;
 
 //     private Tenant $tenant;
@@ -80,4 +80,4 @@
 
 //         $response->assertStatus(422);
 //     }
-// }
+}

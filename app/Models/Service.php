@@ -14,7 +14,6 @@ class Service extends Model
     use BelongsToTenant, HasFactory, HasUuids;
 
     protected $fillable = [
-        'tenant_id',
         'name_ar',
         'name_en',
         'default_price',

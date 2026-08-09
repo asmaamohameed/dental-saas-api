@@ -10,7 +10,7 @@ Route::prefix('auth')->group(function () {
     Route::post('login', LoginController::class);
 });
 
-Route::middleware(['auth:sanctum', 'admin'])->group(function () {
+Route::middleware(['auth:sanctum', 'is_admin'])->group(function () {
     Route::get('/ping', function (Request $request) {
         return response()->json([
             'message' => 'Admin API works!',

@@ -17,7 +17,6 @@ class Invoice extends Model
     use Auditable, BelongsToTenant, HasFactory, HasUuids, SoftDeletes;
 
     protected $fillable = [
-        'tenant_id',
         'patient_id',
         'appointment_id',
         'created_by',

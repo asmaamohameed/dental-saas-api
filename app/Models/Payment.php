@@ -15,7 +15,6 @@ class Payment extends Model
     use Auditable, BelongsToTenant, HasFactory, HasUuids, SoftDeletes;
 
     protected $fillable = [
-        'tenant_id',
         'invoice_id',
         'amount',
         'paid_at',

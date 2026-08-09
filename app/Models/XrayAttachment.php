@@ -13,7 +13,6 @@ class XrayAttachment extends Model
     use Auditable, BelongsToTenant, HasUuids;
 
     protected $fillable = [
-        'tenant_id',
         'patient_id',
         'appointment_id',
         'file_url',

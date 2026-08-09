@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Middleware\EnsureAdminAccess;
 use App\Http\Middleware\EnsureTenantAccess;
 use App\Http\Middleware\EnsureUserIsAdmin;
 use App\Http\Middleware\EnsureUserRole;
@@ -35,6 +36,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'tenant' => EnsureTenantAccess::class,
             'role' => EnsureUserRole::class,
             'locale' => SetLocale::class,
+            'admin' => EnsureAdminAccess::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

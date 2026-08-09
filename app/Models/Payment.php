@@ -5,12 +5,26 @@ namespace App\Models;
 use App\Models\Concerns\Auditable;
 use App\Models\Concerns\BelongsToTenant;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Carbon;
 
+/**
+ * @property int $id
+ * @property int $invoice_id
+ * @property float $amount
+ * @property Carbon|null $paid_at
+ * @property string $method
+ * @property string $received_by
+ * @property string|null $notes
+ * @property Carbon|null $created_at
+ * @property-read User|null $receiver
+ */
 class Payment extends Model
 {
-    use Auditable, BelongsToTenant, HasUuids;
+    use Auditable, BelongsToTenant, HasFactory, HasUuids, SoftDeletes;
 
     protected $fillable = [
         'invoice_id',

@@ -4,14 +4,27 @@ namespace App\Models;
 
 use App\Models\Concerns\Auditable;
 use App\Models\Concerns\BelongsToTenant;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
+/**
+ * @property int $id
+ * @property int $tenant_id
+ * @property int $patient_id
+ * @property int $appointment_id
+ * @property int $created_by
+ * @property float $total_amount
+ * @property float $remaining_amount
+ * @property string $status
+ */
 class Invoice extends Model
 {
-    use Auditable, BelongsToTenant, HasUuids;
+    use Auditable, BelongsToTenant, HasFactory, HasUuids, SoftDeletes;
 
     protected $fillable = [
         'patient_id',
@@ -19,6 +32,10 @@ class Invoice extends Model
         'created_by',
         'total_amount',
         'status',
+    ];
+
+    protected $appends = [
+        'remaining_amount',
     ];
 
     protected function casts(): array
@@ -55,10 +72,33 @@ class Invoice extends Model
     }
 
     // Computed Attributes
-    public function getRemainingAmountAttribute()
+    public function getRemainingAmountAttribute(): float
     {
-        $paid = $this->payments()->sum('amount');
+        $paid = (float) $this->payments()->sum('amount');
 
-        return $this->total_amount - $paid;
+        return max(0, (float) $this->total_amount - $paid);
+    }
+
+    // Scopes
+    public function scopeByStatus(Builder $query, string $status): Builder
+    {
+        return $query->where('status', $status);
+    }
+
+    public function scopeByPatient(Builder $query, string $patientId): Builder
+    {
+        return $query->where('patient_id', $patientId);
+    }
+
+    public function scopeDateRange(Builder $query, ?string $from, ?string $to): Builder
+    {
+        if ($from) {
+            $query->whereDate('created_at', '>=', $from);
+        }
+        if ($to) {
+            $query->whereDate('created_at', '<=', $to);
+        }
+
+        return $query;
     }
 }

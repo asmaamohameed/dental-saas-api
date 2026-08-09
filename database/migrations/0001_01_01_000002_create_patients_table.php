@@ -21,7 +21,9 @@ return new class extends Migration
             $table->timestamps();
         });
 
-        DB::statement('CREATE INDEX idx_patients_medical_history ON patients USING GIN (medical_history);');
+        if (DB::getDriverName() === 'pgsql') {
+            DB::statement('CREATE INDEX idx_patients_medical_history ON patients USING GIN (medical_history);');
+        }
     }
 
     public function down(): void

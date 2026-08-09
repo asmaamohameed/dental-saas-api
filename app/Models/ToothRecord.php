@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Enums\ToothTreatmentStatus;
 use App\Models\Concerns\Auditable;
 use App\Models\Concerns\BelongsToTenant;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -14,7 +15,6 @@ class ToothRecord extends Model
     use Auditable, BelongsToTenant, HasUuids;
 
     protected $fillable = [
-        'tenant_id',
         'patient_id',
         'appointment_id',
         'recorded_by',
@@ -46,5 +46,26 @@ class ToothRecord extends Model
     public function recordedBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'recorded_by');
+    }
+
+    /**
+     * Returns the most recent record per tooth for a given patient.
+     * Uses a subquery on max(created_at) grouped by tooth_number.
+     *
+     * @return Collection<int, ToothRecord>
+     */
+    public static function latestPerTooth(string $patientId)
+    {
+        return self::where('patient_id', $patientId)
+            ->whereIn('id', function ($query) use ($patientId) {
+                $query->select('id')
+                    ->from(function ($sub) use ($patientId) {
+                        $sub->from('tooth_records')
+                            ->selectRaw('id, ROW_NUMBER() OVER (PARTITION BY tooth_number ORDER BY created_at DESC, id DESC) as rn')
+                            ->where('patient_id', $patientId);
+                    }, 'ranked')
+                    ->where('rn', 1);
+            })
+            ->get();
     }
 }

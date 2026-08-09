@@ -8,13 +8,19 @@ use App\Http\Requests\V1\Patient\UpdatePatientRequest;
 use App\Http\Resources\V1\PatientResource;
 use App\Models\Patient;
 use App\Traits\ApiResponse;
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controllers\HasMiddleware;
 use Illuminate\Routing\Controllers\Middleware;
 
 class PatientController extends Controller implements HasMiddleware
 {
-    use ApiResponse;
+    use ApiResponse, AuthorizesRequests;
+
+    public function __construct()
+    {
+        $this->authorizeResource(Patient::class, 'patient');
+    }
 
     public static function middleware(): array
     {
@@ -30,11 +36,14 @@ class PatientController extends Controller implements HasMiddleware
     {
         $query = Patient::query();
 
-        if ($request->filled('search')) {
-            $search = $request->input('search');
-            $query->where(function ($q) use ($search) {
-                $q->where('full_name', 'like', "%{$search}%")
-                    ->orWhere('phone', 'like', "%{$search}%");
+        $search = $request->input('search');
+
+        if ($search) {
+            $escapedSearch = addcslashes($search, '%_\\');
+
+            $query->where(function ($q) use ($escapedSearch) {
+                $q->whereRaw("full_name LIKE ? ESCAPE '\\'", ["%{$escapedSearch}%"])
+                    ->orWhereRaw("phone LIKE ? ESCAPE '\\'", ["%{$escapedSearch}%"]);
             });
         }
 

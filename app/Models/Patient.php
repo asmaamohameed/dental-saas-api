@@ -31,7 +31,6 @@ class Patient extends Model
     use Auditable, BelongsToTenant, HasUuids;
 
     protected $fillable = [
-        'tenant_id',
         'full_name',
         'phone',
         'date_of_birth',

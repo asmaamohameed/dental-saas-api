@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Middleware\EnsureTenantAccess;
+use App\Http\Middleware\EnsureUserIsAdmin;
 use App\Http\Middleware\EnsureUserRole;
 use App\Http\Middleware\SetLocale;
 use Illuminate\Auth\AuthenticationException;
@@ -30,6 +31,7 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->alias([
+            'is_admin' => EnsureUserIsAdmin::class,
             'tenant' => EnsureTenantAccess::class,
             'role' => EnsureUserRole::class,
             'locale' => SetLocale::class,
@@ -57,7 +59,9 @@ return Application::configure(basePath: dirname(__DIR__))
                     $message = $e->getMessage() ?: Response::$statusTexts[$status] ?? 'HTTP Error';
                 } elseif ($e instanceof QueryException) {
                     $status = 500;
-                    $message = 'Database error.';
+                    $message = config('app.debug')
+                        ? $e->getMessage()
+                        : 'Database error.';
                 } else {
                     $message = config('app.debug') ? $e->getMessage() : $message;
                 }

@@ -14,7 +14,7 @@ class AdminUserSeeder extends Seeder
             'email' => 'superadmin@dental.com',
         ], [
             'name' => 'Super Administrator',
-            'password_hash' => Hash::make('password'),
+            'password_hash' => Hash::make('Password123'),
             'is_active' => true,
         ]);
     }

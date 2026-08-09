@@ -12,7 +12,6 @@ class Subscription extends Model
     use BelongsToTenant, HasUuids;
 
     protected $fillable = [
-        'tenant_id',
         'plan_type',
         'status',
         'start_date',

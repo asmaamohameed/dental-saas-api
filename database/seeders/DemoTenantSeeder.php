@@ -37,6 +37,18 @@ class DemoTenantSeeder extends Seeder
         ]);
 
         // 3. Create Users
+        $owner = User::firstOrCreate([
+            'email' => 'owner@smileclinic.com',
+        ],
+            [
+                'tenant_id' => $tenant->id,
+                'name' => 'Owner',
+                'phone' => '+1234567890',
+                'password_hash' => Hash::make('password'),
+                'role' => 'owner',
+                'is_active' => true,
+            ]);
+
         $doctor = User::firstOrCreate([
             'email' => 'doctor@smileclinic.com',
         ], [

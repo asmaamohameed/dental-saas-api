@@ -12,6 +12,16 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
+/**
+ * @property int $id
+ * @property int $tenant_id
+ * @property int $patient_id
+ * @property int $appointment_id
+ * @property int $created_by
+ * @property float $total_amount
+ * @property float $remaining_amount
+ * @property string $status
+ */
 class Invoice extends Model
 {
     use Auditable, BelongsToTenant, HasFactory, HasUuids, SoftDeletes;

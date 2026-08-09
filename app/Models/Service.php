@@ -9,6 +9,14 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
+/**
+ * @property int $id
+ * @property string $name_ar
+ * @property string $name_en
+ * @property float $default_price
+ * @property bool $is_active
+ * @property bool $is_other
+ */
 class Service extends Model
 {
     use BelongsToTenant, HasFactory, HasUuids;

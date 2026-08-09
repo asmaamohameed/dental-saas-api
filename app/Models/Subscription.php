@@ -6,7 +6,18 @@ use App\Enums\SubscriptionStatus;
 use App\Models\Concerns\BelongsToTenant;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Carbon;
 
+/**
+ * @property int $id
+ * @property int $tenant_id
+ * @property string $plan_type
+ * @property string $status
+ * @property Carbon $start_date
+ * @property Carbon $end_date
+ * @property Carbon|null $marked_paid_at
+ * @property string|null $notes
+ */
 class Subscription extends Model
 {
     use BelongsToTenant, HasUuids;

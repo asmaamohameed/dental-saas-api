@@ -2,8 +2,6 @@
 
 namespace App\Http\Requests\V1\Payment;
 
-use App\Models\Invoice;
-use App\Models\Payment;
 use Illuminate\Foundation\Http\FormRequest;
 
 class UpdatePaymentRequest extends FormRequest
@@ -26,9 +24,7 @@ class UpdatePaymentRequest extends FormRequest
     public function withValidator($validator): void
     {
         $validator->after(function ($validator) {
-            /** @var Invoice $invoice */
             $invoice = $this->route('invoice');
-            /** @var Payment $payment */
             $payment = $this->route('payment');
 
             if ($invoice && $payment && $this->has('amount')) {

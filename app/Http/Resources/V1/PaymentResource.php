@@ -3,6 +3,7 @@
 namespace App\Http\Resources\V1;
 
 use App\Models\Payment;
+use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -20,10 +21,10 @@ class PaymentResource extends JsonResource
             'paid_at' => $this->paid_at?->toISOString(),
             'method' => $this->method,
             'received_by' => $this->received_by,
-            'receiver' => $this->whenLoaded('receiver', function () {
+            'receiver' => $this->whenLoaded('receiver', function (User $receiver) {
                 return [
-                    'id' => $this->receiver->id,
-                    'name' => $this->receiver->name,
+                    'id' => $receiver->id,
+                    'name' => $receiver->name,
                 ];
             }),
             'notes' => $this->notes,

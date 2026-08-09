@@ -3,6 +3,7 @@
 namespace App\Http\Resources\V1;
 
 use App\Models\InvoiceItem;
+use App\Models\Service;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -21,11 +22,11 @@ class InvoiceItemResource extends JsonResource
             'price' => (float) $this->price,
             'quantity' => $this->quantity,
             'subtotal' => (float) $this->subtotal,
-            'service' => $this->whenLoaded('service', function () {
+            'service' => $this->whenLoaded('service', function (Service $service) {
                 return [
-                    'id' => $this->service->id,
-                    'name_ar' => $this->service->name_ar,
-                    'name_en' => $this->service->name_en,
+                    'id' => $service->id,
+                    'name_ar' => $service->name_ar,
+                    'name_en' => $service->name_en,
                 ];
             }),
             'created_at' => $this->created_at?->toISOString(),

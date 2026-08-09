@@ -2,7 +2,7 @@
 
 namespace App\Http\Requests\V1\Invoice;
 
-use App\Models\Invoice;
+use App\Enums\UserRole;
 use App\Models\Service;
 use Illuminate\Foundation\Http\FormRequest;
 
@@ -29,7 +29,6 @@ class UpdateInvoiceRequest extends FormRequest
     public function withValidator($validator): void
     {
         $validator->after(function ($validator) {
-            /** @var Invoice $invoice */
             $invoice = $this->route('invoice');
 
             if ($invoice && $invoice->status === 'paid') {
@@ -37,7 +36,7 @@ class UpdateInvoiceRequest extends FormRequest
             }
 
             $user = $this->user();
-            if ($user && $user->role === 'receptionist') {
+            if ($user && $user->role === UserRole::RECEPTIONIST) {
                 if ($invoice && $invoice->status === 'partial' && $this->has('items')) {
                     $validator->errors()->add('items', 'Receptionists cannot modify items of partially paid invoices.');
                 }

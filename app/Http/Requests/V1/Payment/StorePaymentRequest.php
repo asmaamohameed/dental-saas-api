@@ -2,7 +2,6 @@
 
 namespace App\Http\Requests\V1\Payment;
 
-use App\Models\Invoice;
 use Illuminate\Foundation\Http\FormRequest;
 
 class StorePaymentRequest extends FormRequest
@@ -25,7 +24,6 @@ class StorePaymentRequest extends FormRequest
     public function withValidator($validator): void
     {
         $validator->after(function ($validator) {
-            /** @var Invoice $invoice */
             $invoice = $this->route('invoice');
 
             if ($invoice) {

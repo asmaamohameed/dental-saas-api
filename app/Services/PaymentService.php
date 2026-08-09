@@ -14,6 +14,7 @@ class PaymentService
     public function create(Invoice $invoice, array $data, string $receivedBy): Payment
     {
         return DB::transaction(function () use ($invoice, $data, $receivedBy) {
+            /** @var Payment $payment */
             $payment = $invoice->payments()->create([
                 ...$data,
                 'paid_at' => $data['paid_at'] ?? Carbon::now(),

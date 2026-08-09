@@ -7,6 +7,15 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
+/**
+ * @property int $id
+ * @property int $invoice_id
+ * @property int $service_id
+ * @property string $description
+ * @property float $price
+ * @property int $quantity
+ * @property float $subtotal
+ */
 class InvoiceItem extends Model
 {
     use HasFactory, HasUuids;

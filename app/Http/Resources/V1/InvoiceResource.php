@@ -2,7 +2,10 @@
 
 namespace App\Http\Resources\V1;
 
+use App\Models\Appointment;
 use App\Models\Invoice;
+use App\Models\Patient;
+use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -22,24 +25,24 @@ class InvoiceResource extends JsonResource
             'total_amount' => (float) $this->total_amount,
             'remaining_amount' => (float) $this->remaining_amount,
             'status' => $this->status,
-            'patient' => $this->whenLoaded('patient', function () {
+            'patient' => $this->whenLoaded('patient', function (Patient $patient) {
                 return [
-                    'id' => $this->patient->id,
-                    'full_name' => $this->patient->full_name,
-                    'phone' => $this->patient->phone,
+                    'id' => $patient->id,
+                    'full_name' => $patient->full_name,
+                    'phone' => $patient->phone,
                 ];
             }),
-            'appointment' => $this->whenLoaded('appointment', function () {
+            'appointment' => $this->whenLoaded('appointment', function (Appointment $appointment) {
                 return [
-                    'id' => $this->appointment->id,
-                    'scheduled_at' => $this->appointment->scheduled_at,
-                    'status' => $this->appointment->status,
+                    'id' => $appointment->id,
+                    'scheduled_at' => $appointment->scheduled_at,
+                    'status' => $appointment->status,
                 ];
             }),
-            'creator' => $this->whenLoaded('creator', function () {
+            'creator' => $this->whenLoaded('creator', function (User $creator) {
                 return [
-                    'id' => $this->creator->id,
-                    'name' => $this->creator->name,
+                    'id' => $creator->id,
+                    'name' => $creator->name,
                 ];
             }),
             'items' => InvoiceItemResource::collection($this->whenLoaded('items')),

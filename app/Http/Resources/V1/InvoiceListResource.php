@@ -3,6 +3,7 @@
 namespace App\Http\Resources\V1;
 
 use App\Models\Invoice;
+use App\Models\Patient;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -16,7 +17,7 @@ class InvoiceListResource extends JsonResource
         return [
             'id' => $this->id,
             'patient_id' => $this->patient_id,
-            'patient_name' => $this->whenLoaded('patient', fn () => $this->patient->full_name),
+            'patient_name' => $this->whenLoaded('patient', fn (Patient $patient) => $patient->full_name),
             'total_amount' => (float) $this->total_amount,
             'remaining_amount' => (float) $this->remaining_amount,
             'status' => $this->status,

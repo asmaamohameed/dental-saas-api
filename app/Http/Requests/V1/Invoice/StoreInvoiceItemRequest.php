@@ -4,6 +4,7 @@ namespace App\Http\Requests\V1\Invoice;
 
 use App\Models\Service;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
 class StoreInvoiceItemRequest extends FormRequest
 {
@@ -16,9 +17,9 @@ class StoreInvoiceItemRequest extends FormRequest
     {
         return [
             'service_id' => [
-                'required', 
-                'uuid', 
-                \Illuminate\Validation\Rule::exists('services', 'id')->where('tenant_id', auth()->user()->tenant_id)
+                'required',
+                'uuid',
+                Rule::exists('services', 'id')->where('tenant_id', auth()->user()->tenant_id),
             ],
             'description' => ['nullable', 'string', 'max:500'],
             'price' => ['required', 'numeric', 'min:0'],

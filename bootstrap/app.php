@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Middleware\EnsureAdminAccess;
 use App\Http\Middleware\EnsureTenantAccess;
 use App\Http\Middleware\EnsureUserRole;
 use App\Http\Middleware\SetLocale;
@@ -17,9 +18,9 @@ use Symfony\Component\HttpKernel\Exception\HttpException;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
-        web: __DIR__ . '/../routes/web.php',
-        api: __DIR__ . '/../routes/api.php',
-        commands: __DIR__ . '/../routes/console.php',
+        web: __DIR__.'/../routes/web.php',
+        api: __DIR__.'/../routes/api.php',
+        commands: __DIR__.'/../routes/console.php',
         health: '/up',
         then: function () {
             Route::middleware('api')
@@ -33,7 +34,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'tenant' => EnsureTenantAccess::class,
             'role' => EnsureUserRole::class,
             'locale' => SetLocale::class,
-            'admin' => \App\Http\Middleware\EnsureAdminAccess::class,
+            'admin' => EnsureAdminAccess::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
@@ -70,7 +71,7 @@ return Application::configure(basePath: dirname(__DIR__))
                     'message' => $message,
                 ];
 
-                if (!is_null($errors)) {
+                if (! is_null($errors)) {
                     $response['errors'] = $errors;
                 }
 

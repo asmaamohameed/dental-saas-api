@@ -17,8 +17,8 @@ class ServiceFactory extends Factory
     {
         return [
             'tenant_id' => Tenant::factory(),
-            'name_ar' => fake()->word() . ' خدمة أسنان',
-            'name_en' => fake()->word() . ' Dental Service',
+            'name_ar' => fake()->word().' خدمة أسنان',
+            'name_en' => fake()->word().' Dental Service',
             'default_price' => fake()->randomFloat(2, 50, 1000),
             'is_active' => true,
             'is_other' => false,

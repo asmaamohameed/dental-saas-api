@@ -15,10 +15,15 @@ class InvoiceTest extends TestCase
     use RefreshDatabase;
 
     private Tenant $tenant;
+
     private User $owner;
+
     private User $receptionist;
+
     private User $doctor;
+
     private Patient $patient;
+
     private Service $service;
 
     protected function setUp(): void

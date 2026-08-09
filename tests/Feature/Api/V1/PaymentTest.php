@@ -17,9 +17,13 @@ class PaymentTest extends TestCase
     use RefreshDatabase;
 
     private Tenant $tenant;
+
     private User $owner;
+
     private User $receptionist;
+
     private User $doctor;
+
     private Invoice $invoice;
 
     protected function setUp(): void

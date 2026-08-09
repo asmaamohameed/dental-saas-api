@@ -13,8 +13,11 @@ class ServiceTest extends TestCase
     use RefreshDatabase;
 
     private Tenant $tenant;
+
     private User $owner;
+
     private User $receptionist;
+
     private User $doctor;
 
     protected function setUp(): void
@@ -70,7 +73,7 @@ class ServiceTest extends TestCase
             'tenant_id' => $this->tenant->id,
             'name_ar' => 'خلع سن',
         ]);
-        
+
         $this->assertDatabaseHas('services', [
             'tenant_id' => $this->tenant->id,
             'name_ar' => 'حشو',

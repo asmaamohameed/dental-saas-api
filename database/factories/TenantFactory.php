@@ -15,7 +15,7 @@ class TenantFactory extends Factory
     public function definition(): array
     {
         return [
-            'name' => fake()->company() . ' Dental Clinic',
+            'name' => fake()->company().' Dental Clinic',
             'subdomain' => fake()->unique()->slug(),
             'locale' => 'ar',
             'status' => 'active',

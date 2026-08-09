@@ -46,4 +46,3 @@ class Service extends Model
         return $query->where('is_other', false);
     }
 }
-

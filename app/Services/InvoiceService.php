@@ -3,7 +3,6 @@
 namespace App\Services;
 
 use App\Models\Invoice;
-
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\DB;
 

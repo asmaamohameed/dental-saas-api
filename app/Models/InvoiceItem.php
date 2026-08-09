@@ -48,4 +48,3 @@ class InvoiceItem extends Model
         return $this->belongsTo(Service::class);
     }
 }
-

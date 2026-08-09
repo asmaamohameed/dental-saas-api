@@ -5,6 +5,7 @@ use App\Http\Controllers\Api\V1\Auth\LogoutController;
 use App\Http\Controllers\Api\V1\Auth\ProfileController;
 use App\Http\Controllers\Api\V1\InvoiceController;
 use App\Http\Controllers\Api\V1\InvoiceItemController;
+use App\Http\Controllers\Api\V1\PatientController;
 use App\Http\Controllers\Api\V1\PaymentController;
 use App\Http\Controllers\Api\V1\ServiceController;
 use Illuminate\Support\Facades\Route;
@@ -14,8 +15,8 @@ Route::prefix('v1')->group(function () {
     Route::prefix('auth')->group(function () {
         Route::post('login', LoginController::class);
 
-    Route::post('auth/login', LoginController::class);
-
+        Route::post('auth/login', LoginController::class);
+    });
     Route::middleware(['auth:sanctum', 'tenant'])->group(function () {
         Route::prefix('auth')->group(function () {
             Route::post('logout', LogoutController::class);

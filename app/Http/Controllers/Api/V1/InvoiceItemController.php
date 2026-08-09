@@ -34,6 +34,7 @@ class InvoiceItemController extends Controller
 
             if ($lockedInvoice->status === 'paid') {
                 DB::rollBack();
+
                 return $this->errorResponse('Cannot add items to a fully paid invoice.', 422);
             }
 
@@ -69,16 +70,18 @@ class InvoiceItemController extends Controller
 
             if ($lockedInvoice->status === 'paid') {
                 DB::rollBack();
+
                 return $this->errorResponse('Cannot modify items of a fully paid invoice.', 422);
             }
 
             $item->update($request->validated());
 
             $newTotal = $lockedInvoice->items()->selectRaw('SUM(price * quantity) as total')->value('total') ?? 0;
-            
+
             $totalPayments = $lockedInvoice->payments()->sum('amount');
             if ($newTotal < $totalPayments) {
                 DB::rollBack();
+
                 return $this->errorResponse('New total cannot be less than paid amount.', 422);
             }
 
@@ -109,21 +112,24 @@ class InvoiceItemController extends Controller
 
             if ($lockedInvoice->status === 'paid') {
                 DB::rollBack();
+
                 return $this->errorResponse('Cannot delete items from a fully paid invoice.', 422);
             }
 
             if ($lockedInvoice->items()->count() <= 1) {
                 DB::rollBack();
+
                 return $this->errorResponse('Invoice must contain at least one item.', 422);
             }
 
             $item->delete();
 
             $newTotal = $lockedInvoice->items()->selectRaw('SUM(price * quantity) as total')->value('total') ?? 0;
-            
+
             $totalPayments = $lockedInvoice->payments()->sum('amount');
             if ($newTotal < $totalPayments) {
                 DB::rollBack();
+
                 return $this->errorResponse('New total cannot be less than paid amount.', 422);
             }
 

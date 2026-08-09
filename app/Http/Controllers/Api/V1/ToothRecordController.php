@@ -8,15 +8,18 @@ use App\Http\Resources\V1\ToothRecordResource;
 use App\Models\Patient;
 use App\Models\ToothRecord;
 use App\Traits\ApiResponse;
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\Request;
 
 class ToothRecordController extends Controller
 {
-    use ApiResponse;
+    use ApiResponse, AuthorizesRequests;
 
-    /**
-     * Display a listing of historical tooth records for the patient.
-     */
+    public function __construct()
+    {
+        $this->authorizeResource(ToothRecord::class, 'toothRecord');
+    }
+
     public function index(Request $request, Patient $patient)
     {
         $perPage = min((int) $request->input('per_page', 15), 100);

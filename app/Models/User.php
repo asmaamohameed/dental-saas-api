@@ -13,6 +13,9 @@ use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
 
+/**
+ * @property UserRole|null $role
+ */
 class User extends Authenticatable
 {
     /** @use HasFactory<UserFactory> */

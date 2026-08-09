@@ -8,13 +8,19 @@ use App\Http\Requests\V1\Patient\UpdatePatientRequest;
 use App\Http\Resources\V1\PatientResource;
 use App\Models\Patient;
 use App\Traits\ApiResponse;
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controllers\HasMiddleware;
 use Illuminate\Routing\Controllers\Middleware;
 
 class PatientController extends Controller implements HasMiddleware
 {
-    use ApiResponse;
+    use ApiResponse, AuthorizesRequests;
+
+    public function __construct()
+    {
+        $this->authorizeResource(Patient::class, 'patient');
+    }
 
     public static function middleware(): array
     {

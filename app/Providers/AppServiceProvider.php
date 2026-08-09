@@ -2,9 +2,6 @@
 
 namespace App\Providers;
 
-use App\Enums\UserRole;
-use App\Models\User;
-use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
@@ -20,17 +17,5 @@ class AppServiceProvider extends ServiceProvider
     /**
      * Bootstrap any application services.
      */
-    public function boot(): void
-    {
-        Gate::before(function (User $user, string $ability) {
-            if (str_contains($ability, '.')) {
-                /** @var UserRole $role */
-                $role = $user->role;
-
-                return $role->can($ability);
-            }
-
-            return null;
-        });
-    }
+    public function boot(): void {}
 }

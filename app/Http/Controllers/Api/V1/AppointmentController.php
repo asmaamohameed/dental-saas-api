@@ -10,15 +10,18 @@ use App\Http\Requests\V1\Appointment\UpdateAppointmentStatusRequest;
 use App\Http\Resources\V1\AppointmentResource;
 use App\Models\Appointment;
 use App\Traits\ApiResponse;
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\Request;
 
 class AppointmentController extends Controller
 {
-    use ApiResponse;
+    use ApiResponse, AuthorizesRequests;
 
-    /**
-     * Display a listing of the resource.
-     */
+    public function __construct()
+    {
+        $this->authorizeResource(Appointment::class, 'appointment');
+    }
+
     public function index(Request $request)
     {
         $query = Appointment::query()->with(['patient', 'doctor']);

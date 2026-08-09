@@ -8,21 +8,18 @@ enum UserRole: string
     case DOCTOR = 'doctor';
     case RECEPTIONIST = 'receptionist';
 
-    public function can(string $ability): bool
+    public function isOwner(): bool
     {
-        return match ($this) {
-            self::OWNER => true,
-            self::DOCTOR => in_array($ability, [
-                'appointment.view', 'appointment.create', 'appointment.update', 'appointment.updateStatus', 'appointment.delete',
-                'patient.view', 'patient.create', 'patient.update', 'patient.delete',
-                'patient.viewMedicalHistory',
-                'toothRecord.manage', 'toothRecord.view', 'invoice.view',
-            ]),
-            self::RECEPTIONIST => in_array($ability, [
-                'appointment.view', 'appointment.create', 'appointment.update', 'appointment.updateStatus', 'appointment.delete',
-                'patient.view', 'patient.create', 'patient.update', 'patient.delete',
-                'toothRecord.view', 'invoice.view', 'invoice.create', 'invoice.update',
-            ]),
-        };
+        return $this === self::OWNER;
+    }
+
+    public function isDoctor(): bool
+    {
+        return $this === self::DOCTOR;
+    }
+
+    public function isReceptionist(): bool
+    {
+        return $this === self::RECEPTIONIST;
     }
 }

@@ -56,18 +56,16 @@ class ToothRecord extends Model
      */
     public static function latestPerTooth(string $patientId)
     {
-        $subQuery = self::selectRaw('MAX(created_at) as max_created_at, tooth_number')
-            ->where('patient_id', $patientId)
-            ->groupBy('tooth_number');
-
         return self::where('patient_id', $patientId)
-            ->joinSub($subQuery, 'latest', function ($join) {
-                $join->on('tooth_records.tooth_number', '=', 'latest.tooth_number')
-                    ->on('tooth_records.created_at', '=', 'latest.max_created_at');
+            ->whereIn('id', function ($query) use ($patientId) {
+                $query->select('id')
+                    ->from(function ($sub) use ($patientId) {
+                        $sub->from('tooth_records')
+                            ->selectRaw('id, ROW_NUMBER() OVER (PARTITION BY tooth_number ORDER BY created_at DESC, id DESC) as rn')
+                            ->where('patient_id', $patientId);
+                    }, 'ranked')
+                    ->where('rn', 1);
             })
-            ->select('tooth_records.*')
-            ->get()
-            ->unique('tooth_number')
-            ->values();
+            ->get();
     }
 }

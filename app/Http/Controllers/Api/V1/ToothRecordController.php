@@ -22,7 +22,7 @@ class ToothRecordController extends Controller
 
     public function index(Request $request, Patient $patient)
     {
-        $perPage = min((int) $request->input('per_page', 15), 100);
+        $perPage = max(1, min((int) $request->input('per_page', 15), 100));
         $records = $patient->toothRecords()->latest()->paginate($perPage);
 
         return $this->paginatedResponse(ToothRecordResource::collection($records));

@@ -36,11 +36,14 @@ class PatientController extends Controller implements HasMiddleware
     {
         $query = Patient::query();
 
-        if ($request->filled('search')) {
-            $search = addcslashes($request->input('search'), '%_\\');
-            $query->where(function ($q) use ($search) {
-                $q->where('full_name', 'like', "%{$search}%")
-                    ->orWhere('phone', 'like', "%{$search}%");
+        $search = $request->input('search');
+
+        if ($search) {
+            $escapedSearch = addcslashes($search, '%_\\');
+
+            $query->where(function ($q) use ($escapedSearch) {
+                $q->whereRaw("full_name LIKE ? ESCAPE '\\'", ["%{$escapedSearch}%"])
+                    ->orWhereRaw("phone LIKE ? ESCAPE '\\'", ["%{$escapedSearch}%"]);
             });
         }
 

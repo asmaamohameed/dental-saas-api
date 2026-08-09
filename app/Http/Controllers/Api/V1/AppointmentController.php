@@ -45,8 +45,7 @@ class AppointmentController extends Controller
         if ($request->filled('date_to')) {
             $query->where('scheduled_at', '<=', $request->input('date_to'));
         }
-
-        $perPage = min((int) $request->input('per_page', 15), 100);
+        $perPage = min(max((int) $request->input('per_page', 15), 1), 100);
         $appointments = $query->latest('scheduled_at')->paginate($perPage);
 
         return $this->paginatedResponse(AppointmentResource::collection($appointments));

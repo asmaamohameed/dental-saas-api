@@ -1,8 +1,8 @@
 <?php
 
 use App\Http\Controllers\Admin\Auth\LoginController;
-use App\Http\Controllers\Admin\TenantController;
 use App\Http\Controllers\Admin\SubscriptionController;
+use App\Http\Controllers\Admin\TenantController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 

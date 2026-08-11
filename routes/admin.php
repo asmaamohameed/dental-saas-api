@@ -2,7 +2,7 @@
 
 use App\Http\Controllers\Admin\Auth\LoginController;
 use App\Http\Controllers\Admin\TenantController;
-use App\Http\Controllers\Admin\TenantUserController;
+use App\Http\Controllers\Admin\SubscriptionController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
@@ -19,7 +19,7 @@ Route::middleware(['auth:sanctum', 'is_admin'])->group(function () {
     });
 
     // Super Admin Tenant Management Endpoints
-    Route::apiResource('tenants', TenantController::class);
-    Route::get('tenants/{tenant}/users', [TenantUserController::class, 'index']);
-    Route::post('tenants/{tenant}/users', [TenantUserController::class, 'store']);
+    Route::apiResource('tenants', TenantController::class)->except('destroy');
+    Route::apiResource('subscriptions', SubscriptionController::class)->only(['index', 'store', 'update']);
+    Route::patch('subscriptions/{subscription}/mark-paid', [SubscriptionController::class, 'markAsPaid']);
 });

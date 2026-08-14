@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\V1\Invoice;
 
+use App\Models\InvoiceItem;
 use App\Models\Service;
 use App\Support\Tenancy\CurrentTenant;
 use Illuminate\Foundation\Http\FormRequest;
@@ -11,7 +12,7 @@ class StoreInvoiceItemRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return true;
+        return $this->user()->can('create', [InvoiceItem::class, $this->route('invoice')]);
     }
 
     public function rules(): array

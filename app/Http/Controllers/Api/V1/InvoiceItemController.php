@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api\V1;
 
+use App\Enums\InvoiceStatus;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\V1\Invoice\StoreInvoiceItemRequest;
 use App\Http\Requests\V1\Invoice\UpdateInvoiceItemRequest;
@@ -32,7 +33,7 @@ class InvoiceItemController extends Controller
         try {
             $lockedInvoice = Invoice::lockForUpdate()->find($invoice->id);
 
-            if ($lockedInvoice->status === 'paid') {
+            if ($lockedInvoice->status === InvoiceStatus::PAID) {
                 DB::rollBack();
 
                 return $this->errorResponse('Cannot add items to a fully paid invoice.', 422);
@@ -68,7 +69,7 @@ class InvoiceItemController extends Controller
         try {
             $lockedInvoice = Invoice::lockForUpdate()->find($invoice->id);
 
-            if ($lockedInvoice->status === 'paid') {
+            if ($lockedInvoice->status === InvoiceStatus::PAID) {
                 DB::rollBack();
 
                 return $this->errorResponse('Cannot modify items of a fully paid invoice.', 422);
@@ -110,7 +111,7 @@ class InvoiceItemController extends Controller
         try {
             $lockedInvoice = Invoice::lockForUpdate()->find($invoice->id);
 
-            if ($lockedInvoice->status === 'paid') {
+            if ($lockedInvoice->status === InvoiceStatus::PAID) {
                 DB::rollBack();
 
                 return $this->errorResponse('Cannot delete items from a fully paid invoice.', 422);

@@ -10,6 +10,7 @@ use App\Models\Service;
 use App\Models\Subscription;
 use App\Models\Tenant;
 use App\Models\User;
+use App\Support\Tenancy\CurrentTenant;
 use Carbon\Carbon;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
@@ -26,6 +27,15 @@ class DemoTenantSeeder extends Seeder
             'status' => 'active',
         ]);
 
+        $tenant = Tenant::firstOrCreate([
+            'subdomain' => 'smileclinic',
+        ], [
+            'name' => 'Smile Clinic',
+            'status' => 'active',
+        ]);
+
+        app(CurrentTenant::class)->set($tenant->id);
+
         // 2. Create Subscription
         Subscription::firstOrCreate([
             'tenant_id' => $tenant->id,
@@ -37,9 +47,10 @@ class DemoTenantSeeder extends Seeder
         ]);
 
         // 3. Create Users
-        $owner = User::firstOrCreate([
-            'email' => 'owner@smileclinic.com',
-        ],
+        $owner = User::firstOrCreate(
+            [
+                'email' => 'owner@smileclinic.com',
+            ],
             [
                 'tenant_id' => $tenant->id,
                 'name' => 'Owner',
@@ -47,7 +58,8 @@ class DemoTenantSeeder extends Seeder
                 'password_hash' => Hash::make('password'),
                 'role' => 'owner',
                 'is_active' => true,
-            ]);
+            ]
+        );
 
         $doctor = User::firstOrCreate([
             'email' => 'doctor@smileclinic.com',

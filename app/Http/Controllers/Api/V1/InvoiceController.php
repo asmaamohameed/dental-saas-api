@@ -9,11 +9,14 @@ use App\Http\Resources\V1\InvoiceListResource;
 use App\Http\Resources\V1\InvoiceResource;
 use App\Models\Invoice;
 use App\Services\InvoiceService;
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 class InvoiceController extends Controller
 {
+    use AuthorizesRequests;
+
     public function __construct(private readonly InvoiceService $invoiceService) {}
 
     public function index(Request $request): JsonResponse
@@ -21,7 +24,9 @@ class InvoiceController extends Controller
         $perPage = (int) $request->query('per_page', 15);
         $perPage = min(max($perPage, 1), 50);
 
-        $invoices = $this->invoiceService->list($request->all(), $perPage);
+        $filters = $request->only(['status', 'patient_id', 'date_from', 'date_to']);
+
+        $invoices = $this->invoiceService->list($filters, $perPage);
 
         return $this->successResponse(
             InvoiceListResource::collection($invoices)->response()->getData(true),
@@ -55,6 +60,10 @@ class InvoiceController extends Controller
 
     public function update(UpdateInvoiceRequest $request, Invoice $invoice): JsonResponse
     {
+        if ($request->has('items')) {
+            $this->authorize('updateItems', $invoice);
+        }
+
         $updatedInvoice = $this->invoiceService->update($invoice, $request->validated());
 
         return $this->successResponse(

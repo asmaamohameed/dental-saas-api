@@ -20,7 +20,9 @@ class ServiceController extends Controller
         $perPage = (int) $request->query('per_page', 15);
         $perPage = min(max($perPage, 1), 50);
 
-        $services = $this->serviceService->list($request->all(), $perPage);
+        $filters = $request->only(['is_active', 'search']);
+
+        $services = $this->serviceService->list($filters, $perPage);
 
         return $this->successResponse(
             ServiceResource::collection($services)->response()->getData(true),
@@ -59,26 +61,18 @@ class ServiceController extends Controller
 
     public function destroy(Service $service): JsonResponse
     {
-        try {
-            $this->serviceService->delete($service);
+        $this->serviceService->delete($service);
 
-            return $this->successResponse(null, 'Service deleted successfully.');
-        } catch (\InvalidArgumentException $e) {
-            return $this->errorResponse($e->getMessage(), 422);
-        }
+        return $this->successResponse(null, 'Service deleted successfully.');
     }
 
     public function toggleActive(Service $service): JsonResponse
     {
-        try {
-            $updatedService = $this->serviceService->toggleActive($service);
+        $updatedService = $this->serviceService->toggleActive($service);
 
-            return $this->successResponse(
-                new ServiceResource($updatedService),
-                'Service active status updated successfully.'
-            );
-        } catch (\InvalidArgumentException $e) {
-            return $this->errorResponse($e->getMessage(), 422);
-        }
+        return $this->successResponse(
+            new ServiceResource($updatedService),
+            'Service active status updated successfully.'
+        );
     }
 }

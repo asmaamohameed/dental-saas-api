@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\InvoiceStatus;
 use App\Models\Concerns\Auditable;
 use App\Models\Concerns\BelongsToTenant;
 use Illuminate\Database\Eloquent\Builder;
@@ -20,7 +21,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
  * @property int $created_by
  * @property float $total_amount
  * @property float $remaining_amount
- * @property string $status
+ * @property InvoiceStatus $status
  */
 class Invoice extends Model
 {
@@ -42,6 +43,7 @@ class Invoice extends Model
     {
         return [
             'total_amount' => 'decimal:2',
+            'status' => InvoiceStatus::class,
         ];
     }
 
@@ -74,7 +76,13 @@ class Invoice extends Model
     // Computed Attributes
     public function getRemainingAmountAttribute(): float
     {
-        $paid = (float) $this->payments()->sum('amount');
+        if ($this->relationLoaded('payments')) {
+            $paid = (float) $this->payments->sum('amount');
+        } elseif (array_key_exists('paid_amount', $this->attributes)) {
+            $paid = (float) $this->attributes['paid_amount'];
+        } else {
+            $paid = (float) $this->payments()->sum('amount');
+        }
 
         return max(0, (float) $this->total_amount - $paid);
     }

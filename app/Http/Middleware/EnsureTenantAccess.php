@@ -4,15 +4,15 @@ namespace App\Http\Middleware;
 
 use App\Enums\TenantStatus;
 use App\Models\Tenant;
+use App\Support\Tenancy\CurrentTenant;
 use Closure;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
 
 class EnsureTenantAccess
 {
-    /**
-     * Handle an incoming request.
-     */
+    public function __construct(protected CurrentTenant $currentTenant) {}
+
     public function handle(Request $request, Closure $next): Response
     {
 
@@ -28,6 +28,8 @@ class EnsureTenantAccess
         if (! $tenant || $tenant->status !== TenantStatus::ACTIVE) {
             return response()->json(['message' => 'Tenant account is inactive or suspended.'], 403);
         }
+
+        $this->currentTenant->set($user->tenant_id);
 
         return $next($request);
     }

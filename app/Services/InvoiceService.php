@@ -2,7 +2,11 @@
 
 namespace App\Services;
 
+use App\Enums\InvoiceStatus;
+use App\Exceptions\InvoiceHasPaymentsException;
 use App\Models\Invoice;
+use App\Models\Payment;
+use App\Models\Service;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\DB;
 
@@ -10,7 +14,9 @@ class InvoiceService
 {
     public function list(array $filters = [], int $perPage = 15): LengthAwarePaginator
     {
-        $query = Invoice::query()->with(['patient', 'creator']);
+        $query = Invoice::query()
+            ->with(['patient', 'creator'])
+            ->withSum('payments as paid_amount', 'amount');
 
         if (! empty($filters['status'])) {
             $query->byStatus($filters['status']);
@@ -42,14 +48,22 @@ class InvoiceService
                 ...$data,
                 'created_by' => $userId,
                 'total_amount' => $totalAmount,
-                'status' => 'unpaid',
+                'status' => InvoiceStatus::UNPAID,
             ]);
 
             foreach ($itemsData as $item) {
+                $service = Service::find($item['service_id']);
+
+                $price = $service->is_other
+                    ? (float) $item['price']
+                    : (float) $service->default_price;
+
+                $totalAmount += $price * $item['quantity'];
+
                 $invoice->items()->create([
                     'service_id' => $item['service_id'],
                     'description' => $item['description'] ?? null,
-                    'price' => $item['price'],
+                    'price' => $price,
                     'quantity' => $item['quantity'],
                 ]);
             }
@@ -74,11 +88,17 @@ class InvoiceService
 
                 $totalAmount = 0;
                 foreach ($itemsData as $item) {
-                    $totalAmount += $item['price'] * $item['quantity'];
+                    $service = Service::find($item['service_id']);
+
+                    $price = $service->is_other
+                        ? (float) $item['price']
+                        : (float) $service->default_price;
+
+                    $totalAmount += $price * $item['quantity'];
                     $invoice->items()->create([
                         'service_id' => $item['service_id'],
                         'description' => $item['description'] ?? null,
-                        'price' => $item['price'],
+                        'price' => $price,
                         'quantity' => $item['quantity'],
                     ]);
                 }
@@ -97,7 +117,13 @@ class InvoiceService
     public function delete(Invoice $invoice): bool
     {
         return DB::transaction(function () use ($invoice) {
-            $invoice->payments()->delete();
+            if ($invoice->payments()->exists()) {
+                throw new InvoiceHasPaymentsException(
+                    'Cannot cancel an invoice that has recorded payments.'
+                );
+            }
+
+            $invoice->update(['status' => InvoiceStatus::CANCELLED->value]);
 
             return (bool) $invoice->delete();
         });
@@ -108,16 +134,22 @@ class InvoiceService
         $paid = (float) $invoice->payments()->sum('amount');
         $total = (float) $invoice->total_amount;
 
+        $status = match (true) {
+            $paid >= $total && $total > 0 => InvoiceStatus::PAID,
+            $paid > 0 => InvoiceStatus::PARTIAL,
+            default => InvoiceStatus::UNPAID,
+        };
+
+        if ($invoice->status !== $status) {
+            $invoice->update(['status' => $status]);
+        }
+
         if ($paid >= $total && $total > 0) {
             $status = 'paid';
         } elseif ($paid > 0) {
             $status = 'partial';
         } else {
             $status = 'unpaid';
-        }
-
-        if ($invoice->status !== $status) {
-            $invoice->update(['status' => $status]);
         }
     }
 
@@ -126,7 +158,7 @@ class InvoiceService
         $invoices = Invoice::where('patient_id', $patientId)->get();
 
         $totalBilled = $invoices->sum('total_amount');
-        $totalPaid = $invoices->sum(fn ($invoice) => $invoice->payments()->sum('amount'));
+        $totalPaid = Payment::whereIn('invoice_id', $invoices->pluck('id'))->sum('amount');
 
         return [
             'patient_id' => $patientId,

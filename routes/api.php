@@ -1,5 +1,6 @@
 <?php
 
+use App\Enums\UserRole;
 use App\Http\Controllers\Api\V1\AppointmentController;
 use App\Http\Controllers\Api\V1\Auth\LoginController;
 use App\Http\Controllers\Api\V1\Auth\LogoutController;
@@ -10,6 +11,7 @@ use App\Http\Controllers\Api\V1\PatientController;
 use App\Http\Controllers\Api\V1\PaymentController;
 use App\Http\Controllers\Api\V1\ServiceController;
 use App\Http\Controllers\Api\V1\ToothRecordController;
+use App\Http\Middleware\EnsureUserRole;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('v1')->group(function () {
@@ -38,11 +40,6 @@ Route::prefix('v1')->group(function () {
         Route::apiResource('appointments', AppointmentController::class);
         Route::patch('appointments/{appointment}/status', [AppointmentController::class, 'updateStatus']);
 
-    });
-
-    // Tenant feature routes
-    Route::middleware(['auth:sanctum', 'tenant'])->group(function () {
-
         // Read-only endpoints (owner, receptionist, doctor)
         Route::get('services', [ServiceController::class, 'index']);
         Route::get('services/{service}', [ServiceController::class, 'show']);
@@ -57,7 +54,7 @@ Route::prefix('v1')->group(function () {
         Route::get('invoices/{invoice}/payments/{payment}', [PaymentController::class, 'show']);
 
         // Create & Edit endpoints (owner, receptionist)
-        Route::middleware('role:owner,receptionist')->group(function () {
+        Route::middleware(EnsureUserRole::using(UserRole::OWNER, UserRole::RECEPTIONIST))->group(function () {
             Route::post('services', [ServiceController::class, 'store']);
             Route::put('services/{service}', [ServiceController::class, 'update']);
             Route::patch('services/{service}/toggle-active', [ServiceController::class, 'toggleActive']);
@@ -73,7 +70,7 @@ Route::prefix('v1')->group(function () {
         });
 
         // Owner-only sensitive actions (delete invoice, delete payment, edit payment, delete service)
-        Route::middleware('role:owner')->group(function () {
+        Route::middleware(EnsureUserRole::using(UserRole::OWNER))->group(function () {
             Route::delete('services/{service}', [ServiceController::class, 'destroy']);
             Route::delete('invoices/{invoice}', [InvoiceController::class, 'destroy']);
             Route::put('invoices/{invoice}/payments/{payment}', [PaymentController::class, 'update']);

@@ -51,7 +51,7 @@ class ServiceService
         }
 
         if ($service->invoiceItems()->exists()) {
-            throw new \InvalidArgumentException('Cannot delete service associated with existing invoice items.');
+            throw new ServiceProtectedException('Cannot delete service associated with existing invoice items.');
         }
 
         return (bool) $service->delete();
@@ -60,7 +60,7 @@ class ServiceService
     public function toggleActive(Service $service): Service
     {
         if ($service->is_other) {
-            throw new \InvalidArgumentException('Cannot deactivate system reserved "Other" service.');
+            throw new ServiceProtectedException('Cannot deactivate system reserved "Other" service.');
         }
 
         $service->update(['is_active' => ! $service->is_active]);

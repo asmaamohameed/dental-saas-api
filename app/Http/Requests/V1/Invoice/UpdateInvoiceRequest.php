@@ -33,16 +33,22 @@ class UpdateInvoiceRequest extends FormRequest
     {
         $validator->after(function ($validator) {
             $tenantId = app(CurrentTenant::class)->id();
+            $invoice = $this->route('invoice');
 
-            if ($this->filled('appointment_id') && $this->filled('patient_id')) {
-                $appointment = Appointment::where('tenant_id', $tenantId)->find($this->input('appointment_id'));
+            $appointmentId = $this->filled('appointment_id')
+                ? $this->input('appointment_id')
+                : $invoice?->appointment_id;
 
-                if ($appointment && (string) $appointment->patient_id !== (string) $this->input('patient_id')) {
+            $patientId = $this->filled('patient_id')
+                ? $this->input('patient_id')
+                : $invoice?->patient_id;
+
+            if ($appointmentId && $patientId) {
+                $appointment = Appointment::where('tenant_id', $tenantId)->find($appointmentId);
+                if ($appointment && (string) $appointment->patient_id !== (string) $patientId) {
                     $validator->errors()->add('appointment_id', 'The appointment does not belong to this patient.');
                 }
             }
-
-            $invoice = $this->route('invoice');
 
             if ($invoice && $invoice->status === InvoiceStatus::PAID) {
                 $validator->errors()->add('invoice', 'Fully paid invoices cannot be updated.');

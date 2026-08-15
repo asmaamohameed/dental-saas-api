@@ -40,7 +40,6 @@ class InvoiceItem extends Model
     {
         return [
             'price' => 'decimal:2',
-            'quantity' => 'integer',
         ];
     }
 

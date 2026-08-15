@@ -18,11 +18,9 @@ class PaymentPolicy
         return null;
     }
 
-    public function viewAny(User $user, Payment|Invoice $context): bool
+    public function viewAny(User $user, Invoice $invoice): bool
     {
-        $tenantId = $context instanceof Invoice ? $context->tenant_id : $context->invoice->tenant_id;
-
-        return $user->tenant_id === $tenantId
+        return $user->tenant_id === $invoice->tenant_id
             && in_array($user->role, [
                 UserRole::DOCTOR,
                 UserRole::RECEPTIONIST,

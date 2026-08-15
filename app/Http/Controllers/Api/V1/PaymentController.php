@@ -20,7 +20,7 @@ class PaymentController extends Controller
 
     public function index(Invoice $invoice): JsonResponse
     {
-        $this->authorize('viewAny', $invoice);
+        $this->authorize('viewAny', [Payment::class, $invoice]);
         $payments = $invoice->payments()->with('receiver')->latest()->get();
 
         return $this->successResponse(

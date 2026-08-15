@@ -2,9 +2,11 @@
 
 namespace App\Models;
 
+use App\Enums\InvoiceStatus;
 use App\Models\Concerns\Auditable;
 use App\Models\Concerns\BelongsToTenant;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -13,14 +15,19 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 /**
- * @property int $id
- * @property int $tenant_id
- * @property int $patient_id
- * @property int $appointment_id
- * @property int $created_by
- * @property float $total_amount
+ * @property string $id
+ * @property string $tenant_id
+ * @property string $patient_id
+ * @property string|null $appointment_id
+ * @property string|null $created_by
+ * @property string $total_amount
  * @property float $remaining_amount
- * @property string $status
+ * @property InvoiceStatus $status
+ * @property-read Patient $patient
+ * @property-read Appointment|null $appointment
+ * @property-read User|null $creator
+ * @property-read Collection<int, InvoiceItem> $items
+ * @property-read Collection<int, Payment> $payments
  */
 class Invoice extends Model
 {
@@ -42,6 +49,7 @@ class Invoice extends Model
     {
         return [
             'total_amount' => 'decimal:2',
+            'status' => InvoiceStatus::class,
         ];
     }
 
@@ -74,7 +82,13 @@ class Invoice extends Model
     // Computed Attributes
     public function getRemainingAmountAttribute(): float
     {
-        $paid = (float) $this->payments()->sum('amount');
+        if ($this->relationLoaded('payments')) {
+            $paid = (float) $this->payments->sum('amount');
+        } elseif (array_key_exists('paid_amount', $this->attributes)) {
+            $paid = (float) $this->attributes['paid_amount'];
+        } else {
+            $paid = (float) $this->payments()->sum('amount');
+        }
 
         return max(0, (float) $this->total_amount - $paid);
     }

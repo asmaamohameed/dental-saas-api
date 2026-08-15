@@ -21,7 +21,11 @@ class PaymentResource extends JsonResource
             'paid_at' => $this->paid_at?->toISOString(),
             'method' => $this->method,
             'received_by' => $this->received_by,
-            'receiver' => $this->whenLoaded('receiver', function (User $receiver) {
+            'receiver' => $this->whenLoaded('receiver', function (?User $receiver) {
+                if (! $receiver) {
+                    return null;
+                }
+
                 return [
                     'id' => $receiver->id,
                     'name' => $receiver->name,

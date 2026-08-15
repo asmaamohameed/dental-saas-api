@@ -19,10 +19,14 @@ class InvoiceItemResource extends JsonResource
             'invoice_id' => $this->invoice_id,
             'service_id' => $this->service_id,
             'description' => $this->description,
-            'price' => (float) $this->price,
+            'price' => $this->price,
             'quantity' => $this->quantity,
-            'subtotal' => (float) $this->subtotal,
-            'service' => $this->whenLoaded('service', function (Service $service) {
+            'subtotal' => $this->subtotal,
+            'service' => $this->whenLoaded('service', function (?Service $service) {
+                if (! $service) {
+                    return null;
+                }
+
                 return [
                     'id' => $service->id,
                     'name_ar' => $service->name_ar,

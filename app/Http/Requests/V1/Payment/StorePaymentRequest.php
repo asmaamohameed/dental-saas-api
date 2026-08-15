@@ -2,13 +2,14 @@
 
 namespace App\Http\Requests\V1\Payment;
 
+use App\Models\Payment;
 use Illuminate\Foundation\Http\FormRequest;
 
 class StorePaymentRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return true;
+        return $this->user()->can('create', [Payment::class, $this->route('invoice')]);
     }
 
     public function rules(): array

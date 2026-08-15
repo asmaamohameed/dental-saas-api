@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api\V1;
 
+use App\Enums\InvoiceStatus;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\V1\Invoice\StoreInvoiceItemRequest;
 use App\Http\Requests\V1\Invoice\UpdateInvoiceItemRequest;
@@ -9,15 +10,21 @@ use App\Http\Resources\V1\InvoiceItemResource;
 use App\Models\Invoice;
 use App\Models\InvoiceItem;
 use App\Services\InvoiceService;
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 class InvoiceItemController extends Controller
 {
+    use AuthorizesRequests;
+
     public function __construct(private readonly InvoiceService $invoiceService) {}
 
     public function index(Invoice $invoice): JsonResponse
     {
+        $this->authorize('viewAny', [InvoiceItem::class, $invoice]);
+
         $items = $invoice->items()->with('service')->get();
 
         return $this->successResponse(
@@ -28,14 +35,14 @@ class InvoiceItemController extends Controller
 
     public function store(StoreInvoiceItemRequest $request, Invoice $invoice): JsonResponse
     {
-        DB::beginTransaction();
-        try {
+        // authorize() handled inside StoreInvoiceItemRequest
+        $item = DB::transaction(function () use ($request, $invoice) {
             $lockedInvoice = Invoice::lockForUpdate()->find($invoice->id);
 
-            if ($lockedInvoice->status === 'paid') {
-                DB::rollBack();
-
-                return $this->errorResponse('Cannot add items to a fully paid invoice.', 422);
+            if ($lockedInvoice->status === InvoiceStatus::PAID) {
+                throw ValidationException::withMessages([
+                    'invoice' => 'Cannot add items to a fully paid invoice.',
+                ]);
             }
 
             $item = $lockedInvoice->items()->create($request->validated());
@@ -45,17 +52,14 @@ class InvoiceItemController extends Controller
 
             $this->invoiceService->recalculateStatus($lockedInvoice);
 
-            DB::commit();
+            return $item;
+        });
 
-            return $this->successResponse(
-                new InvoiceItemResource($item->load('service')),
-                'Invoice item added successfully.',
-                201
-            );
-        } catch (\Exception $e) {
-            DB::rollBack();
-            throw $e;
-        }
+        return $this->successResponse(
+            new InvoiceItemResource($item->load('service')),
+            'Invoice item added successfully.',
+            201
+        );
     }
 
     public function update(UpdateInvoiceItemRequest $request, Invoice $invoice, InvoiceItem $item): JsonResponse
@@ -64,40 +68,38 @@ class InvoiceItemController extends Controller
             return $this->errorResponse('Item does not belong to this invoice.', 404);
         }
 
-        DB::beginTransaction();
-        try {
+        // authorize() handled inside UpdateInvoiceItemRequest
+
+        $updatedItem = DB::transaction(function () use ($request, $invoice, $item) {
             $lockedInvoice = Invoice::lockForUpdate()->find($invoice->id);
 
-            if ($lockedInvoice->status === 'paid') {
-                DB::rollBack();
-
-                return $this->errorResponse('Cannot modify items of a fully paid invoice.', 422);
+            if ($lockedInvoice->status === InvoiceStatus::PAID) {
+                throw ValidationException::withMessages([
+                    'invoice' => 'Cannot modify items of a fully paid invoice.',
+                ]);
             }
 
             $item->update($request->validated());
 
             $newTotal = $lockedInvoice->items()->selectRaw('SUM(price * quantity) as total')->value('total') ?? 0;
-
             $totalPayments = $lockedInvoice->payments()->sum('amount');
-            if ($newTotal < $totalPayments) {
-                DB::rollBack();
 
-                return $this->errorResponse('New total cannot be less than paid amount.', 422);
+            if (bccomp((string) $newTotal, (string) $totalPayments, 2) === -1) {
+                throw ValidationException::withMessages([
+                    'quantity' => 'New total cannot be less than paid amount.',
+                ]);
             }
 
             $lockedInvoice->update(['total_amount' => $newTotal]);
             $this->invoiceService->recalculateStatus($lockedInvoice);
 
-            DB::commit();
+            return $item;
+        });
 
-            return $this->successResponse(
-                new InvoiceItemResource($item->load('service')),
-                'Invoice item updated successfully.'
-            );
-        } catch (\Exception $e) {
-            DB::rollBack();
-            throw $e;
-        }
+        return $this->successResponse(
+            new InvoiceItemResource($updatedItem->load('service')),
+            'Invoice item updated successfully.'
+        );
     }
 
     public function destroy(Invoice $invoice, InvoiceItem $item): JsonResponse
@@ -106,42 +108,38 @@ class InvoiceItemController extends Controller
             return $this->errorResponse('Item does not belong to this invoice.', 404);
         }
 
-        DB::beginTransaction();
-        try {
+        $this->authorize('delete', $item);
+
+        DB::transaction(function () use ($invoice, $item) {
             $lockedInvoice = Invoice::lockForUpdate()->find($invoice->id);
 
-            if ($lockedInvoice->status === 'paid') {
-                DB::rollBack();
-
-                return $this->errorResponse('Cannot delete items from a fully paid invoice.', 422);
+            if ($lockedInvoice->status === InvoiceStatus::PAID) {
+                throw ValidationException::withMessages([
+                    'invoice' => 'Cannot delete items from a fully paid invoice.',
+                ]);
             }
 
             if ($lockedInvoice->items()->count() <= 1) {
-                DB::rollBack();
-
-                return $this->errorResponse('Invoice must contain at least one item.', 422);
+                throw ValidationException::withMessages([
+                    'item' => 'Invoice must contain at least one item.',
+                ]);
             }
 
             $item->delete();
 
             $newTotal = $lockedInvoice->items()->selectRaw('SUM(price * quantity) as total')->value('total') ?? 0;
-
             $totalPayments = $lockedInvoice->payments()->sum('amount');
-            if ($newTotal < $totalPayments) {
-                DB::rollBack();
 
-                return $this->errorResponse('New total cannot be less than paid amount.', 422);
+            if (bccomp((string) $newTotal, (string) $totalPayments, 2) === -1) {
+                throw ValidationException::withMessages([
+                    'item' => 'New total cannot be less than paid amount.',
+                ]);
             }
 
             $lockedInvoice->update(['total_amount' => $newTotal]);
             $this->invoiceService->recalculateStatus($lockedInvoice);
+        });
 
-            DB::commit();
-
-            return $this->successResponse(null, 'Invoice item deleted successfully.');
-        } catch (\Exception $e) {
-            DB::rollBack();
-            throw $e;
-        }
+        return $this->successResponse(null, 'Invoice item deleted successfully.');
     }
 }

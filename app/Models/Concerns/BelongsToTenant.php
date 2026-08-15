@@ -3,7 +3,7 @@
 namespace App\Models\Concerns;
 
 use App\Models\Tenant;
-use App\Models\User;
+use App\Support\Tenancy\CurrentTenant;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -12,6 +12,9 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @phpstan-require-extends Model
  *
  * @property string|int|null $tenant_id
+ *
+ * @method static void creating(\Closure $callback)
+ * @method static void addGlobalScope(string $identifier, \Closure $scope)
  */
 trait BelongsToTenant
 {
@@ -21,21 +24,25 @@ trait BelongsToTenant
     protected static function bootBelongsToTenant(): void
     {
         static::addGlobalScope('tenant', function (Builder $builder) {
-            /** @var User|null $user */
-            $user = auth()->user();
+            $tenantId = app(CurrentTenant::class)->id();
 
-            if ($user && $user->tenant_id) {
-                $builder->where($builder->getModel()->getTable().'.tenant_id', $user->tenant_id);
+            if (! $tenantId) {
+                throw new \RuntimeException(
+                    'Attempted to query '.$builder->getModel()::class.' without a tenant context.'
+                );
             }
+            $builder->where($builder->getModel()->getTable().'.tenant_id', $tenantId);
         });
 
         static::creating(function (Model $model) {
-            /** @var User|null $user */
-            $user = auth()->user();
+            $tenantId = app(CurrentTenant::class)->id();
 
-            if ($user && $user->tenant_id) {
-                $model->setAttribute('tenant_id', $user->tenant_id);
+            if (! $tenantId) {
+                throw new \RuntimeException(
+                    'Attempted to create '.$model::class.' without a tenant context.'
+                );
             }
+            $model->setAttribute('tenant_id', $tenantId);
         });
     }
 

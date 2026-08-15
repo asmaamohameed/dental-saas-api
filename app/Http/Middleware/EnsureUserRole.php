@@ -29,4 +29,9 @@ class EnsureUserRole
 
         return $next($request);
     }
+
+    public static function using(UserRole ...$roles): string
+    {
+        return 'role:'.implode(',', array_map(fn (UserRole $role) => $role->value, $roles));
+    }
 }

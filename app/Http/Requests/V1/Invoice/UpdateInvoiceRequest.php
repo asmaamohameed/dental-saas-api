@@ -2,9 +2,12 @@
 
 namespace App\Http\Requests\V1\Invoice;
 
-use App\Enums\UserRole;
+use App\Enums\InvoiceStatus;
+use App\Models\Appointment;
 use App\Models\Service;
+use App\Support\Tenancy\CurrentTenant;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
 class UpdateInvoiceRequest extends FormRequest
 {
@@ -16,10 +19,10 @@ class UpdateInvoiceRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'patient_id' => ['sometimes', 'required', 'uuid', 'exists:patients,id'],
-            'appointment_id' => ['nullable', 'uuid', 'exists:appointments,id'],
+            'patient_id' => ['sometimes', 'required', 'uuid', Rule::exists('patients', 'id')->where('tenant_id', app(CurrentTenant::class)->id())],
+            'appointment_id' => ['nullable', 'uuid', Rule::exists('appointments', 'id')->where('tenant_id', app(CurrentTenant::class)->id())],
             'items' => ['sometimes', 'required', 'array', 'min:1'],
-            'items.*.service_id' => ['required_with:items', 'uuid', 'exists:services,id'],
+            'items.*.service_id' => ['required_with:items', 'uuid', Rule::exists('services', 'id')->where('tenant_id', app(CurrentTenant::class)->id())],
             'items.*.description' => ['nullable', 'string', 'max:500'],
             'items.*.price' => ['required_with:items', 'numeric', 'min:0'],
             'items.*.quantity' => ['required_with:items', 'integer', 'min:1'],
@@ -29,23 +32,36 @@ class UpdateInvoiceRequest extends FormRequest
     public function withValidator($validator): void
     {
         $validator->after(function ($validator) {
+            $tenantId = app(CurrentTenant::class)->id();
             $invoice = $this->route('invoice');
 
-            if ($invoice && $invoice->status === 'paid') {
+            $appointmentId = $this->filled('appointment_id')
+                ? $this->input('appointment_id')
+                : $invoice?->appointment_id;
+
+            $patientId = $this->filled('patient_id')
+                ? $this->input('patient_id')
+                : $invoice?->patient_id;
+
+            if ($appointmentId && $patientId) {
+                $appointment = Appointment::where('tenant_id', $tenantId)->find($appointmentId);
+                if ($appointment && (string) $appointment->patient_id !== (string) $patientId) {
+                    $validator->errors()->add('appointment_id', 'The appointment does not belong to this patient.');
+                }
+            }
+
+            if ($invoice && $invoice->status === InvoiceStatus::PAID) {
                 $validator->errors()->add('invoice', 'Fully paid invoices cannot be updated.');
             }
 
-            $user = $this->user();
-            if ($user && $user->role === UserRole::RECEPTIONIST) {
-                if ($invoice && $invoice->status === 'partial' && $this->has('items')) {
-                    $validator->errors()->add('items', 'Receptionists cannot modify items of partially paid invoices.');
-                }
+            if ($invoice && $invoice->status === InvoiceStatus::PARTIAL && $this->has('items')) {
+                $validator->errors()->add('items', 'Partially paid invoices cannot be updated.');
             }
 
             $items = $this->input('items', []);
             foreach ($items as $index => $item) {
                 if (! empty($item['service_id'])) {
-                    $service = Service::find($item['service_id']);
+                    $service = Service::where('tenant_id', $tenantId)->find($item['service_id']);
                     if ($service && $service->is_other && empty($item['description'])) {
                         $validator->errors()->add(
                             "items.{$index}.description",

@@ -32,13 +32,16 @@ class UpdateInvoiceRequest extends FormRequest
     public function withValidator($validator): void
     {
         $validator->after(function ($validator) {
+            $tenantId = app(CurrentTenant::class)->id();
+
             if ($this->filled('appointment_id') && $this->filled('patient_id')) {
-                $appointment = Appointment::find($this->input('appointment_id'));
+                $appointment = Appointment::where('tenant_id', $tenantId)->find($this->input('appointment_id'));
 
                 if ($appointment && (string) $appointment->patient_id !== (string) $this->input('patient_id')) {
                     $validator->errors()->add('appointment_id', 'The appointment does not belong to this patient.');
                 }
             }
+
             $invoice = $this->route('invoice');
 
             if ($invoice && $invoice->status === InvoiceStatus::PAID) {
@@ -52,7 +55,7 @@ class UpdateInvoiceRequest extends FormRequest
             $items = $this->input('items', []);
             foreach ($items as $index => $item) {
                 if (! empty($item['service_id'])) {
-                    $service = Service::find($item['service_id']);
+                    $service = Service::where('tenant_id', $tenantId)->find($item['service_id']);
                     if ($service && $service->is_other && empty($item['description'])) {
                         $validator->errors()->add(
                             "items.{$index}.description",

@@ -8,7 +8,7 @@ class StorePaymentRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return true;
+        return $this->user()->can('create', $this->route('invoice'));
     }
 
     public function rules(): array

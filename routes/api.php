@@ -5,6 +5,8 @@ use App\Http\Controllers\Api\V1\AppointmentController;
 use App\Http\Controllers\Api\V1\Auth\LoginController;
 use App\Http\Controllers\Api\V1\Auth\LogoutController;
 use App\Http\Controllers\Api\V1\Auth\ProfileController;
+use App\Http\Controllers\Api\V1\InventoryItemController;
+use App\Http\Controllers\Api\V1\InventoryTransactionController;
 use App\Http\Controllers\Api\V1\InvoiceController;
 use App\Http\Controllers\Api\V1\InvoiceItemController;
 use App\Http\Controllers\Api\V1\PatientController;
@@ -52,6 +54,11 @@ Route::prefix('v1')->group(function () {
 
         Route::get('invoices/{invoice}/payments', [PaymentController::class, 'index']);
         Route::get('invoices/{invoice}/payments/{payment}', [PaymentController::class, 'show']);
+
+        // Inventory
+        Route::apiResource('inventory-items', InventoryItemController::class);
+        Route::get('inventory-items/{item}/transactions', [InventoryTransactionController::class, 'index']);
+        Route::post('inventory-items/{item}/transactions', [InventoryTransactionController::class, 'store']);
 
         // Create & Edit endpoints (owner, receptionist)
         Route::middleware(EnsureUserRole::using(UserRole::OWNER, UserRole::RECEPTIONIST))->group(function () {

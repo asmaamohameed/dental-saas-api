@@ -31,18 +31,21 @@ class InvoiceItemPolicy
     public function create(User $user, Invoice $invoice): bool
     {
         return $user->tenant_id === $invoice->tenant_id
+            && $user->role === UserRole::RECEPTIONIST
             && Gate::forUser($user)->allows('updateItems', $invoice);
     }
 
     public function update(User $user, InvoiceItem $invoiceItem): bool
     {
         return $user->tenant_id === $invoiceItem->invoice->tenant_id
+            && $user->role === UserRole::RECEPTIONIST
             && Gate::forUser($user)->allows('updateItems', $invoiceItem->invoice);
     }
 
     public function delete(User $user, InvoiceItem $invoiceItem): bool
     {
         return $user->tenant_id === $invoiceItem->invoice->tenant_id
+            && $user->role === UserRole::RECEPTIONIST
             && Gate::forUser($user)->allows('updateItems', $invoiceItem->invoice);
     }
 }

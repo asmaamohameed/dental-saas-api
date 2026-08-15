@@ -7,8 +7,10 @@ use App\Exceptions\InvoiceHasPaymentsException;
 use App\Models\Invoice;
 use App\Models\Payment;
 use App\Models\Service;
+use App\Support\Tenancy\CurrentTenant;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 class InvoiceService
 {
@@ -39,9 +41,28 @@ class InvoiceService
             $itemsData = $data['items'];
             unset($data['items']);
 
+            $tenantId = app(CurrentTenant::class)->id();
+            $resolvedItems = [];
             $totalAmount = 0;
+
             foreach ($itemsData as $item) {
-                $totalAmount += $item['price'] * $item['quantity'];
+                $service = Service::where('tenant_id', $tenantId)->find($item['service_id']);
+
+                if (! $service) {
+                    throw ValidationException::withMessages([
+                        'items' => 'One or more selected services are invalid.',
+                    ]);
+                }
+
+                $price = $service->is_other ? (float) $item['price'] : (float) $service->default_price;
+                $totalAmount += $price * $item['quantity'];
+
+                $resolvedItems[] = [
+                    'service_id' => $item['service_id'],
+                    'description' => $item['description'] ?? null,
+                    'price' => $price,
+                    'quantity' => $item['quantity'],
+                ];
             }
 
             $invoice = Invoice::create([
@@ -51,21 +72,8 @@ class InvoiceService
                 'status' => InvoiceStatus::UNPAID,
             ]);
 
-            foreach ($itemsData as $item) {
-                $service = Service::find($item['service_id']);
-
-                $price = $service->is_other
-                    ? (float) $item['price']
-                    : (float) $service->default_price;
-
-                $totalAmount += $price * $item['quantity'];
-
-                $invoice->items()->create([
-                    'service_id' => $item['service_id'],
-                    'description' => $item['description'] ?? null,
-                    'price' => $price,
-                    'quantity' => $item['quantity'],
-                ]);
+            foreach ($resolvedItems as $resolvedItem) {
+                $invoice->items()->create($resolvedItem);
             }
 
             return $invoice->load(['patient', 'appointment', 'creator', 'items.service', 'payments']);
@@ -80,52 +88,87 @@ class InvoiceService
     public function update(Invoice $invoice, array $data): Invoice
     {
         return DB::transaction(function () use ($invoice, $data) {
+            $lockedInvoice = Invoice::lockForUpdate()->find($invoice->id);
+
+            if ($lockedInvoice->status === InvoiceStatus::PAID) {
+                throw ValidationException::withMessages([
+                    'invoice' => 'Fully paid invoices cannot be updated.',
+                ]);
+            }
+
+            if (isset($data['items']) && $lockedInvoice->status === InvoiceStatus::PARTIAL) {
+                throw ValidationException::withMessages([
+                    'items' => 'Partially paid invoices cannot be updated.',
+                ]);
+            }
+
             if (isset($data['items'])) {
                 $itemsData = $data['items'];
                 unset($data['items']);
 
-                $invoice->items()->delete();
-
+                $tenantId = app(CurrentTenant::class)->id();
                 $totalAmount = 0;
+                $resolvedItems = [];
+
                 foreach ($itemsData as $item) {
-                    $service = Service::find($item['service_id']);
+                    $service = Service::where('tenant_id', $tenantId)->find($item['service_id']);
 
-                    $price = $service->is_other
-                        ? (float) $item['price']
-                        : (float) $service->default_price;
+                    if (! $service) {
+                        throw ValidationException::withMessages([
+                            'items' => 'One or more selected services are invalid.',
+                        ]);
+                    }
 
+                    $price = $service->is_other ? (float) $item['price'] : (float) $service->default_price;
                     $totalAmount += $price * $item['quantity'];
-                    $invoice->items()->create([
+
+                    $resolvedItems[] = [
                         'service_id' => $item['service_id'],
                         'description' => $item['description'] ?? null,
                         'price' => $price,
                         'quantity' => $item['quantity'],
+                    ];
+                }
+
+                $totalPayments = (float) $lockedInvoice->payments()->sum('amount');
+
+                if (bccomp((string) $totalAmount, (string) $totalPayments, 2) === -1) {
+                    throw ValidationException::withMessages([
+                        'items' => 'New total cannot be less than paid amount.',
                     ]);
+                }
+
+                $lockedInvoice->items()->delete();
+
+                foreach ($resolvedItems as $resolvedItem) {
+                    $lockedInvoice->items()->create($resolvedItem);
                 }
 
                 $data['total_amount'] = $totalAmount;
             }
 
-            $invoice->update($data);
+            $lockedInvoice->update($data);
 
-            $this->recalculateStatus($invoice);
+            $this->recalculateStatus($lockedInvoice);
 
-            return $invoice->load(['patient', 'appointment', 'creator', 'items.service', 'payments']);
+            return $lockedInvoice->load(['patient', 'appointment', 'creator', 'items.service', 'payments']);
         });
     }
 
     public function delete(Invoice $invoice): bool
     {
         return DB::transaction(function () use ($invoice) {
-            if ($invoice->payments()->exists()) {
+            $lockedInvoice = Invoice::lockForUpdate()->find($invoice->id);
+
+            if ($lockedInvoice->payments()->exists()) {
                 throw new InvoiceHasPaymentsException(
                     'Cannot cancel an invoice that has recorded payments.'
                 );
             }
 
-            $invoice->update(['status' => InvoiceStatus::CANCELLED->value]);
+            $lockedInvoice->update(['status' => InvoiceStatus::CANCELLED->value]);
 
-            return (bool) $invoice->delete();
+            return (bool) $lockedInvoice->delete();
         });
     }
 
@@ -142,14 +185,6 @@ class InvoiceService
 
         if ($invoice->status !== $status) {
             $invoice->update(['status' => $status]);
-        }
-
-        if ($paid >= $total && $total > 0) {
-            $status = 'paid';
-        } elseif ($paid > 0) {
-            $status = 'partial';
-        } else {
-            $status = 'unpaid';
         }
     }
 

@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Exceptions\ServiceProtectedException;
 use App\Models\Service;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 
@@ -16,7 +17,7 @@ class ServiceService
         }
 
         if (! empty($filters['search'])) {
-            $search = $filters['search'];
+            $search = str_replace(['%', '_'], ['\%', '\_'], $filters['search']);
             $query->where(function ($q) use ($search) {
                 $q->where('name_ar', 'like', "%{$search}%")
                     ->orWhere('name_en', 'like', "%{$search}%");
@@ -46,11 +47,11 @@ class ServiceService
     public function delete(Service $service): bool
     {
         if ($service->is_other) {
-            throw new \InvalidArgumentException('Cannot delete system reserved "Other" service.');
+            throw new ServiceProtectedException('Cannot delete system reserved "Other" service.');
         }
 
         if ($service->invoiceItems()->exists()) {
-            throw new \InvalidArgumentException('Cannot delete service associated with existing invoice items.');
+            throw new ServiceProtectedException('Cannot delete service associated with existing invoice items.');
         }
 
         return (bool) $service->delete();
@@ -59,7 +60,7 @@ class ServiceService
     public function toggleActive(Service $service): Service
     {
         if ($service->is_other) {
-            throw new \InvalidArgumentException('Cannot deactivate system reserved "Other" service.');
+            throw new ServiceProtectedException('Cannot deactivate system reserved "Other" service.');
         }
 
         $service->update(['is_active' => ! $service->is_active]);

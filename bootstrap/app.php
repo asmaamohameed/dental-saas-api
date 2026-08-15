@@ -1,11 +1,13 @@
 <?php
 
-use App\Http\Middleware\EnsureAdminAccess;
+use App\Exceptions\InvoiceHasPaymentsException;
+use App\Exceptions\ServiceProtectedException;
 use App\Http\Middleware\EnsureTenantAccess;
 use App\Http\Middleware\EnsureUserIsAdmin;
 use App\Http\Middleware\EnsureUserRole;
 use App\Http\Middleware\SetLocale;
 use Illuminate\Auth\AuthenticationException;
+use Illuminate\Auth\Middleware\Authenticate;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Application;
@@ -36,8 +38,12 @@ return Application::configure(basePath: dirname(__DIR__))
             'tenant' => EnsureTenantAccess::class,
             'role' => EnsureUserRole::class,
             'locale' => SetLocale::class,
-            'admin' => EnsureAdminAccess::class,
         ]);
+
+        $middleware->appendToPriorityList(
+            after: Authenticate::class,
+            append: EnsureTenantAccess::class,
+        );
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->render(function (Throwable $e, Request $request) {
@@ -59,12 +65,13 @@ return Application::configure(basePath: dirname(__DIR__))
                 } elseif ($e instanceof HttpException) {
                     $status = $e->getStatusCode();
                     $message = $e->getMessage() ?: Response::$statusTexts[$status] ?? 'HTTP Error';
+                } elseif ($e instanceof InvoiceHasPaymentsException) {
+                    $status = 422;
+                    $message = $e->getMessage();
+                } elseif ($e instanceof ServiceProtectedException) {
+                    $status = 422;
+                    $message = $e->getMessage();
                 } elseif ($e instanceof QueryException) {
-                    $status = 500;
-                    $message = config('app.debug')
-                        ? $e->getMessage()
-                        : 'Database error.';
-                } else {
                     $message = config('app.debug') ? $e->getMessage() : $message;
                 }
 

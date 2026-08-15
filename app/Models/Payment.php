@@ -12,14 +12,15 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Carbon;
 
 /**
- * @property int $id
- * @property int $invoice_id
- * @property float $amount
+ * @property string $id
+ * @property string $invoice_id
+ * @property string $amount
  * @property Carbon|null $paid_at
  * @property string $method
  * @property string $received_by
  * @property string|null $notes
  * @property Carbon|null $created_at
+ * @property-read Invoice $invoice
  * @property-read User|null $receiver
  */
 class Payment extends Model

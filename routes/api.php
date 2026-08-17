@@ -56,9 +56,11 @@ Route::prefix('v1')->group(function () {
         Route::get('invoices/{invoice}/payments/{payment}', [PaymentController::class, 'show']);
 
         // Inventory
-        Route::apiResource('inventory-items', InventoryItemController::class);
+        Route::apiResource('inventory-items', InventoryItemController::class)->parameters(['inventory-items' => 'inventoryItem']);
         Route::get('inventory-items/{item}/transactions', [InventoryTransactionController::class, 'index']);
         Route::post('inventory-items/{item}/transactions', [InventoryTransactionController::class, 'store']);
+        Route::patch('inventory-items/{inventoryItem}/restore', [InventoryItemController::class, 'restore']);
+        Route::patch('inventory-items/{inventoryItem}', [InventoryItemController::class, 'update']);
 
         // Create & Edit endpoints (owner, receptionist)
         Route::middleware(EnsureUserRole::using(UserRole::OWNER, UserRole::RECEPTIONIST))->group(function () {

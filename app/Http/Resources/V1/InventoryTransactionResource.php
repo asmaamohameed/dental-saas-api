@@ -3,7 +3,6 @@
 namespace App\Http\Resources\V1;
 
 use App\Models\InventoryTransaction;
-use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -22,15 +21,11 @@ class InventoryTransactionResource extends JsonResource
             'type' => $this->type,
             'quantity' => (float) $this->quantity,
             'reason' => $this->reason,
-            'performed_by' => $this->whenLoaded('performer', function (?User $performer) {
-                if (! $performer) {
-                    return null;
-                }
-
-                return [
-                    'id' => $performer->id,
-                    'name' => $performer->name,
-                ];
+            'performed_by' => $this->whenLoaded('performer', function () {
+                return $this->performer ? [
+                    'id' => $this->performer->id,
+                    'name' => $this->performer->name,
+                ] : null;
             }),
             'created_at' => $this->created_at?->toISOString(),
         ];

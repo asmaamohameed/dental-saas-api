@@ -39,7 +39,10 @@ class InventoryTransactionPolicy
     public function create(User $user, InventoryItem $item): bool
     {
         return $user->tenant_id === $item->tenant_id
-            && $user->role === UserRole::RECEPTIONIST;
+            && in_array($user->role, [
+                UserRole::DOCTOR,
+                UserRole::RECEPTIONIST,
+            ], true);
     }
 
     public function delete(User $user, InventoryTransaction $transaction): bool

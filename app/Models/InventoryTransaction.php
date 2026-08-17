@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\InventoryTransactionType;
 use App\Models\Concerns\BelongsToTenant;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -39,6 +40,7 @@ class InventoryTransaction extends Model
     {
         return [
             'quantity' => 'decimal:2',
+            'type' => InventoryTransactionType::class,
         ];
     }
 

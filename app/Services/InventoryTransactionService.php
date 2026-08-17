@@ -28,10 +28,16 @@ class InventoryTransactionService
                     ]);
                 }
 
-                $lockedItem->update(['current_quantity' => $newQuantity]);
+                $lockedItem->forceFill(['current_quantity' => $newQuantity])->save();
             } else {
                 $newQuantity = bcadd($currentQuantity, $quantity, 2);
-                $lockedItem->update(['current_quantity' => $newQuantity]);
+                $lockedItem->forceFill(['current_quantity' => $newQuantity])->save();
+            }
+
+            if (! $lockedItem->is_active) {
+                throw ValidationException::withMessages([
+                    'inventory_item_id' => 'This item is inactive and cannot receive transactions.',
+                ]);
             }
 
             /** @var InventoryTransaction $transaction */

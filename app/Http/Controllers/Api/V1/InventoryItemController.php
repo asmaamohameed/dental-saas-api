@@ -25,9 +25,9 @@ class InventoryItemController extends Controller
             $query->lowStock();
         }
 
-        $items = $query->latest()->get();
+        $items = $query->latest()->paginate($request->integer('per_page', 15));
 
-        return $this->successResponse(
+        return $this->paginatedResponse(
             InventoryItemResource::collection($items),
             'Inventory items retrieved successfully.'
         );
@@ -73,5 +73,17 @@ class InventoryItemController extends Controller
         $inventoryItem->update(['is_active' => false]);
 
         return $this->successResponse(null, 'Inventory item deactivated successfully.');
+    }
+
+    public function restore(InventoryItem $inventoryItem): JsonResponse
+    {
+        $this->authorize('restore', $inventoryItem);
+
+        $inventoryItem->update(['is_active' => true]);
+
+        return $this->successResponse(
+            new InventoryItemResource($inventoryItem),
+            'Inventory item reactivated successfully.'
+        );
     }
 }

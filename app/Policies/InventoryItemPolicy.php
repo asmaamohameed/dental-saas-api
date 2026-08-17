@@ -51,4 +51,10 @@ class InventoryItemPolicy
         // Only the owner may deactivate items — granted via before().
         return false;
     }
+
+    public function restore(User $user, InventoryItem $item): bool
+    {
+        // Only the owner may restore items — granted via before().
+        return false;
+    }
 }

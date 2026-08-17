@@ -30,7 +30,6 @@ class InventoryItem extends Model
     protected $fillable = [
         'name',
         'unit',
-        'current_quantity',
         'minimum_threshold',
         'is_active',
     ];

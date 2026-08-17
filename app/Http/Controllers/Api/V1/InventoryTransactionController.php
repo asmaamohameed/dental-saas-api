@@ -10,6 +10,7 @@ use App\Models\InventoryTransaction;
 use App\Services\InventoryTransactionService;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 
 class InventoryTransactionController extends Controller
 {
@@ -17,16 +18,16 @@ class InventoryTransactionController extends Controller
 
     public function __construct(private readonly InventoryTransactionService $transactionService) {}
 
-    public function index(InventoryItem $item): JsonResponse
+    public function index(InventoryItem $item, Request $request): JsonResponse
     {
         $this->authorize('viewAny', [InventoryTransaction::class, $item]);
 
         $transactions = $item->transactions()
             ->with('performer')
             ->latest('created_at')
-            ->get();
+            ->paginate($request->integer('per_page', 15));
 
-        return $this->successResponse(
+        return $this->paginatedResponse(
             InventoryTransactionResource::collection($transactions),
             'Inventory transactions retrieved successfully.'
         );

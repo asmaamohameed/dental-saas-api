@@ -19,7 +19,7 @@ class InventoryItemController extends Controller
     {
         $this->authorize('viewAny', InventoryItem::class);
 
-        $query = InventoryItem::query();
+        $query = InventoryItem::query()->where('is_active', true);
 
         if ($request->boolean('low_stock')) {
             $query->lowStock();

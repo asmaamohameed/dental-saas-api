@@ -11,6 +11,10 @@ class InventoryTransactionPolicy
 {
     public function before(User $user, string $ability): ?bool
     {
+        if ($ability === 'delete') {
+            return null;
+        }
+
         if ($user->role?->isOwner()) {
             return true;
         }
@@ -43,11 +47,5 @@ class InventoryTransactionPolicy
                 UserRole::DOCTOR,
                 UserRole::RECEPTIONIST,
             ], true);
-    }
-
-    public function delete(User $user, InventoryTransaction $transaction): bool
-    {
-        // Transactions are append-only — never delete.
-        return false;
     }
 }

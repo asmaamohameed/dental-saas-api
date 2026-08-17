@@ -18,12 +18,28 @@ class InventoryTransactionFactory extends Factory
     public function definition(): array
     {
         return [
-            'tenant_id' => Tenant::factory(),
             'inventory_item_id' => InventoryItem::factory(),
+            'tenant_id' => function (array $attributes) {
+                if (isset($attributes['inventory_item_id'])) {
+                    $item = $attributes['inventory_item_id'] instanceof InventoryItem
+                        ? $attributes['inventory_item_id']
+                        : InventoryItem::find($attributes['inventory_item_id']);
+
+                    if ($item) {
+                        return $item->tenant_id;
+                    }
+                }
+
+                return Tenant::factory();
+            },
             'type' => 'in',
             'quantity' => '10.00',
             'reason' => 'purchase',
-            'performed_by' => User::factory(),
+            'performed_by' => function (array $attributes) {
+                return User::factory()->create([
+                    'tenant_id' => $attributes['tenant_id'],
+                ]);
+            },
         ];
     }
 }

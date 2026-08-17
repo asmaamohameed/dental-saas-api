@@ -23,7 +23,7 @@ class StoreInventoryTransactionRequest extends FormRequest
                 Rule::exists('inventory_items', 'id')->where('tenant_id', app(CurrentTenant::class)->id()),
             ],
             'type' => ['required', 'string', 'in:in,out'],
-            'quantity' => ['required', 'numeric', 'min:0.01'],
+            'quantity' => ['required', 'numeric', 'min:0.01', 'decimal:0,2'],
             'reason' => ['nullable', 'string', 'max:255'],
         ];
     }

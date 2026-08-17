@@ -25,7 +25,9 @@ class InventoryItemController extends Controller
             $query->lowStock();
         }
 
-        $items = $query->latest()->paginate($request->integer('per_page', 15));
+        $perPage = max(1, min((int) $request->input('per_page', 15), 100));
+
+        $items = $query->latest()->paginate($perPage);
 
         return $this->paginatedResponse(
             InventoryItemResource::collection($items),

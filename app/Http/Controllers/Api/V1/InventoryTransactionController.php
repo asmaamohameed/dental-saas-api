@@ -22,10 +22,12 @@ class InventoryTransactionController extends Controller
     {
         $this->authorize('viewAny', [InventoryTransaction::class, $item]);
 
+        $perPage = max(1, min((int) $request->input('per_page', 15), 100));
+
         $transactions = $item->transactions()
             ->with('performer')
             ->latest('created_at')
-            ->paginate($request->integer('per_page', 15));
+            ->paginate($perPage);
 
         return $this->paginatedResponse(
             InventoryTransactionResource::collection($transactions),

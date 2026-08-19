@@ -2,9 +2,11 @@
 
 use App\Enums\UserRole;
 use App\Http\Controllers\Api\V1\AppointmentController;
+use App\Http\Controllers\Api\V1\Auth\ForgotPasswordController;
 use App\Http\Controllers\Api\V1\Auth\LoginController;
 use App\Http\Controllers\Api\V1\Auth\LogoutController;
 use App\Http\Controllers\Api\V1\Auth\ProfileController;
+use App\Http\Controllers\Api\V1\Auth\ResetPasswordController;
 use App\Http\Controllers\Api\V1\InventoryItemController;
 use App\Http\Controllers\Api\V1\InventoryTransactionController;
 use App\Http\Controllers\Api\V1\InvoiceController;
@@ -19,7 +21,9 @@ use Illuminate\Support\Facades\Route;
 Route::prefix('v1')->group(function () {
 
     // Auth Routes (Public)
-    Route::post('auth/login', LoginController::class);
+    Route::post('auth/login', LoginController::class)->middleware('throttle:login');
+    Route::post('auth/forgot-password', ForgotPasswordController::class)->middleware('throttle:6,1');
+    Route::post('auth/reset-password', ResetPasswordController::class)->middleware('throttle:6,1');
 
     // Protected Routes
     Route::middleware(['auth:sanctum', 'tenant'])->group(function () {

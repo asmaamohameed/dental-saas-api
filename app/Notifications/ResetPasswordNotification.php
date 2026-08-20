@@ -20,14 +20,14 @@ class ResetPasswordNotification extends Notification
     public function toMail($notifiable): MailMessage
     {
         $url = rtrim(config('app.frontend_url'), '/')
-            .'/reset-password?token='.$this->token
-            .'&email='.urlencode($this->email);
+            . '/reset-password?token=' . $this->token
+            . '&email=' . urlencode($this->email);
 
         return (new MailMessage)
-            ->subject('إعادة تعيين كلمة المرور')
-            ->line('تلقيت هذا البريد لأنه تم طلب إعادة تعيين كلمة المرور لحسابك.')
-            ->action('إعادة تعيين كلمة المرور', $url)
-            ->line('هذا الرابط صالح لمدة 60 دقيقة.')
-            ->line('إذا لم تطلب ذلك، تجاهل هذه الرسالة.');
+            ->subject('Password Reset')
+            ->line('You received this email because a password reset was requested for your account.')
+            ->action('Reset Password', $url)
+            ->line('This link will expire in 60 minutes.')
+            ->line('If you did not request this, please ignore this message.');
     }
 }

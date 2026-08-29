@@ -2,12 +2,16 @@
 
 namespace App\Providers;
 
+use App\Auth\TenantAwareUserProvider;
+use App\Models\PersonalAccessToken;
 use App\Support\Tenancy\CurrentTenant;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Str;
+use Laravel\Sanctum\Sanctum;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -24,6 +28,12 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        Sanctum::usePersonalAccessTokenModel(PersonalAccessToken::class);
+
+        Auth::provider('tenant_aware_eloquent', function ($app, array $config) {
+            return new TenantAwareUserProvider($app['hash'], $config['model']);
+        });
+
         RateLimiter::for('login', function (Request $request) {
             $key = Str::lower($request->input('email')).'|'.$request->ip();
 

@@ -9,9 +9,12 @@ use Illuminate\Validation\ValidationException;
 
 class AuthService
 {
-    public function loginUser(array $credentials, string $device = 'api_token'): string
+    public function loginUser(array $credentials, string $device = 'api_token'): array
     {
-        $user = User::where('email', $credentials['email'])->first();
+        $user = User::withoutGlobalScope('tenant')
+            ->with('tenant')
+            ->where('email', $credentials['email'])
+            ->first();
 
         if (! $user || ! Hash::check($credentials['password'], $user->password_hash)) {
             throw ValidationException::withMessages([
@@ -25,7 +28,10 @@ class AuthService
             ]);
         }
 
-        return $user->createToken($device)->plainTextToken;
+        return [
+            'user' => $user,
+            'token' => $user->createToken($device)->plainTextToken,
+        ];
     }
 
     public function loginAdmin(array $credentials, string $device = 'admin_api_token'): string

@@ -17,13 +17,10 @@ class AppointmentController extends Controller
 {
     use ApiResponse, AuthorizesRequests;
 
-    public function __construct()
-    {
-        $this->authorizeResource(Appointment::class, 'appointment');
-    }
-
     public function index(Request $request)
     {
+        $this->authorize('viewAny', Appointment::class);
+
         $query = Appointment::query()->with(['patient', 'doctor']);
 
         if ($request->filled('patient_id')) {
@@ -56,6 +53,8 @@ class AppointmentController extends Controller
      */
     public function store(StoreAppointmentRequest $request)
     {
+        $this->authorize('create', Appointment::class);
+
         $data = $request->validated();
         $data['created_by'] = auth()->id();
         $data['status'] = AppointmentStatus::SCHEDULED;
@@ -75,6 +74,8 @@ class AppointmentController extends Controller
      */
     public function show(Appointment $appointment)
     {
+        $this->authorize('view', $appointment);
+
         $appointment->load(['patient', 'doctor']);
 
         return $this->successResponse(new AppointmentResource($appointment));
@@ -85,6 +86,8 @@ class AppointmentController extends Controller
      */
     public function update(UpdateAppointmentRequest $request, Appointment $appointment)
     {
+        $this->authorize('update', $appointment);
+
         $appointment->update($request->validated());
         $appointment->load(['patient', 'doctor']);
 
@@ -99,6 +102,8 @@ class AppointmentController extends Controller
      */
     public function destroy(Appointment $appointment)
     {
+        $this->authorize('delete', $appointment);
+
         $appointment->delete();
 
         return $this->successResponse(null, 'Appointment deleted successfully.');
@@ -109,6 +114,8 @@ class AppointmentController extends Controller
      */
     public function updateStatus(UpdateAppointmentStatusRequest $request, Appointment $appointment)
     {
+        $this->authorize('update', $appointment);
+
         $data = $request->validated();
 
         $appointment->status = $data['status'];

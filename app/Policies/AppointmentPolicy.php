@@ -2,6 +2,7 @@
 
 namespace App\Policies;
 
+use App\Enums\UserRole;
 use App\Models\Appointment;
 use App\Models\User;
 
@@ -12,7 +13,11 @@ class AppointmentPolicy
      */
     public function viewAny(User $user): bool
     {
-        return $user->can('appointment.view');
+        return in_array($user->role, [
+            UserRole::OWNER,
+            UserRole::DOCTOR,
+            UserRole::RECEPTIONIST,
+        ]);
     }
 
     /**
@@ -20,7 +25,11 @@ class AppointmentPolicy
      */
     public function view(User $user, Appointment $appointment): bool
     {
-        return $user->can('appointment.view');
+        return in_array($user->role, [
+            UserRole::OWNER,
+            UserRole::DOCTOR,
+            UserRole::RECEPTIONIST,
+        ]);
     }
 
     /**
@@ -28,7 +37,10 @@ class AppointmentPolicy
      */
     public function create(User $user): bool
     {
-        return $user->can('appointment.create');
+        return in_array($user->role, [
+            UserRole::OWNER,
+            UserRole::RECEPTIONIST,
+        ]);
     }
 
     /**
@@ -36,7 +48,10 @@ class AppointmentPolicy
      */
     public function update(User $user, Appointment $appointment): bool
     {
-        return $user->can('appointment.update');
+        return in_array($user->role, [
+            UserRole::OWNER,
+            UserRole::RECEPTIONIST,
+        ]);
     }
 
     /**
@@ -44,7 +59,11 @@ class AppointmentPolicy
      */
     public function updateStatus(User $user, Appointment $appointment): bool
     {
-        return $user->can('appointment.updateStatus');
+        if ($user->role === UserRole::OWNER || $user->role === UserRole::RECEPTIONIST) {
+            return true;
+        }
+
+        return $user->role === UserRole::DOCTOR && $appointment->doctor_id === $user->id;
     }
 
     /**
@@ -52,7 +71,7 @@ class AppointmentPolicy
      */
     public function delete(User $user, Appointment $appointment): bool
     {
-        return $user->can('appointment.delete');
+        return $user->role === UserRole::OWNER;
     }
 
     /**

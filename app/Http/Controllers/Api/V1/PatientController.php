@@ -17,11 +17,6 @@ class PatientController extends Controller implements HasMiddleware
 {
     use ApiResponse, AuthorizesRequests;
 
-    public function __construct()
-    {
-        $this->authorizeResource(Patient::class, 'patient');
-    }
-
     public static function middleware(): array
     {
         return [
@@ -34,6 +29,8 @@ class PatientController extends Controller implements HasMiddleware
      */
     public function index(Request $request)
     {
+        $this->authorize('viewAny', Patient::class);
+
         $query = Patient::query();
 
         $search = $request->input('search');
@@ -58,6 +55,8 @@ class PatientController extends Controller implements HasMiddleware
      */
     public function store(StorePatientRequest $request)
     {
+        $this->authorize('create', Patient::class);
+
         $patient = Patient::create($request->validated());
 
         return $this->successResponse(
@@ -72,6 +71,8 @@ class PatientController extends Controller implements HasMiddleware
      */
     public function show(Patient $patient)
     {
+        $this->authorize('view', $patient);
+        
         return $this->successResponse(new PatientResource($patient));
     }
 
@@ -80,6 +81,8 @@ class PatientController extends Controller implements HasMiddleware
      */
     public function update(UpdatePatientRequest $request, Patient $patient)
     {
+        $this->authorize('update', $patient);
+
         $patient->update($request->validated());
 
         return $this->successResponse(
@@ -93,6 +96,8 @@ class PatientController extends Controller implements HasMiddleware
      */
     public function destroy(Patient $patient)
     {
+        $this->authorize('delete', $patient);
+
         if (
             $patient->appointments()->exists()
             || $patient->toothRecords()->exists()

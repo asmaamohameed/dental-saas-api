@@ -37,6 +37,7 @@ class PatientPolicy
     public function create(User $user): bool
     {
         return in_array($user->role, [
+            UserRole::OWNER,
             UserRole::DOCTOR,
             UserRole::RECEPTIONIST,
         ]);
@@ -46,6 +47,7 @@ class PatientPolicy
     {
         return $user->tenant_id === $patient->tenant_id
             && in_array($user->role, [
+                UserRole::OWNER,
                 UserRole::DOCTOR,
                 UserRole::RECEPTIONIST,
             ]);

@@ -10,7 +10,7 @@ class StoreAppointmentRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return $this->user()->can('appointment.create');
+        return true;
     }
 
     public function rules(): array

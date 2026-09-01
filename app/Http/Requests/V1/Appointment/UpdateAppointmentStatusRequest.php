@@ -11,7 +11,7 @@ class UpdateAppointmentStatusRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return $this->user()->can('appointment.updateStatus');
+        return true;
     }
 
     public function rules(): array

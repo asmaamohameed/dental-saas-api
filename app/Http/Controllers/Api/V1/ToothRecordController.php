@@ -15,13 +15,11 @@ class ToothRecordController extends Controller
 {
     use ApiResponse, AuthorizesRequests;
 
-    public function __construct()
-    {
-        $this->authorizeResource(ToothRecord::class, 'toothRecord');
-    }
 
     public function index(Request $request, Patient $patient)
     {
+        $this->authorize('viewAny', [ToothRecord::class, $patient]);
+
         $perPage = max(1, min((int) $request->input('per_page', 15), 100));
         $records = $patient->toothRecords()->latest()->paginate($perPage);
 
@@ -33,6 +31,8 @@ class ToothRecordController extends Controller
      */
     public function store(StoreToothRecordRequest $request, Patient $patient)
     {
+        $this->authorize('create', [ToothRecord::class, $patient]);
+
         // Verify appointment belongs to this specific patient
         $patient->appointments()->findOrFail($request->validated('appointment_id'));
 
@@ -53,6 +53,8 @@ class ToothRecordController extends Controller
      */
     public function odontogram(Patient $patient)
     {
+        $this->authorize('view', $patient);
+
         $records = ToothRecord::latestPerTooth($patient->id);
 
         return $this->successResponse(ToothRecordResource::collection($records));

@@ -72,7 +72,7 @@ class PatientController extends Controller implements HasMiddleware
     public function show(Patient $patient)
     {
         $this->authorize('view', $patient);
-        
+
         return $this->successResponse(new PatientResource($patient));
     }
 

@@ -12,7 +12,7 @@ class UpdatePatientRequest extends FormRequest
      */
     public function authorize(): bool
     {
-        return $this->user()->can('patient.update');
+        return true;
     }
 
     /**

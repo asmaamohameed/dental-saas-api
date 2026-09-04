@@ -2,6 +2,7 @@
 
 namespace App\Policies;
 
+use App\Enums\InvoiceStatus;
 use App\Enums\UserRole;
 use App\Models\Invoice;
 use App\Models\InvoiceItem;
@@ -10,8 +11,14 @@ use Illuminate\Support\Facades\Gate;
 
 class InvoiceItemPolicy
 {
-    public function before(User $user, string $ability): ?bool
+    public function before(User $user, string $ability, mixed $model = null): ?bool
     {
+        $invoice = $model instanceof InvoiceItem ? $model->invoice : $model;
+
+        if ($invoice instanceof Invoice && $invoice->status === InvoiceStatus::PAID) {
+            return false;
+        }
+
         if ($user->role?->isOwner()) {
             return true;
         }

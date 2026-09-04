@@ -52,7 +52,7 @@ class ToothRecordController extends Controller
      */
     public function odontogram(Patient $patient)
     {
-        $this->authorize('view', $patient);
+        $this->authorize('viewAny', [ToothRecord::class, $patient]);
 
         $records = ToothRecord::latestPerTooth($patient->id);
 

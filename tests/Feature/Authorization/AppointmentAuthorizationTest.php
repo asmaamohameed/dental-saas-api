@@ -60,6 +60,7 @@ class AppointmentAuthorizationTest extends TestCase
         $this->deleteJson("/api/v1/appointments/{$appointment->id}")
             ->assertOk();
     }
+
     public function test_doctor_cannot_create_an_appointment(): void
     {
         $tenant = Tenant::factory()->create();

@@ -56,6 +56,6 @@ class PatientPolicy
     public function delete(User $user, Patient $patient): bool
     {
         return $user->tenant_id === $patient->tenant_id
-            && $user->role === UserRole::RECEPTIONIST;
+            && $user->role === UserRole::OWNER;
     }
 }

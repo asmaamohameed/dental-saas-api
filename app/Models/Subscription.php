@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Enums\SubscriptionStatus;
 use App\Models\Concerns\BelongsToTenant;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
 
@@ -20,7 +21,7 @@ use Illuminate\Support\Carbon;
  */
 class Subscription extends Model
 {
-    use BelongsToTenant, HasUuids;
+    use BelongsToTenant, HasFactory,HasUuids;
 
     protected $fillable = [
         'plan_type',

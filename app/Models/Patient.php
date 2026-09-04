@@ -7,6 +7,7 @@ use App\Models\Concerns\BelongsToTenant;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
@@ -28,7 +29,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  */
 class Patient extends Model
 {
-    use Auditable, BelongsToTenant, HasUuids;
+    use Auditable, BelongsToTenant, HasFactory, HasUuids;
 
     protected $fillable = [
         'full_name',

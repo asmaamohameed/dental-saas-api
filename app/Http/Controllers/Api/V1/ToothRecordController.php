@@ -15,7 +15,6 @@ class ToothRecordController extends Controller
 {
     use ApiResponse, AuthorizesRequests;
 
-
     public function index(Request $request, Patient $patient)
     {
         $this->authorize('viewAny', [ToothRecord::class, $patient]);

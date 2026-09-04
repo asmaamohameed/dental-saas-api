@@ -2,6 +2,7 @@
 
 namespace Database\Factories;
 
+use App\Enums\TenantStatus;
 use App\Models\Tenant;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
@@ -15,10 +16,15 @@ class TenantFactory extends Factory
     public function definition(): array
     {
         return [
-            'name' => fake()->company().' Dental Clinic',
-            'subdomain' => fake()->unique()->slug(),
+            'name' => fake()->company(),
+            'subdomain' => fake()->unique()->slug(2),
             'locale' => 'ar',
-            'status' => 'active',
+            'status' => TenantStatus::ACTIVE,
         ];
+    }
+
+    public function inactive(): static
+    {
+        return $this->state(fn () => ['status' => TenantStatus::INACTIVE]);
     }
 }

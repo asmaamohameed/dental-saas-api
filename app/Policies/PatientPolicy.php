@@ -34,6 +34,11 @@ class PatientPolicy
             ]);
     }
 
+    public function viewMedicalHistory(User $user): bool
+    {
+        return $user->role === UserRole::DOCTOR;
+    }
+
     public function create(User $user): bool
     {
         return in_array($user->role, [

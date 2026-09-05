@@ -24,10 +24,10 @@ class PatientResource extends JsonResource
             'phone' => $this->phone,
             'date_of_birth' => $this->date_of_birth?->format('Y-m-d'),
             'gender' => $this->gender,
-            'medical_history' => $request->user()?->can('patient.viewMedicalHistory')
+            'medical_history' => $request->user()?->can('viewMedicalHistory', Patient::class)
                 ? $this->medical_history
                 : null,
-            'notes' => $request->user()?->can('patient.viewMedicalHistory')
+            'notes' => $request->user()?->can('viewMedicalHistory', Patient::class)
                 ? $this->notes
                 : null,
             'created_at' => $this->created_at,

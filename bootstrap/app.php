@@ -79,20 +79,25 @@ return Application::configure(basePath: dirname(__DIR__))
                 $status = 500;
                 $message = 'An unexpected error occurred.';
                 $errors = null;
+                // الـ exceptions اللي أصلها HttpException (زي TooManyRequestsHttpException
+                // بتاعة الـ throttle) بتحمل headers مهمة (Retry-After, X-RateLimit-*...)
+                // - لازم تتنقل للـ response النهائي وإلا هتضيع.
+                $headers = method_exists($e, 'getHeaders') ? $e->getHeaders() : [];
 
                 if ($e instanceof ValidationException) {
                     $status = 422;
                     $message = $e->getMessage();
                     $errors = $e->errors();
-                } elseif ($e instanceof ModelNotFoundException) {
-                    $status = 404;
-                    $message = 'Resource not found.';
                 } elseif ($e instanceof AuthenticationException) {
                     $status = 401;
                     $message = 'Unauthenticated.';
                 } elseif ($e instanceof HttpException) {
                     $status = $e->getStatusCode();
                     $message = $e->getMessage() ?: Response::$statusTexts[$status] ?? 'HTTP Error';
+
+                    if ($status === 404 && $e->getPrevious() instanceof ModelNotFoundException) {
+                        $message = 'Resource not found.';
+                    }
                 } elseif ($e instanceof InvoiceHasPaymentsException) {
                     $status = 422;
                     $message = $e->getMessage();
@@ -112,7 +117,7 @@ return Application::configure(basePath: dirname(__DIR__))
                     $response['errors'] = $errors;
                 }
 
-                return response()->json($response, $status);
+                return response()->json($response, $status, $headers);
             }
         });
     })->create();

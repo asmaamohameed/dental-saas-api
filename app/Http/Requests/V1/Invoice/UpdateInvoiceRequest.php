@@ -54,10 +54,6 @@ class UpdateInvoiceRequest extends FormRequest
                 $validator->errors()->add('invoice', 'Fully paid invoices cannot be updated.');
             }
 
-            if ($invoice && $invoice->status === InvoiceStatus::PARTIAL && $this->has('items')) {
-                $validator->errors()->add('items', 'Partially paid invoices cannot be updated.');
-            }
-
             $items = $this->input('items', []);
             foreach ($items as $index => $item) {
                 if (! empty($item['service_id'])) {

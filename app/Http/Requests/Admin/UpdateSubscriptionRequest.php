@@ -2,8 +2,10 @@
 
 namespace App\Http\Requests\Admin;
 
+use App\Enums\SubscriptionStatus;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
 class UpdateSubscriptionRequest extends FormRequest
 {
@@ -25,7 +27,7 @@ class UpdateSubscriptionRequest extends FormRequest
         return [
             'tenant_id' => ['sometimes', 'required', 'string', 'exists:tenants,id'],
             'plan_type' => ['sometimes', 'required', 'string', 'max:255'],
-            'status' => ['sometimes', 'required', 'string', 'max:255'],
+            'status' => ['sometimes', 'required', 'string', Rule::enum(SubscriptionStatus::class)],
             'start_date' => ['sometimes', 'required', 'date'],
             'end_date' => ['sometimes', 'required', 'date', 'after_or_equal:start_date'],
             'notes' => ['sometimes', 'nullable', 'string'],

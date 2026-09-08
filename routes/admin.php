@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Admin\Auth\LoginController;
+use App\Http\Controllers\Admin\Auth\LogoutController;
 use App\Http\Controllers\Admin\SubscriptionController;
 use App\Http\Controllers\Admin\TenantController;
 use Illuminate\Http\Request;
@@ -11,6 +12,7 @@ Route::prefix('auth')->group(function () {
 });
 
 Route::middleware(['auth:sanctum', 'is_admin'])->group(function () {
+    Route::post('auth/logout', LogoutController::class);
     Route::get('/ping', function (Request $request) {
         return response()->json([
             'message' => 'Admin API works!',

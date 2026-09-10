@@ -11,13 +11,6 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\App;
 use Tests\TestCase;
 
-/**
- * ملحوظة: مش لاقي SetLocale متطبقة على أي route في api.php اللي شفته لحد
- * دلوقتي (الـ alias 'locale' معرّف في bootstrap/app.php بس مش مستخدم على
- * أي route ظاهر) - فالتستات دي بتستدعي الـ middleware مباشرة بدل ما تعتمد
- * على HTTP request كامل، عشان تبقى صحيحة بغض النظر عن كونها متوصلة
- * بـ route فعلي ولا لسه.
- */
 class SetLocaleMiddlewareTest extends TestCase
 {
     use RefreshDatabase;

@@ -71,7 +71,7 @@ class InvoiceUpdateTest extends TestCase
         $this->assertSame($originalPatientId, $invoice->patient_id);
     }
 
-    public function test_updating_base_fields_on_a_partial_invoice_without_items_succeeds(): void
+    public function test_updating_patient_id_on_a_partial_invoice_with_no_actual_payment_is_still_blocked(): void
     {
         $this->actingAsRole(UserRole::OWNER);
 
@@ -83,10 +83,23 @@ class InvoiceUpdateTest extends TestCase
 
         $this->putJson("/api/v1/invoices/{$invoice->id}", [
             'patient_id' => $newPatient->id,
-        ])->assertOk();
+        ])->assertStatus(422)->assertJsonValidationErrors(['patient_id']);
+    }
 
-        $invoice->refresh();
-        $this->assertSame($newPatient->id, $invoice->patient_id);
+    public function test_updating_base_fields_other_than_patient_id_on_a_partial_invoice_succeeds(): void
+    {
+        $this->actingAsRole(UserRole::OWNER);
+
+        $patient = Patient::factory()->create(['tenant_id' => $this->tenant->id]);
+        $invoice = Invoice::factory()->create([
+            'tenant_id' => $this->tenant->id,
+            'patient_id' => $patient->id,
+            'status' => InvoiceStatus::PARTIAL,
+        ]);
+
+        $this->putJson("/api/v1/invoices/{$invoice->id}", [
+            'patient_id' => $patient->id,
+        ])->assertOk();
     }
 
     public function test_updating_items_on_a_partial_invoice_is_blocked_even_for_owner(): void

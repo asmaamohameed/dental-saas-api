@@ -73,7 +73,7 @@ class DemoTenantSeeder extends Seeder
 
         foreach ($tenants as $tenantIndex => $tenantId) {
             $this->command->info(
-                "Seeding tenant " . ($tenantIndex + 1) . "/{$tenantCount} (ID: {$tenantId})"
+                'Seeding tenant '.($tenantIndex + 1)."/{$tenantCount} (ID: {$tenantId})"
             );
 
             /*
@@ -116,7 +116,7 @@ class DemoTenantSeeder extends Seeder
                 ->where('email', $ownerEmail)
                 ->first();
 
-            if (!$owner) {
+            if (! $owner) {
                 $ownerId = DB::table('users')->insertGetId([
                     'tenant_id' => $tenantId,
                     'name' => "Owner {$tenantIndex}",
@@ -134,7 +134,7 @@ class DemoTenantSeeder extends Seeder
                 ->where('email', $doctorEmail)
                 ->first();
 
-            if (!$doctor) {
+            if (! $doctor) {
                 $doctorId = DB::table('users')->insertGetId([
                     'tenant_id' => $tenantId,
                     'name' => "Dr. Doctor {$tenantIndex}",
@@ -152,7 +152,7 @@ class DemoTenantSeeder extends Seeder
                 ->where('email', $receptionEmail)
                 ->first();
 
-            if (!$receptionist) {
+            if (! $receptionist) {
                 $receptionistId = DB::table('users')->insertGetId([
                     'tenant_id' => $tenantId,
                     'name' => "Receptionist {$tenantIndex}",
@@ -231,7 +231,7 @@ class DemoTenantSeeder extends Seeder
                         $rows[] = [
                             'tenant_id' => $tenantId,
                             'full_name' => "Test Patient {$tenantIndex}-{$number}",
-                            'phone' => '+201' . str_pad(
+                            'phone' => '+201'.str_pad(
                                 (string) $number,
                                 9,
                                 '0',
@@ -404,7 +404,7 @@ class DemoTenantSeeder extends Seeder
             |--------------------------------------------------------------------------
             */
 
-            $this->command->info("Creating invoice items...");
+            $this->command->info('Creating invoice items...');
 
             $invoiceIds = DB::table('invoices')
                 ->where('tenant_id', $tenantId)
@@ -445,7 +445,7 @@ class DemoTenantSeeder extends Seeder
                     $rows[] = [
                         'invoice_id' => $invoiceId,
                         'service_id' => $serviceId,
-                        'description' => "Performance Test Service",
+                        'description' => 'Performance Test Service',
                         'quantity' => 1,
                         'price' => $price,
                     ];
@@ -463,7 +463,7 @@ class DemoTenantSeeder extends Seeder
             }
 
             $this->command->info(
-                "Tenant " . ($tenantIndex + 1) . " completed."
+                'Tenant '.($tenantIndex + 1).' completed.'
             );
         }
 

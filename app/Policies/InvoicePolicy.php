@@ -20,6 +20,11 @@ class InvoicePolicy
 
     public function updateItems(User $user, Invoice $invoice): bool
     {
+
+        if (! in_array($user->role, [UserRole::OWNER, UserRole::RECEPTIONIST], true)) {
+            return false;
+        }
+
         if ($user->role === UserRole::RECEPTIONIST && $invoice->status === InvoiceStatus::PARTIAL) {
             return false;
         }

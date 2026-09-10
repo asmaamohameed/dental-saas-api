@@ -20,7 +20,6 @@ class UpdateInvoiceRequest extends FormRequest
     {
         return [
             'patient_id' => ['sometimes', 'required', 'uuid', Rule::exists('patients', 'id')->where('tenant_id', app(CurrentTenant::class)->id())],
-            'appointment_id' => ['nullable', 'uuid', Rule::exists('appointments', 'id')->where('tenant_id', app(CurrentTenant::class)->id())],
             'items' => ['sometimes', 'required', 'array', 'min:1'],
             'items.*.service_id' => ['required_with:items', 'uuid', Rule::exists('services', 'id')->where('tenant_id', app(CurrentTenant::class)->id())],
             'items.*.description' => ['nullable', 'string', 'max:500'],
@@ -35,23 +34,33 @@ class UpdateInvoiceRequest extends FormRequest
             $tenantId = app(CurrentTenant::class)->id();
             $invoice = $this->route('invoice');
 
-            $appointmentId = $this->filled('appointment_id')
-                ? $this->input('appointment_id')
-                : $invoice?->appointment_id;
-
-            $patientId = $this->filled('patient_id')
-                ? $this->input('patient_id')
-                : $invoice?->patient_id;
-
-            if ($appointmentId && $patientId) {
-                $appointment = Appointment::where('tenant_id', $tenantId)->find($appointmentId);
-                if ($appointment && (string) $appointment->patient_id !== (string) $patientId) {
-                    $validator->errors()->add('appointment_id', 'The appointment does not belong to this patient.');
-                }
+            if ($this->has('appointment_id')) {
+                $validator->errors()->add(
+                    'appointment_id',
+                    'The appointment linked to an invoice cannot be changed after creation.'
+                );
             }
 
             if ($invoice && $invoice->status === InvoiceStatus::PAID) {
                 $validator->errors()->add('invoice', 'Fully paid invoices cannot be updated.');
+            }
+
+            if ($invoice && $invoice->status === InvoiceStatus::PARTIAL && $this->filled('patient_id')
+                && (string) $this->input('patient_id') !== (string) $invoice->patient_id) {
+                $validator->errors()->add(
+                    'patient_id',
+                    'The patient on an invoice with recorded payments cannot be changed.'
+                );
+            }
+
+            $appointmentId = $invoice?->appointment_id;
+            $patientId = $this->filled('patient_id') ? $this->input('patient_id') : $invoice?->patient_id;
+
+            if ($appointmentId && $patientId) {
+                $appointment = Appointment::where('tenant_id', $tenantId)->find($appointmentId);
+                if ($appointment && (string) $appointment->patient_id !== (string) $patientId) {
+                    $validator->errors()->add('patient_id', 'The new patient does not match the invoice\'s appointment.');
+                }
             }
 
             $items = $this->input('items', []);

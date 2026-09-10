@@ -6,6 +6,7 @@ use App\Auth\TenantAwareUserProvider;
 use App\Models\PersonalAccessToken;
 use App\Support\Tenancy\CurrentTenant;
 use Illuminate\Cache\RateLimiting\Limit;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\RateLimiter;
@@ -28,6 +29,8 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        Model::preventLazyLoading(! app()->isProduction());
+
         Sanctum::usePersonalAccessTokenModel(PersonalAccessToken::class);
 
         Auth::provider('tenant_aware_eloquent', function ($app, array $config) {

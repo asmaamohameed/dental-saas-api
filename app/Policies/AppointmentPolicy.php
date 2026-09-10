@@ -25,11 +25,12 @@ class AppointmentPolicy
      */
     public function view(User $user, Appointment $appointment): bool
     {
-        return in_array($user->role, [
-            UserRole::OWNER,
-            UserRole::DOCTOR,
-            UserRole::RECEPTIONIST,
-        ]);
+        return $user->tenant_id === $appointment->tenant_id
+            && in_array($user->role, [
+                UserRole::OWNER,
+                UserRole::DOCTOR,
+                UserRole::RECEPTIONIST,
+            ], true);
     }
 
     /**
@@ -48,10 +49,11 @@ class AppointmentPolicy
      */
     public function update(User $user, Appointment $appointment): bool
     {
-        return in_array($user->role, [
-            UserRole::OWNER,
-            UserRole::RECEPTIONIST,
-        ]);
+        return $user->tenant_id === $appointment->tenant_id
+            && in_array($user->role, [
+                UserRole::OWNER,
+                UserRole::RECEPTIONIST,
+            ], true);
     }
 
     /**
@@ -59,6 +61,10 @@ class AppointmentPolicy
      */
     public function updateStatus(User $user, Appointment $appointment): bool
     {
+        if ($user->tenant_id !== $appointment->tenant_id) {
+            return false;
+        }
+
         if ($user->role === UserRole::OWNER || $user->role === UserRole::RECEPTIONIST) {
             return true;
         }
@@ -71,7 +77,8 @@ class AppointmentPolicy
      */
     public function delete(User $user, Appointment $appointment): bool
     {
-        return $user->role === UserRole::OWNER;
+        return $user->tenant_id === $appointment->tenant_id
+            && $user->role === UserRole::OWNER;
     }
 
     /**

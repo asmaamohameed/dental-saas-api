@@ -2,11 +2,10 @@
 
 namespace Database\Factories;
 
-use App\Models\Tenant;
+use App\Enums\UserRole;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Str;
 
 /**
  * @extends Factory<User>
@@ -26,23 +25,28 @@ class UserFactory extends Factory
     public function definition(): array
     {
         return [
-            'tenant_id' => Tenant::factory(),
             'name' => fake()->name(),
             'email' => fake()->unique()->safeEmail(),
-            'email_verified_at' => now(),
-            'password_hash' => static::$password ??= Hash::make('password'),
-            'role' => 'receptionist',
-            'remember_token' => Str::random(10),
+            'phone' => fake()->phoneNumber(),
+            'password_hash' => Hash::make('password'),
+            'role' => UserRole::DOCTOR,
+            'locale' => null,
+            'is_active' => true,
         ];
     }
 
-    /**
-     * Indicate that the model's email address should be unverified.
-     */
-    public function unverified(): static
+    public function owner(): static
     {
-        return $this->state(fn (array $attributes) => [
-            'email_verified_at' => null,
-        ]);
+        return $this->state(fn () => ['role' => UserRole::OWNER]);
+    }
+
+    public function doctor(): static
+    {
+        return $this->state(fn () => ['role' => UserRole::DOCTOR]);
+    }
+
+    public function receptionist(): static
+    {
+        return $this->state(fn () => ['role' => UserRole::RECEPTIONIST]);
     }
 }

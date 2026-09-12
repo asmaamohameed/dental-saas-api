@@ -3,7 +3,6 @@
 namespace Database\Factories;
 
 use App\Models\Service;
-use App\Models\Tenant;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 /**
@@ -16,10 +15,9 @@ class ServiceFactory extends Factory
     public function definition(): array
     {
         return [
-            'tenant_id' => Tenant::factory(),
-            'name_ar' => fake()->word().' خدمة أسنان',
-            'name_en' => fake()->word().' Dental Service',
-            'default_price' => fake()->randomFloat(2, 50, 1000),
+            'name_ar' => fake()->word(),
+            'name_en' => fake()->word(),
+            'default_price' => fake()->randomFloat(2, 50, 500),
             'is_active' => true,
             'is_other' => false,
         ];
@@ -27,11 +25,6 @@ class ServiceFactory extends Factory
 
     public function other(): static
     {
-        return $this->state(fn (array $attributes) => [
-            'name_ar' => 'أخرى',
-            'name_en' => 'Other',
-            'is_other' => true,
-            'default_price' => 0,
-        ]);
+        return $this->state(fn () => ['is_other' => true]);
     }
 }

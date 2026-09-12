@@ -15,7 +15,6 @@ class ToothRecordController extends Controller
 {
     use ApiResponse, AuthorizesRequests;
 
-
     public function index(Request $request, Patient $patient)
     {
         $this->authorize('viewAny', [ToothRecord::class, $patient]);
@@ -53,7 +52,7 @@ class ToothRecordController extends Controller
      */
     public function odontogram(Patient $patient)
     {
-        $this->authorize('view', $patient);
+        $this->authorize('viewAny', [ToothRecord::class, $patient]);
 
         $records = ToothRecord::latestPerTooth($patient->id);
 

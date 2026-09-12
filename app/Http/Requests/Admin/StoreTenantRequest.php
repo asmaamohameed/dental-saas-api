@@ -2,8 +2,10 @@
 
 namespace App\Http\Requests\Admin;
 
+use App\Enums\TenantStatus;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
 class StoreTenantRequest extends FormRequest
 {
@@ -26,7 +28,7 @@ class StoreTenantRequest extends FormRequest
             'name' => ['required', 'string', 'max:255'],
             'subdomain' => ['required', 'string', 'max:255', 'unique:tenants,subdomain'],
             'locale' => ['nullable', 'string', 'max:10'],
-            'status' => ['required', 'string', 'in:active,suspended'],
+            'status' => ['required', Rule::enum(TenantStatus::class)],
         ];
     }
 }

@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\Admin;
 
+use App\Enums\TenantStatus;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -33,7 +34,7 @@ class UpdateTenantRequest extends FormRequest
                 Rule::unique('tenants', 'subdomain')->ignore($this->route('tenant')),
             ],
             'locale' => ['sometimes', 'nullable', 'string', 'max:10'],
-            'status' => ['sometimes', 'required', 'string', 'in:active,suspended'],
+            'status' => ['sometimes', 'required', Rule::enum(TenantStatus::class)],
         ];
     }
 }

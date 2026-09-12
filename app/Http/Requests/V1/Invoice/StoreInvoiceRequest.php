@@ -23,7 +23,7 @@ class StoreInvoiceRequest extends FormRequest
             'items' => ['required', 'array', 'min:1'],
             'items.*.service_id' => ['required', 'uuid', Rule::exists('services', 'id')->where('tenant_id', app(CurrentTenant::class)->id())],
             'items.*.description' => ['nullable', 'string', 'max:500'],
-            'items.*.price' => ['required', 'numeric', 'min:0'],
+            'items.*.price' => ['nullable', 'numeric', 'min:0'],
             'items.*.quantity' => ['required', 'integer', 'min:1'],
         ];
     }

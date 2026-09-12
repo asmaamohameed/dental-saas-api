@@ -7,12 +7,13 @@ use App\Models\Concerns\Auditable;
 use App\Models\Concerns\BelongsToTenant;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class ToothRecord extends Model
 {
-    use Auditable, BelongsToTenant, HasUuids;
+    use Auditable, BelongsToTenant, HasFactory,HasUuids;
 
     protected $fillable = [
         'patient_id',

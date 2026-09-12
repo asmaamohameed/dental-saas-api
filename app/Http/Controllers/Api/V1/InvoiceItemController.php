@@ -9,7 +9,9 @@ use App\Http\Requests\V1\Invoice\UpdateInvoiceItemRequest;
 use App\Http\Resources\V1\InvoiceItemResource;
 use App\Models\Invoice;
 use App\Models\InvoiceItem;
+use App\Models\Service;
 use App\Services\InvoiceService;
+use App\Support\Tenancy\CurrentTenant;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
@@ -35,7 +37,6 @@ class InvoiceItemController extends Controller
 
     public function store(StoreInvoiceItemRequest $request, Invoice $invoice): JsonResponse
     {
-        // authorize() handled inside StoreInvoiceItemRequest
         $item = DB::transaction(function () use ($request, $invoice) {
             $lockedInvoice = Invoice::lockForUpdate()->find($invoice->id);
 
@@ -45,7 +46,15 @@ class InvoiceItemController extends Controller
                 ]);
             }
 
-            $item = $lockedInvoice->items()->create($request->validated());
+            $validated = $request->validated();
+            $service = Service::where('tenant_id', app(CurrentTenant::class)->id())
+                ->findOrFail($validated['service_id']);
+
+            $validated['price'] = $service->is_other
+                ? (float) $validated['price']
+                : (float) $service->default_price;
+
+            $item = $lockedInvoice->items()->create($validated);
 
             $newTotal = $lockedInvoice->items()->selectRaw('SUM(price * quantity) as total')->value('total') ?? 0;
             $lockedInvoice->update(['total_amount' => $newTotal]);
@@ -68,8 +77,6 @@ class InvoiceItemController extends Controller
             return $this->errorResponse('Item does not belong to this invoice.', 404);
         }
 
-        // authorize() handled inside UpdateInvoiceItemRequest
-
         $updatedItem = DB::transaction(function () use ($request, $invoice, $item) {
             $lockedInvoice = Invoice::lockForUpdate()->find($invoice->id);
 
@@ -79,7 +86,19 @@ class InvoiceItemController extends Controller
                 ]);
             }
 
-            $item->update($request->validated());
+            $validated = $request->validated();
+
+            if (array_key_exists('service_id', $validated) || array_key_exists('price', $validated)) {
+                $serviceId = $validated['service_id'] ?? $item->service_id;
+                $service = Service::where('tenant_id', app(CurrentTenant::class)->id())
+                    ->findOrFail($serviceId);
+
+                if (! $service->is_other) {
+                    $validated['price'] = (float) $service->default_price;
+                }
+            }
+
+            $item->update($validated);
 
             $newTotal = $lockedInvoice->items()->selectRaw('SUM(price * quantity) as total')->value('total') ?? 0;
             $totalPayments = $lockedInvoice->payments()->sum('amount');

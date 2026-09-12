@@ -20,4 +20,12 @@ class CurrentTenant
     {
         return $this->id !== null;
     }
+
+    /**
+     * Clear the current tenant context.
+     */
+    public function clear(): void
+    {
+        $this->set(null);
+    }
 }

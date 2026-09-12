@@ -2,9 +2,9 @@
 
 namespace Database\Factories;
 
+use App\Enums\InvoiceStatus;
 use App\Models\Invoice;
 use App\Models\Patient;
-use App\Models\Tenant;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
@@ -18,12 +18,15 @@ class InvoiceFactory extends Factory
     public function definition(): array
     {
         return [
-            'tenant_id' => Tenant::factory(),
             'patient_id' => Patient::factory(),
-            'appointment_id' => null,
-            'created_by' => User::factory(),
-            'total_amount' => 500.00,
-            'status' => 'unpaid',
+            'created_by' => User::factory()->receptionist(),
+            'total_amount' => 100,
+            'status' => InvoiceStatus::UNPAID,
         ];
+    }
+
+    public function paid(): static
+    {
+        return $this->state(fn () => ['status' => InvoiceStatus::PAID]);
     }
 }

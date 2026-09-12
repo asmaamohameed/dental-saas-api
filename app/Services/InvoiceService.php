@@ -96,9 +96,25 @@ class InvoiceService
                 ]);
             }
 
+            if (array_key_exists('appointment_id', $data)) {
+                throw ValidationException::withMessages([
+                    'appointment_id' => 'The appointment linked to an invoice cannot be changed after creation.',
+                ]);
+            }
+
             if (isset($data['items']) && $lockedInvoice->status === InvoiceStatus::PARTIAL) {
                 throw ValidationException::withMessages([
                     'items' => 'Partially paid invoices cannot be updated.',
+                ]);
+            }
+
+            if (
+                isset($data['patient_id'])
+                && $lockedInvoice->status === InvoiceStatus::PARTIAL
+                && (string) $data['patient_id'] !== (string) $lockedInvoice->patient_id
+            ) {
+                throw ValidationException::withMessages([
+                    'patient_id' => 'The patient on an invoice with recorded payments cannot be changed.',
                 ]);
             }
 

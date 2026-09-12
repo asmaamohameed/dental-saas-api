@@ -22,7 +22,7 @@ class UpdateInventoryItemRequest extends FormRequest
                 'max:255',
                 Rule::unique('inventory_items', 'name')
                     ->where('tenant_id', app(CurrentTenant::class)->id())
-                    ->ignore($this->route('inventory_item')),
+                    ->ignore($this->route('inventoryItem')),
             ],
             'unit' => ['sometimes', 'string', 'max:50'],
             'minimum_threshold' => ['nullable', 'numeric', 'min:0'],

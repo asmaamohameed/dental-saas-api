@@ -114,7 +114,7 @@ class AppointmentController extends Controller
      */
     public function updateStatus(UpdateAppointmentStatusRequest $request, Appointment $appointment)
     {
-        $this->authorize('update', $appointment);
+        $this->authorize('updateStatus', $appointment);
 
         $data = $request->validated();
 

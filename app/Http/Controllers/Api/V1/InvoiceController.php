@@ -28,8 +28,8 @@ class InvoiceController extends Controller
 
         $invoices = $this->invoiceService->list($filters, $perPage);
 
-        return $this->successResponse(
-            InvoiceListResource::collection($invoices)->response()->getData(true),
+        return $this->paginatedResponse(
+            InvoiceListResource::collection($invoices),
             'Invoices retrieved successfully.'
         );
     }

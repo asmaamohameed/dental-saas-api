@@ -23,7 +23,7 @@ class UpdateInvoiceRequest extends FormRequest
             'items' => ['sometimes', 'required', 'array', 'min:1'],
             'items.*.service_id' => ['required_with:items', 'uuid', Rule::exists('services', 'id')->where('tenant_id', app(CurrentTenant::class)->id())],
             'items.*.description' => ['nullable', 'string', 'max:500'],
-            'items.*.price' => ['required_with:items', 'numeric', 'min:0'],
+            'items.*.price' => ['nullable', 'numeric', 'min:0'],
             'items.*.quantity' => ['required_with:items', 'integer', 'min:1'],
         ];
     }
@@ -45,8 +45,10 @@ class UpdateInvoiceRequest extends FormRequest
                 $validator->errors()->add('invoice', 'Fully paid invoices cannot be updated.');
             }
 
-            if ($invoice && $invoice->status === InvoiceStatus::PARTIAL && $this->filled('patient_id')
-                && (string) $this->input('patient_id') !== (string) $invoice->patient_id) {
+            if (
+                $invoice && $invoice->status === InvoiceStatus::PARTIAL && $this->filled('patient_id')
+                && (string) $this->input('patient_id') !== (string) $invoice->patient_id
+            ) {
                 $validator->errors()->add(
                     'patient_id',
                     'The patient on an invoice with recorded payments cannot be changed.'
@@ -67,11 +69,19 @@ class UpdateInvoiceRequest extends FormRequest
             foreach ($items as $index => $item) {
                 if (! empty($item['service_id'])) {
                     $service = Service::where('tenant_id', $tenantId)->find($item['service_id']);
-                    if ($service && $service->is_other && empty($item['description'])) {
-                        $validator->errors()->add(
-                            "items.{$index}.description",
-                            'Description is required when selecting the "Other" service.'
-                        );
+                    if ($service && $service->is_other) {
+                        if (empty($item['description'])) {
+                            $validator->errors()->add(
+                                "items.{$index}.description",
+                                'Description is required when selecting the "Other" service.'
+                            );
+                        }
+                        if (! isset($item['price'])) {
+                            $validator->errors()->add(
+                                "items.{$index}.price",
+                                'Price is required when selecting the "Other" service.'
+                            );
+                        }
                     }
                 }
             }

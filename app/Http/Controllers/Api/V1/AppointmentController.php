@@ -10,6 +10,7 @@ use App\Http\Requests\V1\Appointment\UpdateAppointmentStatusRequest;
 use App\Http\Resources\V1\AppointmentResource;
 use App\Models\Appointment;
 use App\Traits\ApiResponse;
+use App\Events\PatientCheckedIn;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\Request;
 
@@ -118,6 +119,8 @@ class AppointmentController extends Controller
 
         $data = $request->validated();
 
+        $previousStatus = $appointment->status;
+
         $appointment->status = $data['status'];
 
         if (isset($data['doctor_id']) && $data['doctor_id'] !== $appointment->doctor_id) {
@@ -126,6 +129,13 @@ class AppointmentController extends Controller
 
         $appointment->save();
         $appointment->load(['patient', 'doctor']);
+
+        if (
+            $appointment->status === AppointmentStatus::CHECKED_IN
+            && $previousStatus !== AppointmentStatus::CHECKED_IN
+        ) {
+            event(new PatientCheckedIn($appointment));
+        }
 
         return $this->successResponse(
             new AppointmentResource($appointment),

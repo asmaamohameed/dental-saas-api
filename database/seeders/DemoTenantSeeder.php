@@ -29,6 +29,17 @@ class DemoTenantSeeder extends Seeder
         // Insert this many records at a time
         $chunkSize = 1_000;
 
+        // $tenantCount = 1;
+
+        // $patientsPerTenant = 1_000;
+        // $appointmentsPerTenant = 1_000;
+        // $invoicesPerTenant = 1_000;
+
+        // $servicesPerTenant = 5;
+
+        // // Insert this many records at a time
+        // $chunkSize = 1_000;
+
         /*
         |--------------------------------------------------------------------------
         | Shared values

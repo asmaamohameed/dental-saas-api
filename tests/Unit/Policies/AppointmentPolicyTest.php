@@ -2,6 +2,7 @@
 
 namespace Tests\Unit\Policies;
 
+use App\Enums\AppointmentStatus;
 use App\Enums\UserRole;
 use App\Models\Appointment;
 use App\Models\User;
@@ -29,11 +30,12 @@ class AppointmentPolicyTest extends TestCase
         return $user;
     }
 
-    private function appointment(string $tenantId = 'tenant-a', ?string $doctorId = null): Appointment
+    private function appointment(string $tenantId = 'tenant-a', ?string $doctorId = null, AppointmentStatus $status = AppointmentStatus::SCHEDULED): Appointment
     {
         $appointment = new Appointment;
         $appointment->tenant_id = $tenantId;
         $appointment->doctor_id = $doctorId;
+        $appointment->status = $status;
 
         return $appointment;
     }
@@ -79,14 +81,18 @@ class AppointmentPolicyTest extends TestCase
     {
         $owner = $this->user(UserRole::OWNER, 'tenant-a');
 
-        $this->assertTrue($this->policy->updateStatus($owner, $this->appointment('tenant-a')));
+        $this->assertTrue($this->policy->updateStatus(
+            $owner,
+            $this->appointment('tenant-a', status: AppointmentStatus::CHECKED_IN),
+            AppointmentStatus::COMPLETED
+        ));
     }
 
     public function test_update_status_denies_owner_cross_tenant(): void
     {
         $owner = $this->user(UserRole::OWNER, 'tenant-a');
 
-        $this->assertFalse($this->policy->updateStatus($owner, $this->appointment('tenant-b')));
+        $this->assertFalse($this->policy->updateStatus($owner, $this->appointment('tenant-b'), AppointmentStatus::COMPLETED));
     }
 
     public function test_update_status_allows_the_treating_doctor_only(): void
@@ -94,10 +100,10 @@ class AppointmentPolicyTest extends TestCase
         $doctor = $this->user(UserRole::DOCTOR, 'tenant-a', 'doctor-1');
         $otherDoctor = $this->user(UserRole::DOCTOR, 'tenant-a', 'doctor-2');
 
-        $appointment = $this->appointment('tenant-a', 'doctor-1');
+        $appointment = $this->appointment('tenant-a', 'doctor-1', AppointmentStatus::CHECKED_IN);
 
-        $this->assertTrue($this->policy->updateStatus($doctor, $appointment));
-        $this->assertFalse($this->policy->updateStatus($otherDoctor, $appointment));
+        $this->assertTrue($this->policy->updateStatus($doctor, $appointment, AppointmentStatus::COMPLETED));
+        $this->assertFalse($this->policy->updateStatus($otherDoctor, $appointment, AppointmentStatus::COMPLETED));
     }
 
     public function test_update_status_denies_treating_doctor_cross_tenant(): void
@@ -105,7 +111,7 @@ class AppointmentPolicyTest extends TestCase
         $doctor = $this->user(UserRole::DOCTOR, 'tenant-a', 'doctor-1');
         $appointment = $this->appointment('tenant-b', 'doctor-1');
 
-        $this->assertFalse($this->policy->updateStatus($doctor, $appointment));
+        $this->assertFalse($this->policy->updateStatus($doctor, $appointment, AppointmentStatus::COMPLETED));
     }
 
     public function test_delete_is_owner_only_same_tenant(): void

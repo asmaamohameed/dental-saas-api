@@ -115,13 +115,14 @@ class AppointmentController extends Controller
      */
     public function updateStatus(UpdateAppointmentStatusRequest $request, Appointment $appointment)
     {
-        $this->authorize('updateStatus', $appointment);
-
         $data = $request->validated();
+        $newStatus = AppointmentStatus::from($data['status']);
+
+        $this->authorize('updateStatus', [$appointment, $newStatus]);
 
         $previousStatus = $appointment->status;
 
-        $appointment->status = $data['status'];
+        $appointment->status = $newStatus;
 
         if (isset($data['doctor_id']) && $data['doctor_id'] !== $appointment->doctor_id) {
             $appointment->doctor_id = $data['doctor_id'];

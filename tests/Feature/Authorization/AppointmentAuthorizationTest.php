@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Authorization;
 
+use App\Enums\AppointmentStatus;
 use App\Enums\UserRole;
 use App\Models\Appointment;
 use App\Models\Patient;
@@ -25,7 +26,10 @@ class AppointmentAuthorizationTest extends TestCase
     public function test_doctor_can_update_status_of_their_own_appointment(): void
     {
         $doctor = $this->actingAsTenantUser(role: UserRole::DOCTOR);
-        $appointment = Appointment::factory()->create(['doctor_id' => $doctor->id]);
+        $appointment = Appointment::factory()->create([
+            'doctor_id' => $doctor->id,
+            'status' => AppointmentStatus::CHECKED_IN,
+        ]);
 
         $this->patchJson("/api/v1/appointments/{$appointment->id}/status", [
             'status' => 'completed',

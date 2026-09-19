@@ -2,6 +2,7 @@
 
 namespace App\Policies;
 
+use App\Enums\AppointmentStatus;
 use App\Enums\UserRole;
 use App\Models\Appointment;
 use App\Models\User;
@@ -49,6 +50,10 @@ class AppointmentPolicy
      */
     public function update(User $user, Appointment $appointment): bool
     {
+        if ($appointment->status === AppointmentStatus::COMPLETED) {
+            return false;
+        }
+
         return $user->tenant_id === $appointment->tenant_id
             && in_array($user->role, [
                 UserRole::OWNER,
@@ -61,6 +66,10 @@ class AppointmentPolicy
      */
     public function updateStatus(User $user, Appointment $appointment): bool
     {
+        if ($appointment->status === AppointmentStatus::COMPLETED) {
+            return false;
+        }
+
         if ($user->tenant_id !== $appointment->tenant_id) {
             return false;
         }

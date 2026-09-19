@@ -15,6 +15,7 @@ use App\Http\Controllers\Api\V1\PatientController;
 use App\Http\Controllers\Api\V1\PaymentController;
 use App\Http\Controllers\Api\V1\ServiceController;
 use App\Http\Controllers\Api\V1\ToothRecordController;
+use App\Http\Controllers\Api\V1\UserController;
 use App\Http\Middleware\EnsureUserRole;
 use Illuminate\Support\Facades\Route;
 
@@ -47,6 +48,7 @@ Route::prefix('v1')->group(function () {
         Route::patch('appointments/{appointment}/status', [AppointmentController::class, 'updateStatus']);
 
         // Read-only endpoints (owner, receptionist, doctor)
+        Route::get('doctors', [UserController::class, 'doctors']);
         Route::get('services', [ServiceController::class, 'index']);
         Route::get('services/{service}', [ServiceController::class, 'show']);
 
@@ -84,6 +86,10 @@ Route::prefix('v1')->group(function () {
 
         // Owner-only sensitive actions (delete invoice, delete payment, edit payment, delete service)
         Route::middleware(EnsureUserRole::using(UserRole::OWNER))->group(function () {
+            Route::get('staff', [UserController::class, 'index']);
+            Route::post('staff', [UserController::class, 'store']);
+            Route::put('staff/{user}', [UserController::class, 'update']);
+            Route::patch('staff/{user}/toggle-active', [UserController::class, 'toggleActive']);
             Route::delete('services/{service}', [ServiceController::class, 'destroy']);
             Route::delete('invoices/{invoice}', [InvoiceController::class, 'destroy']);
             Route::put('invoices/{invoice}/payments/{payment}', [PaymentController::class, 'update']);

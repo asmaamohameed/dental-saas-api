@@ -14,20 +14,25 @@ class PatientCheckedIn implements ShouldBroadcast
     use Dispatchable, InteractsWithSockets, SerializesModels;
 
     public string $appointmentId;
+
     public string $patientId;
+
     public string $patientName;
+
     public string $tenantId;
+
     public string $doctorId;
+
     public string $checkedInAt;
 
     public function __construct(Appointment $appointment)
     {
         $this->appointmentId = (string) $appointment->id;
-        $this->patientId     = (string) $appointment->patient_id;
-        $this->patientName   = $appointment->patient->full_name;
-        $this->tenantId      = (string) $appointment->tenant_id;
-        $this->doctorId      = (string) $appointment->doctor_id;
-        $this->checkedInAt   = now()->toIso8601String();
+        $this->patientId = (string) $appointment->patient_id;
+        $this->patientName = $appointment->patient->full_name;
+        $this->tenantId = (string) $appointment->tenant_id;
+        $this->doctorId = (string) $appointment->doctor_id;
+        $this->checkedInAt = now()->toIso8601String();
     }
 
     public function broadcastOn(): array
@@ -46,9 +51,9 @@ class PatientCheckedIn implements ShouldBroadcast
     {
         return [
             'appointment_id' => $this->appointmentId,
-            'patient_id'     => $this->patientId,
-            'patient_name'   => $this->patientName,
-            'checked_in_at'  => $this->checkedInAt,
+            'patient_id' => $this->patientId,
+            'patient_name' => $this->patientName,
+            'checked_in_at' => $this->checkedInAt,
         ];
     }
 }

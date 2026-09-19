@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Enums\AppointmentStatus;
+use App\Events\PatientCheckedIn;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\V1\Appointment\StoreAppointmentRequest;
 use App\Http\Requests\V1\Appointment\UpdateAppointmentRequest;
@@ -10,7 +11,6 @@ use App\Http\Requests\V1\Appointment\UpdateAppointmentStatusRequest;
 use App\Http\Resources\V1\AppointmentResource;
 use App\Models\Appointment;
 use App\Traits\ApiResponse;
-use App\Events\PatientCheckedIn;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\Request;
 

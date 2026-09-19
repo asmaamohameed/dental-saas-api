@@ -4,6 +4,7 @@ namespace App\Http\Requests\V1\Appointment;
 
 use App\Enums\UserRole;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Support\Carbon;
 use Illuminate\Validation\Rule;
 
 class UpdateAppointmentRequest extends FormRequest
@@ -33,5 +34,23 @@ class UpdateAppointmentRequest extends FormRequest
             'duration_minutes' => ['sometimes', 'integer', 'min:1'],
             'notes' => ['sometimes', 'nullable', 'string'],
         ];
+    }
+
+    public function withValidator($validator)
+    {
+        $validator->after(function ($validator) {
+            if (! $this->filled('scheduled_at')) {
+                return;
+            }
+
+            $appointment = $this->route('appointment');
+            $newScheduledAt = Carbon::parse($this->input('scheduled_at'));
+
+            $isActuallyChanging = ! $appointment->scheduled_at->equalTo($newScheduledAt);
+
+            if ($isActuallyChanging && $newScheduledAt->isPast()) {
+                $validator->errors()->add('scheduled_at', 'The scheduled time must be in the future.');
+            }
+        });
     }
 }

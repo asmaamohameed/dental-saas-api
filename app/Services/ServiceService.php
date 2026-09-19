@@ -17,7 +17,7 @@ class ServiceService
         }
 
         if (! empty($filters['search'])) {
-            $search = str_replace(['%', '_'], ['\%', '\_'], $filters['search']);
+            $search = str_replace(['\\', '%', '_'], ['\\\\', '\%', '\_'], $filters['search']);
             $query->where(function ($q) use ($search) {
                 $q->where('name_ar', 'like', "%{$search}%")
                     ->orWhere('name_en', 'like', "%{$search}%");

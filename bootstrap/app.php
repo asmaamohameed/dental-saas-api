@@ -36,6 +36,7 @@ return Application::configure(basePath: dirname(__DIR__))
         web: __DIR__.'/../routes/web.php',
         api: __DIR__.'/../routes/api.php',
         commands: __DIR__.'/../routes/console.php',
+        channels: __DIR__.'/../routes/channels.php',
         health: '/up',
         then: function () {
             Route::middleware('api')
@@ -79,9 +80,6 @@ return Application::configure(basePath: dirname(__DIR__))
                 $status = 500;
                 $message = 'An unexpected error occurred.';
                 $errors = null;
-                // الـ exceptions اللي أصلها HttpException (زي TooManyRequestsHttpException
-                // بتاعة الـ throttle) بتحمل headers مهمة (Retry-After, X-RateLimit-*...)
-                // - لازم تتنقل للـ response النهائي وإلا هتضيع.
                 $headers = method_exists($e, 'getHeaders') ? $e->getHeaders() : [];
 
                 if ($e instanceof ValidationException) {

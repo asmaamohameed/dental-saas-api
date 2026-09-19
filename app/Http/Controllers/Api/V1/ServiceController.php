@@ -24,8 +24,8 @@ class ServiceController extends Controller
 
         $services = $this->serviceService->list($filters, $perPage);
 
-        return $this->successResponse(
-            ServiceResource::collection($services)->response()->getData(true),
+        return $this->paginatedResponse(
+            ServiceResource::collection($services),
             'Services retrieved successfully.'
         );
     }

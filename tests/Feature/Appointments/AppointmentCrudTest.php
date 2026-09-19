@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Appointments;
 
+use App\Enums\AppointmentStatus;
 use App\Enums\UserRole;
 use App\Models\Appointment;
 use App\Models\Patient;
@@ -35,7 +36,10 @@ class AppointmentCrudTest extends TestCase
     public function test_an_appointment_can_be_updated(): void
     {
         $this->actingAsTenantUser(role: UserRole::RECEPTIONIST);
-        $appointment = Appointment::factory()->create(['duration_minutes' => 30]);
+        $appointment = Appointment::factory()->create([
+            'duration_minutes' => 30,
+            'status' => AppointmentStatus::SCHEDULED,
+        ]);
 
         $response = $this->putJson("/api/v1/appointments/{$appointment->id}", [
             'duration_minutes' => 45,

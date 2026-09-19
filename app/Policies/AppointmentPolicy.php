@@ -2,6 +2,7 @@
 
 namespace App\Policies;
 
+use App\Enums\AppointmentStatus;
 use App\Enums\UserRole;
 use App\Models\Appointment;
 use App\Models\User;
@@ -49,6 +50,10 @@ class AppointmentPolicy
      */
     public function update(User $user, Appointment $appointment): bool
     {
+        if ($appointment->status === AppointmentStatus::COMPLETED) {
+            return false;
+        }
+
         return $user->tenant_id === $appointment->tenant_id
             && in_array($user->role, [
                 UserRole::OWNER,
@@ -59,10 +64,19 @@ class AppointmentPolicy
     /**
      * Determine whether the user can update the model status.
      */
-    public function updateStatus(User $user, Appointment $appointment): bool
+    public function updateStatus(User $user, Appointment $appointment, AppointmentStatus $newStatus): bool
     {
         if ($user->tenant_id !== $appointment->tenant_id) {
             return false;
+        }
+
+        if (! $appointment->status->canTransitionTo($newStatus)) {
+            return false;
+        }
+
+        // تصحيح غلطة: من completed لـ cancelled/no_show - owner بس
+        if ($appointment->status === AppointmentStatus::COMPLETED) {
+            return $user->role === UserRole::OWNER;
         }
 
         if ($user->role === UserRole::OWNER || $user->role === UserRole::RECEPTIONIST) {

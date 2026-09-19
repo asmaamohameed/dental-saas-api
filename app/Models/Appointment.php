@@ -14,6 +14,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 /**
  * @property-read Patient|null $patient
  * @property-read User|null $doctor
+ * @property AppointmentStatus $status
  */
 class Appointment extends Model
 {

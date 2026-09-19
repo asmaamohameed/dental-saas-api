@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Enums\AppointmentStatus;
+use App\Events\PatientCheckedIn;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\V1\Appointment\StoreAppointmentRequest;
 use App\Http\Requests\V1\Appointment\UpdateAppointmentRequest;
@@ -114,11 +115,14 @@ class AppointmentController extends Controller
      */
     public function updateStatus(UpdateAppointmentStatusRequest $request, Appointment $appointment)
     {
-        $this->authorize('updateStatus', $appointment);
-
         $data = $request->validated();
+        $newStatus = AppointmentStatus::from($data['status']);
 
-        $appointment->status = $data['status'];
+        $this->authorize('updateStatus', [$appointment, $newStatus]);
+
+        $previousStatus = $appointment->status;
+
+        $appointment->status = $newStatus;
 
         if (isset($data['doctor_id']) && $data['doctor_id'] !== $appointment->doctor_id) {
             $appointment->doctor_id = $data['doctor_id'];
@@ -126,6 +130,13 @@ class AppointmentController extends Controller
 
         $appointment->save();
         $appointment->load(['patient', 'doctor']);
+
+        if (
+            $appointment->status === AppointmentStatus::CHECKED_IN
+            && $previousStatus !== AppointmentStatus::CHECKED_IN
+        ) {
+            event(new PatientCheckedIn($appointment));
+        }
 
         return $this->successResponse(
             new AppointmentResource($appointment),

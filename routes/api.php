@@ -7,6 +7,8 @@ use App\Http\Controllers\Api\V1\Auth\LoginController;
 use App\Http\Controllers\Api\V1\Auth\LogoutController;
 use App\Http\Controllers\Api\V1\Auth\ProfileController;
 use App\Http\Controllers\Api\V1\Auth\ResetPasswordController;
+use App\Http\Controllers\Api\V1\DashboardController;
+use App\Http\Controllers\Api\V1\ExpenseController;
 use App\Http\Controllers\Api\V1\InventoryItemController;
 use App\Http\Controllers\Api\V1\InventoryTransactionController;
 use App\Http\Controllers\Api\V1\InvoiceController;
@@ -82,8 +84,15 @@ Route::prefix('v1')->group(function () {
             Route::post('invoices/{invoice}/payments', [PaymentController::class, 'store']);
         });
 
-        // Owner-only sensitive actions (delete invoice, delete payment, edit payment, delete service)
+        // Owner-only sensitive actions & financial dashboard
         Route::middleware(EnsureUserRole::using(UserRole::OWNER))->group(function () {
+            Route::get('dashboard/financial-analytics', [DashboardController::class, 'financialAnalytics']);
+            Route::get('dashboard/income-expense', [DashboardController::class, 'incomeExpense']);
+            Route::get('dashboard/patients', [DashboardController::class, 'patients']);
+            Route::get('dashboard/cashflow', [DashboardController::class, 'cashflow']);
+            Route::get('dashboard/expense-breakdown', [DashboardController::class, 'expenseBreakdown']);
+            Route::get('dashboard/invoice-status', [DashboardController::class, 'invoiceStatus']);
+            Route::apiResource('expenses', ExpenseController::class);
             Route::delete('services/{service}', [ServiceController::class, 'destroy']);
             Route::delete('invoices/{invoice}', [InvoiceController::class, 'destroy']);
             Route::put('invoices/{invoice}/payments/{payment}', [PaymentController::class, 'update']);

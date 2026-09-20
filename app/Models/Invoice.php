@@ -22,6 +22,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
  * @property string|null $created_by
  * @property string $total_amount
  * @property float $remaining_amount
+ * @property \Illuminate\Support\Carbon|null $due_date
  * @property InvoiceStatus $status
  * @property-read Patient $patient
  * @property-read Appointment|null $appointment
@@ -39,6 +40,7 @@ class Invoice extends Model
         'created_by',
         'total_amount',
         'status',
+        'due_date',
     ];
 
     protected $appends = [
@@ -50,6 +52,7 @@ class Invoice extends Model
         return [
             'total_amount' => 'decimal:2',
             'status' => InvoiceStatus::class,
+            'due_date' => 'date',
         ];
     }
 

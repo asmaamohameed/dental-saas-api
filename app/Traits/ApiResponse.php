@@ -26,8 +26,18 @@ trait ApiResponse
      */
     protected function paginatedResponse($resourceCollection, ?string $message = null, int $code = 200): JsonResponse
     {
+        if (method_exists($resourceCollection, 'items')) {
+            $items = $resourceCollection->items();
+        } elseif (method_exists($resourceCollection, 'getCollection')) {
+            $items = $resourceCollection->getCollection();
+        } elseif (property_exists($resourceCollection, 'collection') || isset($resourceCollection->collection)) {
+            $items = $resourceCollection->collection;
+        } else {
+            $items = $resourceCollection;
+        }
+
         return $this->successResponse([
-            'items' => $resourceCollection->collection,
+            'items' => $items,
             'meta' => [
                 'current_page' => $resourceCollection->currentPage(),
                 'last_page' => $resourceCollection->lastPage(),

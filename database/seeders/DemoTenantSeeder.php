@@ -215,8 +215,6 @@ class DemoTenantSeeder extends Seeder
                 $remainingPatients =
                     $patientsPerTenant - $existingPatientCount;
 
-                $maxPatientId = DB::table('patients')->max('id') ?? 0;
-
                 for ($offset = 0; $offset < $remainingPatients; $offset += $chunkSize) {
                     $count = min(
                         $chunkSize,
@@ -229,6 +227,7 @@ class DemoTenantSeeder extends Seeder
                         $number = $existingPatientCount + $offset + $i;
 
                         $rows[] = [
+                            'id' => (string) \Illuminate\Support\Str::uuid(),
                             'tenant_id' => $tenantId,
                             'full_name' => "Test Patient {$tenantIndex}-{$number}",
                             'phone' => '+201'.str_pad(
@@ -256,14 +255,14 @@ class DemoTenantSeeder extends Seeder
 
                 $patientIds = DB::table('patients')
                     ->where('tenant_id', $tenantId)
-                    ->where('id', '>', $maxPatientId)
-                    ->orderBy('id')
+                    ->orderBy('created_at')
+                    ->limit($patientsPerTenant)
                     ->pluck('id')
                     ->toArray();
             } else {
                 $patientIds = DB::table('patients')
                     ->where('tenant_id', $tenantId)
-                    ->orderBy('id')
+                    ->orderBy('created_at')
                     ->limit($patientsPerTenant)
                     ->pluck('id')
                     ->toArray();
@@ -313,6 +312,7 @@ class DemoTenantSeeder extends Seeder
                             ->setSecond(0);
 
                         $rows[] = [
+                            'id' => (string) \Illuminate\Support\Str::uuid(),
                             'tenant_id' => $tenantId,
                             'patient_id' => $patientId,
                             'doctor_id' => $doctorId,
@@ -335,7 +335,7 @@ class DemoTenantSeeder extends Seeder
 
             $appointmentIds = DB::table('appointments')
                 ->where('tenant_id', $tenantId)
-                ->orderBy('id')
+                ->orderBy('created_at')
                 ->limit($appointmentsPerTenant)
                 ->pluck('id')
                 ->toArray();
@@ -384,6 +384,7 @@ class DemoTenantSeeder extends Seeder
                         $price = 150 + (($number % 10) * 25);
 
                         $rows[] = [
+                            'id' => (string) \Illuminate\Support\Str::uuid(),
                             'tenant_id' => $tenantId,
                             'patient_id' => $patientId,
                             'appointment_id' => $appointmentId,
@@ -391,6 +392,7 @@ class DemoTenantSeeder extends Seeder
                             'status' => $number % 3 === 0
                                 ? 'paid'
                                 : 'unpaid',
+                            'due_date' => Carbon::now()->subDays(($number % 30) - 15)->toDateString(),
                         ];
                     }
 
@@ -408,7 +410,7 @@ class DemoTenantSeeder extends Seeder
 
             $invoiceIds = DB::table('invoices')
                 ->where('tenant_id', $tenantId)
-                ->orderBy('id')
+                ->orderBy('created_at')
                 ->limit($invoicesPerTenant)
                 ->pluck('id')
                 ->toArray();
@@ -443,6 +445,8 @@ class DemoTenantSeeder extends Seeder
                     $price = 150 + (($index % 10) * 25);
 
                     $rows[] = [
+                        'id' => (string) \Illuminate\Support\Str::uuid(),
+                        'tenant_id' => $tenantId,
                         'invoice_id' => $invoiceId,
                         'service_id' => $serviceId,
                         'description' => 'Performance Test Service',
@@ -460,6 +464,67 @@ class DemoTenantSeeder extends Seeder
                 if ($rows !== []) {
                     DB::table('invoice_items')->insert($rows);
                 }
+            }
+
+            /*
+            |--------------------------------------------------------------------------
+            | Expenses
+            |--------------------------------------------------------------------------
+            */
+
+            $existingExpenseCount = DB::table('expenses')->where('tenant_id', $tenantId)->count();
+            if ($existingExpenseCount === 0) {
+                $now = Carbon::now();
+                DB::table('expenses')->insert([
+                    [
+                        'id' => (string) \Illuminate\Support\Str::uuid(),
+                        'tenant_id' => $tenantId,
+                        'category' => 'rent',
+                        'title' => 'Monthly Clinic Rent',
+                        'amount' => 2500.00,
+                        'expense_date' => $now->copy()->startOfMonth()->toDateString(),
+                        'created_by' => $ownerId,
+                        'notes' => 'Facility rental fee',
+                        'created_at' => $now->copy()->startOfMonth(),
+                        'updated_at' => $now->copy()->startOfMonth(),
+                    ],
+                    [
+                        'id' => (string) \Illuminate\Support\Str::uuid(),
+                        'tenant_id' => $tenantId,
+                        'category' => 'electricity',
+                        'title' => 'Electricity Bill',
+                        'amount' => 340.50,
+                        'expense_date' => $now->copy()->subDays(5)->toDateString(),
+                        'created_by' => $ownerId,
+                        'notes' => 'Power supply bill',
+                        'created_at' => $now->copy()->subDays(5),
+                        'updated_at' => $now->copy()->subDays(5),
+                    ],
+                    [
+                        'id' => (string) \Illuminate\Support\Str::uuid(),
+                        'tenant_id' => $tenantId,
+                        'category' => 'internet',
+                        'title' => 'Fibre Internet Subscription',
+                        'amount' => 95.00,
+                        'expense_date' => $now->copy()->subDays(10)->toDateString(),
+                        'created_by' => $ownerId,
+                        'notes' => 'High speed Wi-Fi',
+                        'created_at' => $now->copy()->subDays(10),
+                        'updated_at' => $now->copy()->subDays(10),
+                    ],
+                    [
+                        'id' => (string) \Illuminate\Support\Str::uuid(),
+                        'tenant_id' => $tenantId,
+                        'category' => 'water',
+                        'title' => 'Water Utility Bill',
+                        'amount' => 65.20,
+                        'expense_date' => $now->copy()->subDays(8)->toDateString(),
+                        'created_by' => $ownerId,
+                        'notes' => 'Water supply',
+                        'created_at' => $now->copy()->subDays(8),
+                        'updated_at' => $now->copy()->subDays(8),
+                    ],
+                ]);
             }
 
             $this->command->info(

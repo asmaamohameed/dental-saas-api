@@ -1,6 +1,6 @@
 <?php
 
-namespace Tests\Feature\Auth;
+namespace Tests\Feature\Authorization;
 
 use App\Enums\UserRole;
 use App\Models\Patient;

@@ -11,8 +11,6 @@ use Illuminate\Support\Facades\Auth;
 
 /**
  * @phpstan-require-extends Model
- *
- * @property string|int|null $tenant_id
  */
 trait Auditable
 {

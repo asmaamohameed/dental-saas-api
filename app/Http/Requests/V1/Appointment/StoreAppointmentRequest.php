@@ -3,7 +3,10 @@
 namespace App\Http\Requests\V1\Appointment;
 
 use App\Enums\UserRole;
+use App\Rules\AppointmentDoctorAvailable;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Support\Carbon;
+use Illuminate\Translation\PotentiallyTranslatedString;
 use Illuminate\Validation\Rule;
 
 class StoreAppointmentRequest extends FormRequest
@@ -33,5 +36,27 @@ class StoreAppointmentRequest extends FormRequest
             'duration_minutes' => ['required', 'integer', 'min:1'],
             'notes' => ['nullable', 'string'],
         ];
+    }
+
+    public function withValidator($validator)
+    {
+        $validator->after(function ($validator) {
+            if ($validator->errors()->has('doctor_id') || $validator->errors()->has('scheduled_at') || $validator->errors()->has('duration_minutes')) {
+                return;
+            }
+
+            $rule = new AppointmentDoctorAvailable(
+                tenantId: $this->user()->tenant_id,
+                doctorId: $this->input('doctor_id'),
+                scheduledAt: Carbon::parse($this->input('scheduled_at')),
+                durationMinutes: (int) $this->input('duration_minutes'),
+            );
+
+            $rule->validate('doctor_id', null, function (string $message, ?string $translate = null) use ($validator): PotentiallyTranslatedString {
+                $validator->errors()->add('doctor_id', $message);
+
+                return new PotentiallyTranslatedString($message, app('translator'));
+            });
+        });
     }
 }

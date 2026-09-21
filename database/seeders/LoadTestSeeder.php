@@ -43,9 +43,15 @@ class LoadTestSeeder extends Seeder
 
             // All other child tables have tenant_id directly
             $childTables = [
-                'payments', 'invoices', 'appointments',
-                'tooth_records', 'xray_attachments', 'patients', 'users',
-                'services', 'subscriptions',
+                'payments',
+                'invoices',
+                'appointments',
+                'tooth_records',
+                'xray_attachments',
+                'patients',
+                'users',
+                'services',
+                'subscriptions',
             ];
             foreach ($childTables as $table) {
                 DB::table($table)->whereIn('tenant_id', $loadTestTenantIds)->delete();
@@ -60,10 +66,10 @@ class LoadTestSeeder extends Seeder
         |--------------------------------------------------------------------------
         */
 
-        $tenantCount = 10; // Set to 1 for testing, 10 for full run
-        $patientsPerTenant = 5_000;
-        $appointmentsPerTenant = 20_000;
-        $servicesPerTenant = 20; // 19 regular + 1 "Other"
+        $tenantCount = 5; // Set to 1 for testing, 10 for full run
+        $patientsPerTenant = 1_000;
+        $appointmentsPerTenant = 5_000;
+        $servicesPerTenant = 10; // 19 regular + 1 "Other"
         $chunkSize = 2_000;
         $passwordHash = Hash::make('password');
 
@@ -311,6 +317,28 @@ class LoadTestSeeder extends Seeder
             $remainingAppts = max(0, $appointmentsPerTenant - $existingApptCount);
             $doctorIdCount = count($doctorIds);
 
+            // Precompute enough working days (skip Fri/Sat) so no doctor ever needs
+            // the same day+slot twice — avoids violating the DB overlap constraint.
+            $workingDaysCache = [];
+            $cursor = Carbon::now()->copy();
+            $neededDays = (int) ceil($appointmentsPerTenant / max(1, $doctorIdCount) / 16) + 30;
+            while (count($workingDaysCache) < $neededDays) {
+                if (! in_array($cursor->dayOfWeek, [Carbon::FRIDAY, Carbon::SATURDAY])) {
+                    $workingDaysCache[] = $cursor->copy();
+                }
+                $cursor->subDay();
+            }
+
+            // Each doctor gets its own ever-incrementing slot counter (continues from
+            // existing appointment count on re-runs), guaranteeing unique day+time per doctor.
+            $doctorApptIndex = [];
+            foreach ($doctorIds as $docId) {
+                $doctorApptIndex[$docId] = DB::table('appointments')
+                    ->where('tenant_id', $tenantId)
+                    ->where('doctor_id', $docId)
+                    ->count();
+            }
+
             for ($offset = 0; $offset < $remainingAppts; $offset += $chunkSize) {
                 $batchSize = min($chunkSize, $remainingAppts - $offset);
                 $batch = [];
@@ -321,18 +349,19 @@ class LoadTestSeeder extends Seeder
                     // Rotate doctors round-robin
                     $doctorId = $doctorIds[$num % $doctorIdCount];
 
-                    // Working days: Mon-Thu (skip Fri=5, Sat=6)
-                    $daysBack = $num % 730; // ~2 years
-                    $scheduledAt = Carbon::now()->subDays($daysBack);
-                    // Skip Friday (5) and Saturday (6)
-                    while (in_array($scheduledAt->dayOfWeek, [Carbon::FRIDAY, Carbon::SATURDAY])) {
-                        $scheduledAt->subDay();
-                    }
-                    $scheduledAt->setHour(9 + ($num % 8)) // 9-16 (9AM to 4PM, last slot)
-                        ->setMinute(($num % 2) * 30)       // :00 or :30
+                    // Unique slot per doctor: 16 slots/day (9AM-4PM x :00/:30)
+                    $slotIndex = $doctorApptIndex[$doctorId]++;
+                    $dayIndex = intdiv($slotIndex, 16);
+                    $slotInDay = $slotIndex % 16;
+                    $hour = 9 + intdiv($slotInDay, 2);
+                    $minute = ($slotInDay % 2) * 30;
+
+                    $scheduledAt = $workingDaysCache[$dayIndex]
+                        ->copy()
+                        ->setHour($hour)
+                        ->setMinute($minute)
                         ->setSecond(0);
 
-                    // Status distribution
                     $status = $statusDistribution[$num % 10];
 
                     $batch[] = [

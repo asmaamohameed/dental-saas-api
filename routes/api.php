@@ -2,6 +2,7 @@
 
 use App\Enums\UserRole;
 use App\Http\Controllers\Api\V1\AppointmentController;
+use App\Http\Controllers\Api\V1\AuditLogController;
 use App\Http\Controllers\Api\V1\Auth\ForgotPasswordController;
 use App\Http\Controllers\Api\V1\Auth\LoginController;
 use App\Http\Controllers\Api\V1\Auth\LogoutController;
@@ -29,6 +30,9 @@ Route::prefix('v1')->group(function () {
     // Protected Routes
     Route::middleware(['auth:sanctum', 'tenant'])->group(function () {
 
+        // Audit Logs (Owner only)
+        Route::get('audit-logs', [AuditLogController::class, 'index']);
+
         // Profile & Auth
         Route::prefix('auth')->group(function () {
             Route::post('logout', LogoutController::class);
@@ -37,6 +41,7 @@ Route::prefix('v1')->group(function () {
 
         // Patients API Resource
         Route::apiResource('patients', PatientController::class);
+        Route::get('/patients/search', [PatientController::class, 'search']);
 
         // Tooth Records
         Route::get('patients/{patient}/tooth-records', [ToothRecordController::class, 'index']);

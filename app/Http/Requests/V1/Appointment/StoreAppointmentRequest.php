@@ -37,7 +37,7 @@ class StoreAppointmentRequest extends FormRequest
             'notes' => ['nullable', 'string'],
         ];
     }
-   
+
     public function withValidator($validator)
     {
         $validator->after(function ($validator) {

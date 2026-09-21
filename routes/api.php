@@ -8,6 +8,8 @@ use App\Http\Controllers\Api\V1\Auth\LoginController;
 use App\Http\Controllers\Api\V1\Auth\LogoutController;
 use App\Http\Controllers\Api\V1\Auth\ProfileController;
 use App\Http\Controllers\Api\V1\Auth\ResetPasswordController;
+use App\Http\Controllers\Api\V1\DashboardController;
+use App\Http\Controllers\Api\V1\ExpenseController;
 use App\Http\Controllers\Api\V1\InventoryItemController;
 use App\Http\Controllers\Api\V1\InventoryTransactionController;
 use App\Http\Controllers\Api\V1\InvoiceController;
@@ -73,6 +75,17 @@ Route::prefix('v1')->group(function () {
         Route::patch('inventory-items/{inventoryItem}/restore', [InventoryItemController::class, 'restore']);
         Route::patch('inventory-items/{inventoryItem}', [InventoryItemController::class, 'update']);
 
+        // Dashboard Analytics
+        Route::get('dashboard/financial-analytics', [DashboardController::class, 'financialAnalytics']);
+        Route::get('dashboard/income-expense', [DashboardController::class, 'incomeExpense']);
+        Route::get('dashboard/patients', [DashboardController::class, 'patients']);
+        Route::get('dashboard/cashflow', [DashboardController::class, 'cashflow']);
+        Route::get('dashboard/expense-breakdown', [DashboardController::class, 'expenseBreakdown']);
+        Route::get('dashboard/invoice-status', [DashboardController::class, 'invoiceStatus']);
+
+        // Expenses
+        Route::get('expenses', [ExpenseController::class, 'index']);
+
         // Create & Edit endpoints (owner, receptionist)
         Route::middleware(EnsureUserRole::using(UserRole::OWNER, UserRole::RECEPTIONIST))->group(function () {
             Route::post('services', [ServiceController::class, 'store']);
@@ -87,6 +100,7 @@ Route::prefix('v1')->group(function () {
             Route::delete('invoices/{invoice}/items/{item}', [InvoiceItemController::class, 'destroy']);
 
             Route::post('invoices/{invoice}/payments', [PaymentController::class, 'store']);
+            Route::post('expenses', [ExpenseController::class, 'store']);
         });
 
         // Owner-only sensitive actions (delete invoice, delete payment, edit payment, delete service)
@@ -99,6 +113,7 @@ Route::prefix('v1')->group(function () {
             Route::delete('invoices/{invoice}', [InvoiceController::class, 'destroy']);
             Route::put('invoices/{invoice}/payments/{payment}', [PaymentController::class, 'update']);
             Route::delete('invoices/{invoice}/payments/{payment}', [PaymentController::class, 'destroy']);
+            Route::delete('expenses/{expense}', [ExpenseController::class, 'destroy']);
         });
     });
 });

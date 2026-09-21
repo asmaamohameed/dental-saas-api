@@ -1,6 +1,6 @@
 <?php
 
-namespace Tests\Feature\Middleware;
+namespace Tests\Unit\Middleware;
 
 use App\Enums\UserRole;
 use App\Models\Service;

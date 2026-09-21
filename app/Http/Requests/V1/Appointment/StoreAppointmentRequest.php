@@ -37,10 +37,14 @@ class StoreAppointmentRequest extends FormRequest
             'notes' => ['nullable', 'string'],
         ];
     }
-
+   
     public function withValidator($validator)
     {
         $validator->after(function ($validator) {
+            if ($this->filled('scheduled_at') && Carbon::parse($this->input('scheduled_at'))->isPast()) {
+                $validator->errors()->add('scheduled_at', 'The scheduled time must be in the future.');
+            }
+
             if ($validator->errors()->has('doctor_id') || $validator->errors()->has('scheduled_at') || $validator->errors()->has('duration_minutes')) {
                 return;
             }

@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\AppointmentStatus;
+use App\Enums\AppointmentType;
 use App\Models\Concerns\Auditable;
 use App\Models\Concerns\BelongsToTenant;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
@@ -23,10 +24,12 @@ class Appointment extends Model
     protected $fillable = [
         'patient_id',
         'doctor_id',
+        'patient_treatment_visit_id',
         'created_by',
         'scheduled_at',
         'duration_minutes',
         'status',
+        'appointment_type',
         'notes',
     ];
 
@@ -36,6 +39,7 @@ class Appointment extends Model
             'scheduled_at' => 'datetime',
             'duration_minutes' => 'integer',
             'status' => AppointmentStatus::class,
+            'appointment_type' => AppointmentType::class,
         ];
     }
 
@@ -53,6 +57,11 @@ class Appointment extends Model
     public function creator(): BelongsTo
     {
         return $this->belongsTo(User::class, 'created_by');
+    }
+
+    public function patientTreatmentVisit(): BelongsTo
+    {
+        return $this->belongsTo(PatientTreatmentVisit::class);
     }
 
     public function toothRecords(): HasMany

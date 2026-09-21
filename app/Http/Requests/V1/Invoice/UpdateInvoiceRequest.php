@@ -4,6 +4,7 @@ namespace App\Http\Requests\V1\Invoice;
 
 use App\Enums\InvoiceStatus;
 use App\Models\Appointment;
+use App\Models\PatientTreatment;
 use App\Models\Service;
 use App\Support\Tenancy\CurrentTenant;
 use Illuminate\Foundation\Http\FormRequest;
@@ -21,7 +22,9 @@ class UpdateInvoiceRequest extends FormRequest
         return [
             'patient_id' => ['sometimes', 'required', 'uuid', Rule::exists('patients', 'id')->where('tenant_id', app(CurrentTenant::class)->id())],
             'items' => ['sometimes', 'required', 'array', 'min:1'],
-            'items.*.service_id' => ['required_with:items', 'uuid', Rule::exists('services', 'id')->where('tenant_id', app(CurrentTenant::class)->id())],
+            'items.*.service_id' => ['nullable', 'required_without:items.*.patient_treatment_id', 'uuid', Rule::exists('services', 'id')->where('tenant_id', app(CurrentTenant::class)->id())],
+            'items.*.patient_treatment_id' => ['nullable', 'required_without:items.*.service_id', 'uuid', Rule::exists('patient_treatments', 'id')->where('tenant_id', app(CurrentTenant::class)->id())],
+            'items.*.patient_treatment_visit_id' => ['nullable', 'uuid', Rule::exists('patient_treatment_visits', 'id')->where('tenant_id', app(CurrentTenant::class)->id())],
             'items.*.description' => ['nullable', 'string', 'max:500'],
             'items.*.price' => ['nullable', 'numeric', 'min:0'],
             'items.*.quantity' => ['required_with:items', 'integer', 'min:1'],
@@ -82,6 +85,16 @@ class UpdateInvoiceRequest extends FormRequest
                                 'Price is required when selecting the "Other" service.'
                             );
                         }
+                    }
+                }
+
+                if (! empty($item['patient_treatment_id'])) {
+                    $treatment = PatientTreatment::where('tenant_id', $tenantId)->find($item['patient_treatment_id']);
+                    if ($treatment && $patientId && (string) $treatment->patient_id !== (string) $patientId) {
+                        $validator->errors()->add(
+                            "items.{$index}.patient_treatment_id",
+                            'The selected treatment does not belong to this patient.'
+                        );
                     }
                 }
             }

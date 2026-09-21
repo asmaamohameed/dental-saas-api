@@ -8,6 +8,7 @@ use App\Http\Controllers\Api\V1\Auth\LoginController;
 use App\Http\Controllers\Api\V1\Auth\LogoutController;
 use App\Http\Controllers\Api\V1\Auth\ProfileController;
 use App\Http\Controllers\Api\V1\Auth\ResetPasswordController;
+use App\Http\Controllers\Api\V1\ComponentController;
 use App\Http\Controllers\Api\V1\DashboardController;
 use App\Http\Controllers\Api\V1\ExpenseController;
 use App\Http\Controllers\Api\V1\InventoryItemController;
@@ -15,8 +16,10 @@ use App\Http\Controllers\Api\V1\InventoryTransactionController;
 use App\Http\Controllers\Api\V1\InvoiceController;
 use App\Http\Controllers\Api\V1\InvoiceItemController;
 use App\Http\Controllers\Api\V1\PatientController;
+use App\Http\Controllers\Api\V1\PatientTreatmentController;
 use App\Http\Controllers\Api\V1\PaymentController;
 use App\Http\Controllers\Api\V1\ServiceController;
+use App\Http\Controllers\Api\V1\TreatmentTemplateController;
 use App\Http\Controllers\Api\V1\ToothRecordController;
 use App\Http\Controllers\Api\V1\UserController;
 use App\Http\Middleware\EnsureUserRole;
@@ -49,6 +52,8 @@ Route::prefix('v1')->group(function () {
         Route::get('patients/{patient}/tooth-records', [ToothRecordController::class, 'index']);
         Route::post('patients/{patient}/tooth-records', [ToothRecordController::class, 'store']);
         Route::get('patients/{patient}/odontogram', [ToothRecordController::class, 'odontogram']);
+        Route::get('patients/{patient}/treatments', [PatientTreatmentController::class, 'forPatient']);
+        Route::get('patients/{patient}/next-treatment', [PatientTreatmentController::class, 'next']);
 
         // Appointments API Resource + Custom Endpoint
         Route::apiResource('appointments', AppointmentController::class);
@@ -58,6 +63,13 @@ Route::prefix('v1')->group(function () {
         Route::get('doctors', [UserController::class, 'doctors']);
         Route::get('services', [ServiceController::class, 'index']);
         Route::get('services/{service}', [ServiceController::class, 'show']);
+        Route::apiResource('components', ComponentController::class)->only(['index', 'show']);
+        Route::apiResource('treatment-templates', TreatmentTemplateController::class)
+            ->parameters(['treatment-templates' => 'treatmentTemplate'])
+            ->only(['index', 'show']);
+        Route::apiResource('patient-treatments', PatientTreatmentController::class)
+            ->parameters(['patient-treatments' => 'patientTreatment'])
+            ->only(['index', 'show']);
 
         Route::get('invoices', [InvoiceController::class, 'index']);
         Route::get('invoices/{invoice}', [InvoiceController::class, 'show']);
@@ -91,6 +103,15 @@ Route::prefix('v1')->group(function () {
             Route::post('services', [ServiceController::class, 'store']);
             Route::put('services/{service}', [ServiceController::class, 'update']);
             Route::patch('services/{service}/toggle-active', [ServiceController::class, 'toggleActive']);
+            Route::post('components', [ComponentController::class, 'store']);
+            Route::put('components/{component}', [ComponentController::class, 'update']);
+            Route::patch('components/{component}/toggle-active', [ComponentController::class, 'toggleActive']);
+            Route::post('treatment-templates', [TreatmentTemplateController::class, 'store']);
+            Route::put('treatment-templates/{treatmentTemplate}', [TreatmentTemplateController::class, 'update']);
+            Route::patch('treatment-templates/{treatmentTemplate}/toggle-active', [TreatmentTemplateController::class, 'toggleActive']);
+            Route::post('patient-treatments', [PatientTreatmentController::class, 'store']);
+            Route::put('patient-treatments/{patientTreatment}', [PatientTreatmentController::class, 'update']);
+            Route::patch('patient-treatment-visits/{visit}', [PatientTreatmentController::class, 'updateVisit']);
 
             Route::post('invoices', [InvoiceController::class, 'store']);
             Route::put('invoices/{invoice}', [InvoiceController::class, 'update']);
@@ -110,6 +131,8 @@ Route::prefix('v1')->group(function () {
             Route::put('staff/{user}', [UserController::class, 'update']);
             Route::patch('staff/{user}/toggle-active', [UserController::class, 'toggleActive']);
             Route::delete('services/{service}', [ServiceController::class, 'destroy']);
+            Route::delete('components/{component}', [ComponentController::class, 'destroy']);
+            Route::delete('treatment-templates/{treatmentTemplate}', [TreatmentTemplateController::class, 'destroy']);
             Route::delete('invoices/{invoice}', [InvoiceController::class, 'destroy']);
             Route::put('invoices/{invoice}/payments/{payment}', [PaymentController::class, 'update']);
             Route::delete('invoices/{invoice}/payments/{payment}', [PaymentController::class, 'destroy']);

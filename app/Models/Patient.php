@@ -68,4 +68,9 @@ class Patient extends Model
     {
         return $this->hasMany(XrayAttachment::class);
     }
+
+    public function treatments(): HasMany
+    {
+        return $this->hasMany(PatientTreatment::class);
+    }
 }

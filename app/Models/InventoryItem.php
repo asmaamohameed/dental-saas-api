@@ -49,6 +49,11 @@ class InventoryItem extends Model
         return $this->hasMany(InventoryTransaction::class);
     }
 
+    public function components(): HasMany
+    {
+        return $this->hasMany(Component::class);
+    }
+
     // Scopes
     public function scopeLowStock(Builder $query): Builder
     {

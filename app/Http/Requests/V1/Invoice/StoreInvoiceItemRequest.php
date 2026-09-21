@@ -19,9 +19,21 @@ class StoreInvoiceItemRequest extends FormRequest
     {
         return [
             'service_id' => [
-                'required',
+                'nullable',
+                'required_without:patient_treatment_id',
                 'uuid',
                 Rule::exists('services', 'id')->where('tenant_id', app(CurrentTenant::class)->id()),
+            ],
+            'patient_treatment_id' => [
+                'nullable',
+                'required_without:service_id',
+                'uuid',
+                Rule::exists('patient_treatments', 'id')->where('tenant_id', app(CurrentTenant::class)->id()),
+            ],
+            'patient_treatment_visit_id' => [
+                'nullable',
+                'uuid',
+                Rule::exists('patient_treatment_visits', 'id')->where('tenant_id', app(CurrentTenant::class)->id()),
             ],
             'description' => ['nullable', 'string', 'max:500'],
             'price' => ['required', 'numeric', 'min:0'],

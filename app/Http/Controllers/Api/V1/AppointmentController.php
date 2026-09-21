@@ -3,6 +3,8 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Enums\AppointmentStatus;
+use App\Enums\AppointmentType;
+use App\Enums\PatientTreatmentVisitStatus;
 use App\Events\PatientCheckedIn;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\V1\Appointment\StoreAppointmentRequest;
@@ -22,7 +24,7 @@ class AppointmentController extends Controller
     {
         $this->authorize('viewAny', Appointment::class);
 
-        $query = Appointment::query()->with(['patient', 'doctor']);
+        $query = Appointment::query()->with(['patient', 'doctor', 'patientTreatmentVisit.treatment']);
 
         if ($request->filled('patient_id')) {
             $query->where('patient_id', $request->input('patient_id'));
@@ -59,9 +61,16 @@ class AppointmentController extends Controller
         $data = $request->validated();
         $data['created_by'] = auth()->id();
         $data['status'] = AppointmentStatus::SCHEDULED;
+        $data['appointment_type'] ??= isset($data['patient_treatment_visit_id'])
+            ? AppointmentType::TREATMENT_VISIT
+            : AppointmentType::CONSULTATION;
 
         $appointment = Appointment::create($data);
-        $appointment->load(['patient', 'doctor']);
+        if ($appointment->patient_treatment_visit_id) {
+            $appointment->patientTreatmentVisit()->update(['status' => PatientTreatmentVisitStatus::SCHEDULED]);
+        }
+
+        $appointment->load(['patient', 'doctor', 'patientTreatmentVisit.treatment']);
 
         return $this->successResponse(
             new AppointmentResource($appointment),
@@ -77,7 +86,7 @@ class AppointmentController extends Controller
     {
         $this->authorize('view', $appointment);
 
-        $appointment->load(['patient', 'doctor']);
+        $appointment->load(['patient', 'doctor', 'patientTreatmentVisit.treatment']);
 
         return $this->successResponse(new AppointmentResource($appointment));
     }
@@ -89,8 +98,20 @@ class AppointmentController extends Controller
     {
         $this->authorize('update', $appointment);
 
+        $previousVisitId = $appointment->patient_treatment_visit_id;
+
         $appointment->update($request->validated());
-        $appointment->load(['patient', 'doctor']);
+
+        if ($previousVisitId && $previousVisitId !== $appointment->patient_treatment_visit_id) {
+            $appointment->patientTreatmentVisit()->getModel()::whereKey($previousVisitId)
+                ->update(['status' => PatientTreatmentVisitStatus::PLANNED]);
+        }
+
+        if ($appointment->patient_treatment_visit_id) {
+            $appointment->patientTreatmentVisit()->update(['status' => PatientTreatmentVisitStatus::SCHEDULED]);
+        }
+
+        $appointment->load(['patient', 'doctor', 'patientTreatmentVisit.treatment']);
 
         return $this->successResponse(
             new AppointmentResource($appointment),
@@ -129,7 +150,22 @@ class AppointmentController extends Controller
         }
 
         $appointment->save();
-        $appointment->load(['patient', 'doctor']);
+
+        if ($appointment->patient_treatment_visit_id) {
+            $visitStatus = match ($appointment->status) {
+                AppointmentStatus::CANCELLED, AppointmentStatus::NO_SHOW => PatientTreatmentVisitStatus::PLANNED,
+                AppointmentStatus::COMPLETED => PatientTreatmentVisitStatus::COMPLETED,
+                AppointmentStatus::CHECKED_IN => PatientTreatmentVisitStatus::IN_PROGRESS,
+                default => PatientTreatmentVisitStatus::SCHEDULED,
+            };
+
+            $appointment->patientTreatmentVisit()->update([
+                'status' => $visitStatus,
+                'completed_at' => $visitStatus === PatientTreatmentVisitStatus::COMPLETED ? now() : null,
+            ]);
+        }
+
+        $appointment->load(['patient', 'doctor', 'patientTreatmentVisit.treatment']);
 
         if (
             $appointment->status === AppointmentStatus::CHECKED_IN

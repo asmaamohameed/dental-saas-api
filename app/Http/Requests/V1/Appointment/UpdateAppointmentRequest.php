@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\V1\Appointment;
 
+use App\Enums\AppointmentType;
 use App\Enums\UserRole;
 use App\Rules\AppointmentDoctorAvailable;
 use Illuminate\Foundation\Http\FormRequest;
@@ -32,8 +33,17 @@ class UpdateAppointmentRequest extends FormRequest
                         ->where('tenant_id', $this->user()->tenant_id);
                 }),
             ],
+            'patient_treatment_visit_id' => [
+                'sometimes',
+                'nullable',
+                'uuid',
+                Rule::exists('patient_treatment_visits', 'id')->where(function ($query) {
+                    $query->where('tenant_id', $this->user()->tenant_id);
+                }),
+            ],
             'scheduled_at' => ['sometimes', 'date'],
             'duration_minutes' => ['sometimes', 'integer', 'min:1'],
+            'appointment_type' => ['sometimes', Rule::enum(AppointmentType::class)],
             'notes' => ['sometimes', 'nullable', 'string'],
         ];
     }

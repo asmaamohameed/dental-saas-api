@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Enums\InvoiceStatus;
 use App\Exceptions\InvoiceHasPaymentsException;
 use App\Models\Invoice;
+use App\Models\PatientTreatment;
 use App\Models\Payment;
 use App\Models\Service;
 use App\Support\Tenancy\CurrentTenant;
@@ -46,20 +47,14 @@ class InvoiceService
             $totalAmount = 0;
 
             foreach ($itemsData as $item) {
-                $service = Service::where('tenant_id', $tenantId)->find($item['service_id']);
-
-                if (! $service) {
-                    throw ValidationException::withMessages([
-                        'items' => 'One or more selected services are invalid.',
-                    ]);
-                }
-
-                $price = $service->is_other ? (float) $item['price'] : (float) $service->default_price;
+                [$price, $description] = $this->resolveItemPriceAndDescription($item, $tenantId);
                 $totalAmount += $price * $item['quantity'];
 
                 $resolvedItems[] = [
-                    'service_id' => $item['service_id'],
-                    'description' => $item['description'] ?? null,
+                    'service_id' => $item['service_id'] ?? null,
+                    'patient_treatment_id' => $item['patient_treatment_id'] ?? null,
+                    'patient_treatment_visit_id' => $item['patient_treatment_visit_id'] ?? null,
+                    'description' => $description,
                     'price' => $price,
                     'quantity' => $item['quantity'],
                 ];
@@ -76,13 +71,13 @@ class InvoiceService
                 $invoice->items()->create($resolvedItem);
             }
 
-            return $invoice->load(['patient', 'appointment', 'creator', 'items.service', 'payments']);
+            return $invoice->load(['patient', 'appointment', 'creator', 'items.service', 'items.patientTreatment.template', 'items.patientTreatmentVisit', 'payments']);
         });
     }
 
     public function show(Invoice $invoice): Invoice
     {
-        return $invoice->load(['patient', 'appointment', 'creator', 'items.service', 'payments.receiver']);
+        return $invoice->load(['patient', 'appointment', 'creator', 'items.service', 'items.patientTreatment.template', 'items.patientTreatmentVisit', 'payments.receiver']);
     }
 
     public function update(Invoice $invoice, array $data): Invoice
@@ -127,20 +122,14 @@ class InvoiceService
                 $resolvedItems = [];
 
                 foreach ($itemsData as $item) {
-                    $service = Service::where('tenant_id', $tenantId)->find($item['service_id']);
-
-                    if (! $service) {
-                        throw ValidationException::withMessages([
-                            'items' => 'One or more selected services are invalid.',
-                        ]);
-                    }
-
-                    $price = $service->is_other ? (float) $item['price'] : (float) $service->default_price;
+                    [$price, $description] = $this->resolveItemPriceAndDescription($item, $tenantId);
                     $totalAmount += $price * $item['quantity'];
 
                     $resolvedItems[] = [
-                        'service_id' => $item['service_id'],
-                        'description' => $item['description'] ?? null,
+                        'service_id' => $item['service_id'] ?? null,
+                        'patient_treatment_id' => $item['patient_treatment_id'] ?? null,
+                        'patient_treatment_visit_id' => $item['patient_treatment_visit_id'] ?? null,
+                        'description' => $description,
                         'price' => $price,
                         'quantity' => $item['quantity'],
                     ];
@@ -167,7 +156,7 @@ class InvoiceService
 
             $this->recalculateStatus($lockedInvoice);
 
-            return $lockedInvoice->load(['patient', 'appointment', 'creator', 'items.service', 'payments']);
+            return $lockedInvoice->load(['patient', 'appointment', 'creator', 'items.service', 'items.patientTreatment.template', 'items.patientTreatmentVisit', 'payments']);
         });
     }
 
@@ -217,6 +206,44 @@ class InvoiceService
             'total_billed' => (float) $totalBilled,
             'total_paid' => (float) $totalPaid,
             'total_remaining' => (float) max(0, $totalBilled - $totalPaid),
+        ];
+    }
+
+    /**
+     * @return array{0: float, 1: string|null}
+     */
+    private function resolveItemPriceAndDescription(array $item, string $tenantId): array
+    {
+        if (! empty($item['patient_treatment_id'])) {
+            $treatment = PatientTreatment::with('template')
+                ->where('tenant_id', $tenantId)
+                ->find($item['patient_treatment_id']);
+
+            if (! $treatment) {
+                throw ValidationException::withMessages([
+                    'items' => 'One or more selected treatments are invalid.',
+                ]);
+            }
+
+            $label = $treatment->template?->name_en ?: $treatment->template?->name_ar ?: 'Patient treatment';
+
+            return [
+                isset($item['price']) ? (float) $item['price'] : (float) $treatment->actual_price,
+                $item['description'] ?? $label,
+            ];
+        }
+
+        $service = Service::where('tenant_id', $tenantId)->find($item['service_id'] ?? null);
+
+        if (! $service) {
+            throw ValidationException::withMessages([
+                'items' => 'One or more selected services are invalid.',
+            ]);
+        }
+
+        return [
+            $service->is_other ? (float) $item['price'] : (float) $service->default_price,
+            $item['description'] ?? null,
         ];
     }
 }

@@ -3,8 +3,10 @@
 namespace App\Http\Requests\V1\Appointment;
 
 use App\Enums\UserRole;
+use App\Rules\AppointmentDoctorAvailable;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Support\Carbon;
+use Illuminate\Translation\PotentiallyTranslatedString;
 use Illuminate\Validation\Rule;
 
 class UpdateAppointmentRequest extends FormRequest
@@ -45,12 +47,32 @@ class UpdateAppointmentRequest extends FormRequest
 
             $appointment = $this->route('appointment');
             $newScheduledAt = Carbon::parse($this->input('scheduled_at'));
-
             $isActuallyChanging = ! $appointment->scheduled_at->equalTo($newScheduledAt);
 
             if ($isActuallyChanging && $newScheduledAt->isPast()) {
                 $validator->errors()->add('scheduled_at', 'The scheduled time must be in the future.');
             }
+
+            if ($validator->errors()->has('scheduled_at') || $validator->errors()->has('doctor_id') || $validator->errors()->has('duration_minutes')) {
+                return;
+            }
+
+            $doctorId = $this->input('doctor_id', $appointment->doctor_id);
+            $duration = (int) $this->input('duration_minutes', $appointment->duration_minutes);
+
+            $rule = new AppointmentDoctorAvailable(
+                tenantId: $this->user()->tenant_id,
+                doctorId: $doctorId,
+                scheduledAt: $newScheduledAt,
+                durationMinutes: $duration,
+                ignoreAppointmentId: $appointment->id,
+            );
+
+            $rule->validate('doctor_id', null, function (string $message, ?string $translate = null) use ($validator): PotentiallyTranslatedString {
+                $validator->errors()->add('doctor_id', $message);
+
+                return new PotentiallyTranslatedString($message, app('translator'));
+            });
         });
     }
 }

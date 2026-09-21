@@ -80,9 +80,9 @@ class DashboardService
         $invoicesMtd = Invoice::whereBetween('created_at', [$startMtd, $endMtd])->get();
         $invoicesSummaryMtd = [
             'total_invoices' => $invoicesMtd->count(),
-            'paid_invoices' => $invoicesMtd->filter(fn ($i) => ($i->status instanceof InvoiceStatus ? $i->status->value : $i->status) === InvoiceStatus::PAID->value)->count(),
-            'partially_paid_invoices' => $invoicesMtd->filter(fn ($i) => ($i->status instanceof InvoiceStatus ? $i->status->value : $i->status) === InvoiceStatus::PARTIAL->value)->count(),
-            'unpaid_invoices' => $invoicesMtd->filter(fn ($i) => ($i->status instanceof InvoiceStatus ? $i->status->value : $i->status) === InvoiceStatus::UNPAID->value)->count(),
+            'paid_invoices' => $invoicesMtd->filter(fn ($i) => $i->status->value === InvoiceStatus::PAID->value)->count(),
+            'partially_paid_invoices' => $invoicesMtd->filter(fn ($i) => $i->status->value === InvoiceStatus::PARTIAL->value)->count(),
+            'unpaid_invoices' => $invoicesMtd->filter(fn ($i) => $i->status->value === InvoiceStatus::UNPAID->value)->count(),
         ];
 
         // 3. Expenses breakdown MTD
@@ -182,7 +182,7 @@ class DashboardService
         [$start, $end] = $this->parseDateRange($range);
 
         $appts = Appointment::whereBetween('scheduled_at', [$start, $end])->get();
-        $getStatusCount = fn (AppointmentStatus $st) => $appts->filter(fn ($a) => ($a->status instanceof AppointmentStatus ? $a->status->value : $a->status) === $st->value)->count();
+        $getStatusCount = fn (AppointmentStatus $st) => $appts->filter(fn ($a) => $a->status->value === $st->value)->count();
 
         return [
             'scheduled' => $getStatusCount(AppointmentStatus::SCHEDULED),
@@ -267,7 +267,7 @@ class DashboardService
 
         $invoices = Invoice::whereBetween('created_at', [$start, $end])->get();
         $getAmount = fn (InvoiceStatus $st) => (float) $invoices
-            ->filter(fn ($i) => ($i->status instanceof InvoiceStatus ? $i->status->value : $i->status) === $st->value)
+            ->filter(fn ($i) => $i->status->value === $st->value)
             ->sum(fn ($i) => (float) $i->total_amount);
 
         $paid = $getAmount(InvoiceStatus::PAID);

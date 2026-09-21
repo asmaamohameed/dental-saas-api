@@ -1,6 +1,7 @@
 <?php
 
 namespace Tests\Feature\Http\Controllers\Requests;
+
 use App\Enums\InvoiceStatus;
 use App\Enums\UserRole;
 use App\Models\Invoice;
@@ -65,7 +66,7 @@ class InvoicePriceValidationTest extends TestCase
                     'description' => 'Custom work',
                     'price' => 300,
                     'quantity' => 1,
-                ]
+                ],
             ],
         ])->assertCreated()->assertJsonPath('data.total_amount', 300);
     }

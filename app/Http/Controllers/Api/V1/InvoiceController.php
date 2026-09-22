@@ -8,6 +8,7 @@ use App\Http\Requests\V1\Invoice\UpdateInvoiceRequest;
 use App\Http\Resources\V1\InvoiceListResource;
 use App\Http\Resources\V1\InvoiceResource;
 use App\Models\Invoice;
+use App\Models\PatientTreatment;
 use App\Services\InvoiceService;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\JsonResponse;
@@ -44,6 +45,17 @@ class InvoiceController extends Controller
         return $this->successResponse(
             new InvoiceResource($invoice),
             'Invoice created successfully.',
+            201
+        );
+    }
+
+    public function storeFromTreatment(Request $request, PatientTreatment $patientTreatment): JsonResponse
+    {
+        $invoice = $this->invoiceService->createFromTreatment($patientTreatment, $request->user()->id);
+
+        return $this->successResponse(
+            new InvoiceResource($invoice),
+            'Invoice created from treatment successfully.',
             201
         );
     }

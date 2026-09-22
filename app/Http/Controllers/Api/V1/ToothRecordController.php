@@ -32,8 +32,9 @@ class ToothRecordController extends Controller
     {
         $this->authorize('create', [ToothRecord::class, $patient]);
 
-        // Verify appointment belongs to this specific patient
-        $patient->appointments()->findOrFail($request->validated('appointment_id'));
+        if ($request->validated('appointment_id')) {
+            $patient->appointments()->findOrFail($request->validated('appointment_id'));
+        }
 
         $record = $patient->toothRecords()->create([
             ...$request->validated(),

@@ -182,7 +182,7 @@ class DashboardService
         [$start, $end] = $this->parseDateRange($range);
 
         $appts = Appointment::whereBetween('scheduled_at', [$start, $end])->get();
-        $getStatusCount = fn (AppointmentStatus $st) => $appts->filter(fn ($a) => $a->status->value === $st->value)->count();
+        $getStatusCount = fn (AppointmentStatus $st) => $appts->filter(fn ($a) => $a->status === $st)->count();
 
         return [
             'scheduled' => $getStatusCount(AppointmentStatus::SCHEDULED),
@@ -267,7 +267,7 @@ class DashboardService
 
         $invoices = Invoice::whereBetween('created_at', [$start, $end])->get();
         $getAmount = fn (InvoiceStatus $st) => (float) $invoices
-            ->filter(fn ($i) => $i->status->value === $st->value)
+            ->filter(fn ($i) => $i->status === $st)
             ->sum(fn ($i) => (float) $i->total_amount);
 
         $paid = $getAmount(InvoiceStatus::PAID);

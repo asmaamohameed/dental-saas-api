@@ -37,6 +37,9 @@ class PatientTreatmentComponent extends Model
         return $this->belongsTo(PatientTreatmentVisit::class, 'patient_treatment_visit_id');
     }
 
+    /**
+     * @return BelongsTo<Component, $this>
+     */
     public function component(): BelongsTo
     {
         return $this->belongsTo(Component::class);

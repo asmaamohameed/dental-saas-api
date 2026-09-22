@@ -3,7 +3,9 @@
 namespace App\Http\Resources\V1;
 
 use App\Models\InvoiceItem;
+use App\Models\PatientTreatment;
 use App\Models\Service;
+use App\Models\TreatmentTemplate;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -36,15 +38,21 @@ class InvoiceItemResource extends JsonResource
                 ];
             }),
             'patient_treatment' => $this->whenLoaded('patientTreatment', function () {
+                /** @var PatientTreatment $patientTreatment */
+                $patientTreatment = $this->patientTreatment;
+
+                /** @var TreatmentTemplate|null $template */
+                $template = $patientTreatment->relationLoaded('template') ? $patientTreatment->template : null;
+
                 return [
-                    'id' => $this->patientTreatment?->id,
-                    'tooth_number' => $this->patientTreatment?->tooth_number,
-                    'status' => $this->patientTreatment?->status,
-                    'actual_price' => (float) $this->patientTreatment?->actual_price,
-                    'template' => $this->patientTreatment?->relationLoaded('template') ? [
-                        'id' => $this->patientTreatment?->template?->id,
-                        'name_ar' => $this->patientTreatment?->template?->name_ar,
-                        'name_en' => $this->patientTreatment?->template?->name_en,
+                    'id' => $patientTreatment->id,
+                    'tooth_number' => $patientTreatment->tooth_number,
+                    'status' => $patientTreatment->status,
+                    'actual_price' => (float) $patientTreatment->actual_price,
+                    'template' => $template ? [
+                        'id' => $template->id,
+                        'name_ar' => $template->name_ar,
+                        'name_en' => $template->name_en,
                     ] : null,
                 ];
             }),

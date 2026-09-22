@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Enums\PatientTreatmentStatus;
 use App\Enums\PatientTreatmentVisitStatus;
+use App\Models\Component;
 use App\Models\PatientTreatment;
 use App\Models\TreatmentTemplate;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
@@ -61,6 +62,7 @@ class PatientTreatmentService
                 ]);
 
                 foreach ($templateVisit->components as $templateComponent) {
+                    /** @var Component|null $component */
                     $component = $templateComponent->component;
 
                     $visit->components()->create([

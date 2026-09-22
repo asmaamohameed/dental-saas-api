@@ -37,6 +37,9 @@ class TreatmentTemplate extends Model
         ];
     }
 
+    /**
+     * @return HasMany<TreatmentTemplateVisit, $this>
+     */
     public function visits(): HasMany
     {
         return $this->hasMany(TreatmentTemplateVisit::class)->orderBy('visit_order');

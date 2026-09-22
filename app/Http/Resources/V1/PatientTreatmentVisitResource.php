@@ -5,8 +5,11 @@ namespace App\Http\Resources\V1;
 use App\Models\PatientTreatmentVisit;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
+use Illuminate\Support\Carbon;
 
-/** @mixin PatientTreatmentVisit */
+/** @mixin PatientTreatmentVisit
+ * @property Carbon|null $completed_at
+ */
 class PatientTreatmentVisitResource extends JsonResource
 {
     public function toArray(Request $request): array

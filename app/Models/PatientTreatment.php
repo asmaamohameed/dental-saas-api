@@ -48,6 +48,9 @@ class PatientTreatment extends Model
         return $this->belongsTo(Patient::class);
     }
 
+    /**
+     * @return BelongsTo<TreatmentTemplate, $this>
+     */
     public function template(): BelongsTo
     {
         return $this->belongsTo(TreatmentTemplate::class, 'treatment_template_id');
@@ -63,11 +66,17 @@ class PatientTreatment extends Model
         return $this->belongsTo(User::class, 'created_by');
     }
 
+    /**
+     * @return HasMany<PatientTreatmentVisit, $this>
+     */
     public function visits(): HasMany
     {
         return $this->hasMany(PatientTreatmentVisit::class)->orderBy('visit_order');
     }
 
+    /**
+     * @return HasMany<InvoiceItem, $this>
+     */
     public function invoiceItems(): HasMany
     {
         return $this->hasMany(InvoiceItem::class);

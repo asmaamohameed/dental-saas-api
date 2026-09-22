@@ -28,6 +28,8 @@ class Component extends Model
         return [
             'default_price' => 'decimal:2',
             'is_active' => 'boolean',
+            'created_at' => 'datetime',
+            'updated_at' => 'datetime',
         ];
     }
 

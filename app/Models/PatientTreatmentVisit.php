@@ -30,9 +30,14 @@ class PatientTreatmentVisit extends Model
             'visit_order' => 'integer',
             'status' => PatientTreatmentVisitStatus::class,
             'completed_at' => 'datetime',
+            'created_at' => 'datetime',
+            'updated_at' => 'datetime',
         ];
     }
 
+    /**
+     * @return BelongsTo<PatientTreatment, $this>
+     */
     public function treatment(): BelongsTo
     {
         return $this->belongsTo(PatientTreatment::class, 'patient_treatment_id');

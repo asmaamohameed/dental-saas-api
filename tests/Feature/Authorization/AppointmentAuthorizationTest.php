@@ -59,10 +59,18 @@ class AppointmentAuthorizationTest extends TestCase
     public function test_owner_can_delete_an_appointment(): void
     {
         $this->actingAsTenantUser(role: UserRole::OWNER);
-        $appointment = Appointment::factory()->create();
-
+        $appointment = Appointment::factory()->create(['status' => AppointmentStatus::SCHEDULED]);
         $this->deleteJson("/api/v1/appointments/{$appointment->id}")
             ->assertOk();
+    }
+
+    public function test_owner_cannot_delete_a_completed_appointment(): void
+    {
+        $this->actingAsTenantUser(role: UserRole::OWNER);
+        $appointment = Appointment::factory()->create(['status' => AppointmentStatus::COMPLETED]);
+
+        $this->deleteJson("/api/v1/appointments/{$appointment->id}")
+            ->assertForbidden();
     }
 
     public function test_doctor_cannot_create_an_appointment(): void

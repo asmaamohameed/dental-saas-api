@@ -12,6 +12,8 @@ use App\Http\Requests\V1\Appointment\UpdateAppointmentRequest;
 use App\Http\Requests\V1\Appointment\UpdateAppointmentStatusRequest;
 use App\Http\Resources\V1\AppointmentResource;
 use App\Models\Appointment;
+use App\Models\PatientTreatmentVisit;
+use App\Services\PatientTreatmentService;
 use App\Traits\ApiResponse;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\Request;
@@ -19,6 +21,8 @@ use Illuminate\Http\Request;
 class AppointmentController extends Controller
 {
     use ApiResponse, AuthorizesRequests;
+
+    public function __construct(private readonly PatientTreatmentService $patientTreatmentService) {}
 
     public function index(Request $request)
     {
@@ -159,10 +163,15 @@ class AppointmentController extends Controller
                 default => PatientTreatmentVisitStatus::SCHEDULED,
             };
 
-            $appointment->patientTreatmentVisit()->update([
-                'status' => $visitStatus,
-                'completed_at' => $visitStatus === PatientTreatmentVisitStatus::COMPLETED ? now() : null,
-            ]);
+            /** @var PatientTreatmentVisit|null $visit */
+            $visit = PatientTreatmentVisit::query()->find($appointment->patient_treatment_visit_id);
+
+            if ($visit) {
+                $this->patientTreatmentService->updateVisit($visit, [
+                    'status' => $visitStatus,
+                    'completed_date' => $visitStatus === PatientTreatmentVisitStatus::COMPLETED ? now() : null,
+                ], $request->user()->id);
+            }
         }
 
         $appointment->load(['patient', 'doctor', 'patientTreatmentVisit.treatment']);

@@ -12,7 +12,15 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Carbon;
 
+/**
+ * @property PatientTreatmentStatus $status
+ * @property TreatmentPriority $priority
+ * @property int $total_visits
+ * @property Carbon|null $started_at
+ * @property Carbon|null $completed_at
+ */
 class PatientTreatment extends Model
 {
     use Auditable, BelongsToTenant, HasFactory, HasUuids;
@@ -25,6 +33,7 @@ class PatientTreatment extends Model
         'diagnosis',
         'status',
         'priority',
+        'total_visits',
         'actual_price',
         'notes',
         'started_at',
@@ -37,6 +46,7 @@ class PatientTreatment extends Model
         return [
             'status' => PatientTreatmentStatus::class,
             'priority' => TreatmentPriority::class,
+            'total_visits' => 'integer',
             'actual_price' => 'decimal:2',
             'started_at' => 'datetime',
             'completed_at' => 'datetime',

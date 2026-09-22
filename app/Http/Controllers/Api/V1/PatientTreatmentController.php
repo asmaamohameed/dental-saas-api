@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Enums\PatientTreatmentStatus;
 use App\Enums\PatientTreatmentVisitStatus;
+use App\Enums\ToothCondition;
 use App\Enums\TreatmentPriority;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\V1\PatientTreatmentResource;
@@ -66,34 +67,65 @@ class PatientTreatmentController extends Controller
         );
     }
 
+    public function invoiceSummary(PatientTreatment $patientTreatment): JsonResponse
+    {
+        return $this->successResponse(
+            $this->patientTreatmentService->getInvoiceSummary($patientTreatment),
+            'Treatment invoice summary retrieved successfully.'
+        );
+    }
+
     public function update(Request $request, PatientTreatment $patientTreatment): JsonResponse
     {
-        $treatment = $this->patientTreatmentService->update($patientTreatment, $this->validated($request, true));
+        $treatment = $this->patientTreatmentService->update($patientTreatment, $this->validated($request, true), $request->user()->id);
 
         return $this->successResponse(new PatientTreatmentResource($treatment), 'Patient treatment updated successfully.');
+    }
+
+    public function destroy(PatientTreatment $patientTreatment): JsonResponse
+    {
+        $this->patientTreatmentService->delete($patientTreatment);
+
+        return $this->successResponse(null, 'Patient treatment deleted successfully.');
     }
 
     public function updateVisit(Request $request, PatientTreatmentVisit $visit): JsonResponse
     {
         $data = $request->validate([
             'status' => ['required', Rule::enum(PatientTreatmentVisitStatus::class)],
+            'scheduled_date' => ['nullable', 'date'],
+            'completed_date' => ['nullable', 'date'],
             'completed_at' => ['nullable', 'date'],
+            'dentist_id' => [
+                'nullable',
+                'uuid',
+                Rule::exists('users', 'id')->where('tenant_id', app(CurrentTenant::class)->id()),
+            ],
+            'appointment_id' => [
+                'nullable',
+                'uuid',
+                Rule::exists('appointments', 'id')->where('tenant_id', app(CurrentTenant::class)->id()),
+            ],
+            'status_reason' => ['nullable', 'string'],
+            'visit_price' => ['nullable', 'numeric', 'min:0'],
         ]);
 
-        if ($data['status'] === PatientTreatmentVisitStatus::COMPLETED->value && empty($data['completed_at'])) {
-            $data['completed_at'] = now();
-        }
+        $statusStr = $data['status'] instanceof PatientTreatmentVisitStatus ? $data['status']->value : (string) $data['status'];
 
-        if ($data['status'] !== PatientTreatmentVisitStatus::COMPLETED->value) {
+        if ($statusStr === PatientTreatmentVisitStatus::COMPLETED->value) {
+            $data['completed_date'] = $data['completed_date'] ?? $data['completed_at'] ?? now();
+            $data['completed_at'] = $data['completed_date'];
+        } else {
+            $data['completed_date'] = null;
             $data['completed_at'] = null;
         }
 
-        $visit->update($data);
+        $result = $this->patientTreatmentService->updateVisit($visit, $data, $request->user()->id);
 
-        return $this->successResponse(
-            new PatientTreatmentVisitResource($visit->load(['components', 'appointments'])),
-            'Treatment visit updated successfully.'
-        );
+        return $this->successResponse([
+            'visit' => new PatientTreatmentVisitResource($result['visit']),
+            'low_stock_warnings' => $result['low_stock_warnings'],
+        ], 'Treatment visit updated successfully.');
     }
 
     private function validated(Request $request, bool $partial = false): array
@@ -116,10 +148,12 @@ class PatientTreatmentController extends Controller
                 'uuid',
                 Rule::exists('users', 'id')->where('tenant_id', app(CurrentTenant::class)->id()),
             ],
-            'tooth_number' => ['nullable', 'string', 'max:20'],
+            'tooth_number' => ['nullable', 'string', 'regex:/^[1-4][1-8]$/'],
+            'tooth_condition' => ['nullable', Rule::enum(ToothCondition::class)],
             'diagnosis' => ['nullable', 'string'],
             'status' => ['sometimes', Rule::enum(PatientTreatmentStatus::class)],
             'priority' => ['sometimes', Rule::enum(TreatmentPriority::class)],
+            'total_visits' => ['sometimes', 'integer', 'min:1', 'max:50'],
             'actual_price' => ['sometimes', 'numeric', 'min:0'],
             'notes' => ['nullable', 'string'],
             'started_at' => ['nullable', 'date'],

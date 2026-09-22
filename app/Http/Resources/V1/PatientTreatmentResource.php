@@ -28,6 +28,7 @@ class PatientTreatmentResource extends JsonResource
             'diagnosis' => $this->diagnosis,
             'status' => $this->status,
             'priority' => $this->priority,
+            'total_visits' => (int) ($this->total_visits ?: ($this->relationLoaded('visits') ? count($this->visits) : 1)),
             'actual_price' => (float) $this->actual_price,
             'notes' => $this->notes,
             'started_at' => $this->started_at?->toISOString(),

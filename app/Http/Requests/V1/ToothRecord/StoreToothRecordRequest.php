@@ -25,7 +25,7 @@ class StoreToothRecordRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'appointment_id' => ['required', 'string', 'exists:appointments,id'],
+            'appointment_id' => ['nullable', 'string', 'exists:appointments,id'],
             'tooth_number' => ['required', 'string', 'regex:/^[1-4][1-8]$/'],
             'condition' => ['required', 'string', 'in:healthy,decayed,filled,missing,crown,root_canal,needs_extraction,impacted'],
             'treatment_status' => ['required', 'string', Rule::enum(ToothTreatmentStatus::class)],

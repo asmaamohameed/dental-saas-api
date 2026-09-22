@@ -63,6 +63,7 @@ Route::prefix('v1')->group(function () {
         Route::get('doctors', [UserController::class, 'doctors']);
         Route::get('services', [ServiceController::class, 'index']);
         Route::get('services/{service}', [ServiceController::class, 'show']);
+        Route::get('components/low-stock', [ComponentController::class, 'lowStock']);
         Route::apiResource('components', ComponentController::class)->only(['index', 'show']);
         Route::apiResource('treatment-templates', TreatmentTemplateController::class)
             ->parameters(['treatment-templates' => 'treatmentTemplate'])
@@ -70,6 +71,11 @@ Route::prefix('v1')->group(function () {
         Route::apiResource('patient-treatments', PatientTreatmentController::class)
             ->parameters(['patient-treatments' => 'patientTreatment'])
             ->only(['index', 'show']);
+        Route::get('patient-treatments/{patientTreatment}/invoice-summary', [PatientTreatmentController::class, 'invoiceSummary']);
+
+        Route::middleware(EnsureUserRole::using(UserRole::OWNER, UserRole::RECEPTIONIST, UserRole::DOCTOR))->group(function () {
+            Route::patch('patient-treatment-visits/{visit}', [PatientTreatmentController::class, 'updateVisit']);
+        });
 
         Route::get('invoices', [InvoiceController::class, 'index']);
         Route::get('invoices/{invoice}', [InvoiceController::class, 'show']);
@@ -111,9 +117,10 @@ Route::prefix('v1')->group(function () {
             Route::patch('treatment-templates/{treatmentTemplate}/toggle-active', [TreatmentTemplateController::class, 'toggleActive']);
             Route::post('patient-treatments', [PatientTreatmentController::class, 'store']);
             Route::put('patient-treatments/{patientTreatment}', [PatientTreatmentController::class, 'update']);
-            Route::patch('patient-treatment-visits/{visit}', [PatientTreatmentController::class, 'updateVisit']);
+            Route::delete('patient-treatments/{patientTreatment}', [PatientTreatmentController::class, 'destroy']);
 
             Route::post('invoices', [InvoiceController::class, 'store']);
+            Route::post('invoices/from-treatment/{patientTreatment}', [InvoiceController::class, 'storeFromTreatment']);
             Route::put('invoices/{invoice}', [InvoiceController::class, 'update']);
 
             Route::post('invoices/{invoice}/items', [InvoiceItemController::class, 'store']);

@@ -12,6 +12,16 @@ use Illuminate\Validation\Rule;
 
 class ComponentController extends Controller
 {
+    public function lowStock(): JsonResponse
+    {
+        $items = Component::query()->lowStock()->with('inventoryItem')->orderBy('name_en')->get();
+
+        return $this->successResponse(
+            ComponentResource::collection($items),
+            'Low stock components retrieved successfully.'
+        );
+    }
+
     public function index(Request $request): JsonResponse
     {
         $perPage = min(max((int) $request->query('per_page', 15), 1), 50);
@@ -23,7 +33,7 @@ class ComponentController extends Controller
 
         if ($request->filled('search')) {
             $search = str_replace(['\\', '%', '_'], ['\\\\', '\%', '\_'], $request->query('search'));
-            $query->where(fn ($q) => $q->where('name_ar', 'like', "%{$search}%")->orWhere('name_en', 'like', "%{$search}%"));
+            $query->where(fn($q) => $q->where('name_ar', 'like', "%{$search}%")->orWhere('name_en', 'like', "%{$search}%"));
         }
 
         return $this->paginatedResponse(
@@ -60,7 +70,7 @@ class ComponentController extends Controller
 
     public function toggleActive(Component $component): JsonResponse
     {
-        $component->update(['is_active' => ! $component->is_active]);
+        $component->update(['is_active' => !$component->is_active]);
 
         return $this->successResponse(new ComponentResource($component), 'Component active status updated successfully.');
     }
@@ -80,6 +90,8 @@ class ComponentController extends Controller
                 Rule::exists('inventory_items', 'id')->where('tenant_id', app(CurrentTenant::class)->id()),
             ],
             'is_active' => ['sometimes', 'boolean'],
+            'current_quantity' => ['sometimes', 'numeric', 'min:0'],
+            'minimum_threshold' => ['nullable', 'numeric', 'min:0'],
         ]);
     }
 }

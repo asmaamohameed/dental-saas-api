@@ -25,6 +25,7 @@ class PatientTreatment extends Model
         'diagnosis',
         'status',
         'priority',
+        'total_visits',
         'actual_price',
         'notes',
         'started_at',
@@ -37,6 +38,7 @@ class PatientTreatment extends Model
         return [
             'status' => PatientTreatmentStatus::class,
             'priority' => TreatmentPriority::class,
+            'total_visits' => 'integer',
             'actual_price' => 'decimal:2',
             'started_at' => 'datetime',
             'completed_at' => 'datetime',

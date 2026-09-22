@@ -17,9 +17,12 @@ class ComponentResource extends JsonResource
             'name_en' => $this->name_en,
             'default_price' => (float) $this->default_price,
             'unit' => $this->unit,
+            'current_quantity' => (float) $this->current_quantity,
+            'minimum_threshold' => $this->minimum_threshold !== null ? (float) $this->minimum_threshold : null,
+            'is_low_stock' => (bool) $this->is_low_stock,
             'inventory_item_id' => $this->inventory_item_id,
             'is_active' => $this->is_active,
-            'inventory_item' => $this->whenLoaded('inventoryItem', fn () => [
+            'inventory_item' => $this->whenLoaded('inventoryItem', fn() => [
                 'id' => $this->inventoryItem?->id,
                 'name' => $this->inventoryItem?->name,
                 'unit' => $this->inventoryItem?->unit,

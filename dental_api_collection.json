@@ -89,6 +89,39 @@
                     }
                 },
                 {
+                    "name": "POST /api/admin/auth/logout",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/admin/auth/logout",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "admin",
+                                "auth",
+                                "logout"
+                            ]
+                        },
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{admin_token}}",
+                                    "type": "string"
+                                }
+                            ]
+                        }
+                    }
+                },
+                {
                     "name": "Tenants",
                     "item": [
                         {
@@ -97,7 +130,7 @@
                                 "method": "GET",
                                 "header": [
                                     {
-                                       "key": "Accept",
+                                        "key": "Accept",
                                         "value": "application/json"
                                     }
                                 ],
@@ -665,6 +698,52 @@
                     }
                 },
                 {
+                    "name": "GET /api/v1/patients/search",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/api/v1/patients/search",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "patients",
+                                "search"
+                            ],
+                            "query": [
+                                {
+                                    "key": "search",
+                                    "value": "John",
+                                    "disabled": true
+                                },
+                                {
+                                    "key": "per_page",
+                                    "value": "15",
+                                    "disabled": true
+                                }
+                            ]
+                        },
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{token}}",
+                                    "type": "string"
+                                }
+                            ]
+                        }
+                    }
+                },
+                {
                     "name": "POST /api/v1/patients",
                     "request": {
                         "method": "POST",
@@ -943,6 +1022,309 @@
                                     "language": "json"
                                 }
                             }
+                        }
+                    }
+                }
+            ]
+        },
+        {
+            "name": "Audit Logs",
+            "item": [
+                {
+                    "name": "GET /api/v1/audit-logs",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/api/v1/audit-logs",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "audit-logs"
+                            ],
+                            "query": [
+                                {
+                                    "key": "user_id",
+                                    "value": "{{user_id}}",
+                                    "disabled": true
+                                },
+                                {
+                                    "key": "action",
+                                    "value": "created",
+                                    "disabled": true
+                                },
+                                {
+                                    "key": "auditable_type",
+                                    "value": "App\\\\Models\\\\Patient",
+                                    "disabled": true
+                                },
+                                {
+                                    "key": "from",
+                                    "value": "2026-08-01",
+                                    "disabled": true
+                                },
+                                {
+                                    "key": "to",
+                                    "value": "2026-08-31",
+                                    "disabled": true
+                                },
+                                {
+                                    "key": "per_page",
+                                    "value": "15",
+                                    "disabled": true
+                                }
+                            ]
+                        },
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{token}}",
+                                    "type": "string"
+                                }
+                            ]
+                        }
+                    }
+                }
+            ]
+        },
+        {
+            "name": "Doctors",
+            "item": [
+                {
+                    "name": "GET /api/v1/doctors",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/api/v1/doctors",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "doctors"
+                            ]
+                        },
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{token}}",
+                                    "type": "string"
+                                }
+                            ]
+                        }
+                    }
+                }
+            ]
+        },
+        {
+            "name": "Staff",
+            "item": [
+                {
+                    "name": "GET /api/v1/staff",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/api/v1/staff",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "staff"
+                            ],
+                            "query": [
+                                {
+                                    "key": "role",
+                                    "value": "doctor",
+                                    "disabled": true
+                                },
+                                {
+                                    "key": "is_active",
+                                    "value": "1",
+                                    "disabled": true
+                                },
+                                {
+                                    "key": "search",
+                                    "value": "Dr.",
+                                    "disabled": true
+                                },
+                                {
+                                    "key": "per_page",
+                                    "value": "15",
+                                    "disabled": true
+                                }
+                            ]
+                        },
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{token}}",
+                                    "type": "string"
+                                }
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "POST /api/v1/staff",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/api/v1/staff",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "staff"
+                            ]
+                        },
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{token}}",
+                                    "type": "string"
+                                }
+                            ]
+                        },
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"name\": \"Dr. New Doctor\",\n    \"email\": \"newdoctor@clinic.com\",\n    \"phone\": \"+201234567890\",\n    \"password\": \"password123\",\n    \"role\": \"doctor\"\n}",
+                            "options": {
+                                "raw": {
+                                    "language": "json"
+                                }
+                            }
+                        }
+                    },
+                    "event": [
+                        {
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "if (pm.response.code === 201 || pm.response.code === 200) {",
+                                    "    const data = pm.response.json();",
+                                    "    const id = data.id || (data.data && data.data.id);",
+                                    "    if (id) pm.environment.set('user_id', id);",
+                                    "}"
+                                ]
+                            },
+                            "listen": "test"
+                        }
+                    ]
+                },
+                {
+                    "name": "PUT /api/v1/staff/{{user_id}}",
+                    "request": {
+                        "method": "PUT",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/api/v1/staff/{{user_id}}",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "staff",
+                                "{{user_id}}"
+                            ]
+                        },
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{token}}",
+                                    "type": "string"
+                                }
+                            ]
+                        },
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"name\": \"Dr. Updated Name\",\n    \"email\": \"updated@clinic.com\",\n    \"phone\": \"+201234567891\",\n    \"role\": \"doctor\"\n}",
+                            "options": {
+                                "raw": {
+                                    "language": "json"
+                                }
+                            }
+                        }
+                    }
+                },
+                {
+                    "name": "PATCH /api/v1/staff/{{user_id}}/toggle-active",
+                    "request": {
+                        "method": "PATCH",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/api/v1/staff/{{user_id}}/toggle-active",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "staff",
+                                "{{user_id}}",
+                                "toggle-active"
+                            ]
+                        },
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{token}}",
+                                    "type": "string"
+                                }
+                            ]
                         }
                     }
                 }
@@ -1284,7 +1666,7 @@
                         },
                         "body": {
                             "mode": "raw",
-                            "raw": "{\n    \"name_ar\": \"تنظيف أسنان\",\n    \"name_en\": \"Teeth Cleaning\",\n    \"default_price\": 150.00,\n    \"is_active\": true\n}",
+                            "raw": "{\n    \"name_ar\": \"ØªÙ†Ø¸ÙŠÙ Ø£Ø³Ù†Ø§Ù†\",\n    \"name_en\": \"Teeth Cleaning\",\n    \"default_price\": 150.00,\n    \"is_active\": true\n}",
                             "options": {
                                 "raw": {
                                     "language": "json"
@@ -1376,7 +1758,7 @@
                         },
                         "body": {
                             "mode": "raw",
-                            "raw": "{\n    \"name_ar\": \"تنظيف وتلميع أسنان\",\n    \"name_en\": \"Teeth Cleaning & Polishing\",\n    \"default_price\": 180.00,\n    \"is_active\": true\n}",
+                            "raw": "{\n    \"name_ar\": \"ØªÙ†Ø¸ÙŠÙ ÙˆØªÙ„Ù…ÙŠØ¹ Ø£Ø³Ù†Ø§Ù†\",\n    \"name_en\": \"Teeth Cleaning & Polishing\",\n    \"default_price\": 180.00,\n    \"is_active\": true\n}",
                             "options": {
                                 "raw": {
                                     "language": "json"
@@ -2569,6 +2951,11 @@
         },
         {
             "key": "inventory_item_id",
+            "value": "",
+            "type": "string"
+        },
+        {
+            "key": "user_id",
             "value": "",
             "type": "string"
         }

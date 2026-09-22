@@ -42,6 +42,7 @@ Route::prefix('v1')->group(function () {
         Route::prefix('auth')->group(function () {
             Route::post('logout', LogoutController::class);
             Route::get('me', [ProfileController::class, 'show']);
+            Route::match(['put', 'patch'], 'me', [ProfileController::class, 'update']);
         });
 
         // Patients API Resource

@@ -24,6 +24,8 @@ class InvoiceResource extends JsonResource
             'created_by' => $this->created_by,
             'total_amount' => (float) $this->total_amount,
             'remaining_amount' => (float) $this->remaining_amount,
+            'paid_amount' => $this->paidAmount(),
+            'deducted_amount' => $this->deductedAmount(),
             'status' => $this->status,
             'patient' => $this->whenLoaded('patient', function (Patient $patient) {
                 return [

@@ -21,7 +21,11 @@ class TreatmentTemplateResource extends JsonResource
             'estimated_duration_minutes' => $this->estimated_duration_minutes,
             'visit_type' => $this->visit_type,
             'is_active' => $this->is_active,
-            'visits' => TreatmentTemplateVisitResource::collection($this->whenLoaded('visits')),
+            'version' => (int) $this->version,
+            'is_current' => (bool) $this->is_current,
+            'root_template_id' => $this->root_template_id,
+            'previous_version_id' => $this->previous_version_id,
+            'steps' => TreatmentTemplateStepResource::collection($this->whenLoaded('steps')),
             'created_at' => $this->created_at?->toISOString(),
             'updated_at' => $this->updated_at?->toISOString(),
         ];

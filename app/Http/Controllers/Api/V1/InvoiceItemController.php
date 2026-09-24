@@ -28,7 +28,7 @@ class InvoiceItemController extends Controller
     {
         $this->authorize('viewAny', [InvoiceItem::class, $invoice]);
 
-        $items = $invoice->items()->with(['service', 'patientTreatment.template', 'patientTreatmentVisit'])->get();
+        $items = $invoice->items()->with(['service', 'patientTreatment.template'])->get();
 
         return $this->successResponse(
             InvoiceItemResource::collection($items),
@@ -52,7 +52,7 @@ class InvoiceItemController extends Controller
                 $treatment = PatientTreatment::with('template')
                     ->where('tenant_id', app(CurrentTenant::class)->id())
                     ->findOrFail($validated['patient_treatment_id']);
-                $validated['price'] = $validated['price'] ?? (float) $treatment->actual_price;
+                $validated['price'] = $validated['price'] ?? (float) $treatment->agreed_price;
                 $validated['description'] ??= $treatment->template?->name_en ?: $treatment->template?->name_ar;
             } else {
                 $service = Service::where('tenant_id', app(CurrentTenant::class)->id())
@@ -74,7 +74,7 @@ class InvoiceItemController extends Controller
         });
 
         return $this->successResponse(
-            new InvoiceItemResource($item->load(['service', 'patientTreatment.template', 'patientTreatmentVisit'])),
+            new InvoiceItemResource($item->load(['service', 'patientTreatment.template'])),
             'Invoice item added successfully.',
             201
         );
@@ -101,7 +101,7 @@ class InvoiceItemController extends Controller
                 if (! empty($validated['patient_treatment_id'])) {
                     $treatment = PatientTreatment::where('tenant_id', app(CurrentTenant::class)->id())
                         ->findOrFail($validated['patient_treatment_id']);
-                    $validated['price'] = $validated['price'] ?? (float) $treatment->actual_price;
+                    $validated['price'] = $validated['price'] ?? (float) $treatment->agreed_price;
                 } else {
                     $serviceId = $validated['service_id'] ?? $item->service_id;
                     $service = Service::where('tenant_id', app(CurrentTenant::class)->id())
@@ -131,7 +131,7 @@ class InvoiceItemController extends Controller
         });
 
         return $this->successResponse(
-            new InvoiceItemResource($updatedItem->load(['service', 'patientTreatment.template', 'patientTreatmentVisit'])),
+            new InvoiceItemResource($updatedItem->load(['service', 'patientTreatment.template'])),
             'Invoice item updated successfully.'
         );
     }

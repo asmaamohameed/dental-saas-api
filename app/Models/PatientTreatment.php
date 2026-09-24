@@ -2,8 +2,11 @@
 
 namespace App\Models;
 
+use App\Enums\ConsentStatus;
+use App\Enums\FinancialStatus;
 use App\Enums\PatientTreatmentStatus;
 use App\Enums\TreatmentPriority;
+use App\Enums\TreatmentType;
 use App\Models\Concerns\Auditable;
 use App\Models\Concerns\BelongsToTenant;
 use Illuminate\Database\Eloquent\Builder;
@@ -19,29 +22,40 @@ class PatientTreatment extends Model
 
     protected $fillable = [
         'patient_id',
+        'treatment_plan_id',
         'treatment_template_id',
-        'doctor_id',
-        'tooth_number',
+        'treatment_template_version',
+        'agreed_price',
+        'clinical_status',
+        'cancellation_reason',
+        'financial_status',
+        'consent_status',
+        'consent_document_ref',
+        'parent_treatment_id',
+        'treatment_type',
+        'dentist_id',
         'diagnosis',
-        'status',
         'priority',
-        'total_visits',
-        'actual_price',
         'notes',
         'started_at',
         'completed_at',
+        'cancelled_at',
         'created_by',
     ];
 
     protected function casts(): array
     {
         return [
-            'status' => PatientTreatmentStatus::class,
+            'treatment_template_version' => 'integer',
+            'agreed_price' => 'decimal:2',
+            'clinical_status' => PatientTreatmentStatus::class,
+            'financial_status' => FinancialStatus::class,
+            'consent_status' => ConsentStatus::class,
+            'treatment_type' => TreatmentType::class,
             'priority' => TreatmentPriority::class,
-            'total_visits' => 'integer',
-            'actual_price' => 'decimal:2',
             'started_at' => 'datetime',
             'completed_at' => 'datetime',
+            'cancelled_at' => 'datetime',
         ];
     }
 
@@ -50,14 +64,19 @@ class PatientTreatment extends Model
         return $this->belongsTo(Patient::class);
     }
 
+    public function plan(): BelongsTo
+    {
+        return $this->belongsTo(TreatmentPlan::class, 'treatment_plan_id');
+    }
+
     public function template(): BelongsTo
     {
         return $this->belongsTo(TreatmentTemplate::class, 'treatment_template_id');
     }
 
-    public function doctor(): BelongsTo
+    public function dentist(): BelongsTo
     {
-        return $this->belongsTo(User::class, 'doctor_id');
+        return $this->belongsTo(User::class, 'dentist_id');
     }
 
     public function creator(): BelongsTo
@@ -65,9 +84,24 @@ class PatientTreatment extends Model
         return $this->belongsTo(User::class, 'created_by');
     }
 
-    public function visits(): HasMany
+    public function parentTreatment(): BelongsTo
     {
-        return $this->hasMany(PatientTreatmentVisit::class)->orderBy('visit_order');
+        return $this->belongsTo(self::class, 'parent_treatment_id');
+    }
+
+    public function retreatments(): HasMany
+    {
+        return $this->hasMany(self::class, 'parent_treatment_id');
+    }
+
+    public function teeth(): HasMany
+    {
+        return $this->hasMany(PatientTreatmentTooth::class);
+    }
+
+    public function sessions(): HasMany
+    {
+        return $this->hasMany(TreatmentSession::class)->orderBy('session_date');
     }
 
     public function invoiceItems(): HasMany
@@ -78,5 +112,10 @@ class PatientTreatment extends Model
     public function scopeForPatient(Builder $query, string $patientId): Builder
     {
         return $query->where('patient_id', $patientId);
+    }
+
+    public function toothNumbers(): array
+    {
+        return $this->teeth->pluck('tooth_number')->map(fn ($n) => (string) $n)->values()->all();
     }
 }

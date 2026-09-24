@@ -38,7 +38,7 @@ app/
   Traits/             # ApiResponse trait
 database/
   migrations/         # Schema definitions
-  seeders/            # AdminUserSeeder, DemoTenantSeeder
+  seeders/            # AdminUserSeeder, DemoTenantSeeder, TreatmentTemplateSeeder
 routes/
   api.php             # Tenant API routes (v1)
   admin.php           # Admin API routes
@@ -54,11 +54,20 @@ routes/
 | **users** | `id`, `tenant_id`, `name`, `email` (globally unique), `phone`, `password_hash`, `role`, `locale`, `is_active` |
 | **admin_users** | `id`, `name`, `email`, `password_hash`, `is_active` (separate from tenants) |
 | **patients** | `id`, `tenant_id`, `full_name`, `phone`, `date_of_birth`, `gender`, `medical_history` (jsonb), `notes` |
-| **appointments** | `id`, `tenant_id`, `patient_id`, `doctor_id` (users), `created_by`, `scheduled_at`, `duration_minutes`, `status`, `notes` |
+| **appointments** | `id`, `tenant_id`, `patient_id`, `doctor_id` (users), `created_by`, `scheduled_at`, `duration_minutes`, `status`, `appointment_type`, `notes` |
 | **tooth_records** | `id`, `tenant_id`, `patient_id`, `appointment_id`, `recorded_by`, `tooth_number` (FDI), `condition`, `treatment_status`, `notes` |
+| **components** | `id`, `tenant_id`, `name_ar`, `name_en`, `default_price`, `unit`, `current_quantity`, `minimum_threshold`, `inventory_item_id`, `is_active` |
+| **treatment_templates** | Versioned catalog: `version`, `is_current`, `root_template_id`, `previous_version_id`. Edits create a new version. |
+| **treatment_template_steps** | Ordered steps (`is_optional`, `is_repeatable`, `default_duration_minutes`) plus per-step components |
+| **treatment_plans** | Optional grouping of patient treatments (`draft`, `active`, `completed`, `cancelled`) |
+| **patient_treatments** | Independent `clinical_status`, `financial_status`, `consent_status`; `agreed_price` snapshot; optional `parent_treatment_id` for retreatment |
+| **patient_treatment_teeth** | Junction: 0, 1, or many FDI teeth per treatment |
+| **treatment_sessions** | Clinical visits (`scheduled`, `completed`, `cancelled`, `no_show`) optionally linked to an appointment |
+| **treatment_session_steps** | Done/skipped occurrences of a template step or a custom step (`occurrence_number`) |
+| **patient_treatment_components** | Materials copied onto a session at complete, then deducted from stock |
 | **services** | `id`, `tenant_id`, `name_ar`, `name_en`, `default_price`, `is_active`, `is_other` |
 | **invoices** | `id`, `tenant_id`, `patient_id`, `appointment_id`, `created_by`, `total_amount`, `status`, soft deletes |
-| **invoice_items** | `id`, `tenant_id`, `invoice_id`, `service_id` (NOT NULL), `description`, `price`, `quantity`, soft deletes |
+| **invoice_items** | `id`, `tenant_id`, `invoice_id`, `service_id`, `patient_treatment_id` (nullable), `description`, `price`, `quantity`, soft deletes |
 | **payments** | `id`, `tenant_id`, `invoice_id`, `amount`, `paid_at`, `method`, `received_by`, `notes`, soft deletes |
 | **inventory_items** | `id`, `tenant_id`, `name`, `unit`, `current_quantity`, `minimum_threshold`, `is_active` |
 | **inventory_transactions** | `id`, `tenant_id`, `inventory_item_id`, `type`, `quantity`, `reason`, `performed_by` |
@@ -67,7 +76,11 @@ routes/
 
 ### Important Relationship Notes
 
-- **`tooth_records` is append-only history**. The `odontogram` endpoint returns the *latest* record per tooth using a window function (`ROW_NUMBER()`), but the underlying table keeps every change.
+- **`tooth_records` is append-only history**. The `odontogram` endpoint returns `{ records, treatment_status_by_tooth }`. `records` is the *latest* condition per tooth (window function); `treatment_status_by_tooth` is derived from patient treatments (failed > in_progress/on_hold > planned > completed; cancelled ignored). Conditions are never overwritten by treatments.
+- **Treatment tracking is five levels**: Template → optional Plan → Patient Treatment → Session → Session Step. Clinical, financial, consent, and appointment statuses are independent.
+- **Template versions are immutable**. Updating a current template inserts `version+1` with `is_current = true` and leaves existing patient treatments on the old id.
+- **Billing**: creating a patient treatment snapshots `agreed_price` and opens one invoice line. Payments recompute `financial_status` without changing `clinical_status`.
+- **Stock**: completing a session copies the template-step components onto the session, then deducts quantity from `components` / inventory.
 - **`invoice_items.service_id` is non-nullable** and references `services.id`. A fixed "Other" service row exists per tenant for ad-hoc charges.
 - **`users.email` is globally unique** across the entire system, not just per tenant.
 - **`inventory_items` has a unique constraint on `(tenant_id, name)`**.
@@ -199,7 +212,56 @@ Filters: `patient_id`, `doctor_id`, `status`, `date_from`, `date_to`.
 | POST | `/patients/{patient}/tooth-records` | Yes | doctor, receptionist, owner |
 | GET | `/patients/{patient}/odontogram` | Yes | doctor, receptionist, owner |
 
-The `odontogram` endpoint returns the latest record per tooth for the patient (no pagination).
+The `odontogram` endpoint is not a flat list. It returns:
+
+```json
+{
+  "records": [{ "tooth_number": "11", "condition": "filled", "...": "..." }],
+  "treatment_status_by_tooth": { "11": "in_progress" }
+}
+```
+
+#### Treatment templates
+| Method | Path | Auth | Roles |
+|--------|------|------|-------|
+| GET | `/treatment-templates` | Yes | doctor, receptionist, owner |
+| GET | `/treatment-templates/{template}` | Yes | doctor, receptionist, owner |
+| GET | `/treatment-templates/{template}/versions` | Yes | doctor, receptionist, owner |
+| POST | `/treatment-templates` | Yes | owner, receptionist |
+| PUT/PATCH | `/treatment-templates/{template}` | Yes | owner, receptionist |
+| PATCH | `/treatment-templates/{template}/toggle-active` | Yes | owner, receptionist |
+| DELETE | `/treatment-templates/{template}` | Yes | owner only |
+
+PUT creates a new version. DELETE deactivates if any patient treatment in the version family exists.
+
+#### Treatment plans
+| Method | Path | Auth | Roles |
+|--------|------|------|-------|
+| GET | `/patients/{patient}/treatment-plans` | Yes | doctor, receptionist, owner |
+| POST | `/patients/{patient}/treatment-plans` | Yes | owner, receptionist |
+| PUT | `/treatment-plans/{plan}` | Yes | owner, receptionist |
+| DELETE | `/treatment-plans/{plan}` | Yes | owner only |
+
+#### Patient treatments & sessions
+| Method | Path | Auth | Roles |
+|--------|------|------|-------|
+| GET | `/patient-treatments` | Yes | doctor, receptionist, owner |
+| GET | `/patients/{patient}/treatments` | Yes | doctor, receptionist, owner |
+| GET | `/patients/{patient}/next-treatment` | Yes | doctor, receptionist, owner |
+| POST | `/patient-treatments` | Yes | owner, receptionist |
+| PUT | `/patient-treatments/{treatment}` | Yes | owner, receptionist |
+| PATCH | `/patient-treatments/{treatment}/status` | Yes | owner, receptionist, doctor |
+| POST | `/patient-treatments/{treatment}/retreat` | Yes | owner, receptionist, doctor |
+| DELETE | `/patient-treatments/{treatment}` | Yes | owner only |
+| GET | `/patient-treatments/{treatment}/invoice-summary` | Yes | doctor, receptionist, owner |
+| POST | `/patient-treatments/{treatment}/sessions` | Yes | doctor, receptionist, owner |
+| PATCH | `/treatment-sessions/{session}` | Yes | doctor, receptionist, owner |
+| POST | `/treatment-sessions/{session}/steps` | Yes | doctor, receptionist, owner |
+| PATCH | `/treatment-session-steps/{step}` | Yes | doctor, receptionist, owner |
+| DELETE | `/treatment-session-steps/{step}` | Yes | doctor, receptionist, owner |
+| POST | `/invoices/from-treatment/{treatment}` | Yes | owner, receptionist |
+
+`clinical_status` values: `planned`, `in_progress`, `on_hold`, `completed`, `cancelled`, `failed`. Cancelling requires `cancellation_reason`. Completion is automatic once every required (non-optional) template step has a `done` occurrence. Appointments may include `patient_treatment_ids`; cancelled / no-show / completed appointments update linked **sessions only**, not clinical status.
 
 #### Services
 | Method | Path | Auth | Roles |
@@ -324,7 +386,7 @@ POST /api/v1/appointments
 }
 ```
 
-**Response includes:** `id`, `patient_id`, `doctor_id`, `scheduled_at`, `duration_minutes`, `status` (default: `scheduled`), `notes`, `patient` (id + name), `doctor` (id + name).
+**Response includes:** `id`, `patient_id`, `doctor_id`, `scheduled_at`, `duration_minutes`, `status` (default: `scheduled`), `appointment_type`, `notes`, `patient` (id + name), `doctor` (id + name), `treatment_sessions` when loaded. Optional `patient_treatment_ids` on create/update schedules sessions for those treatments.
 
 ### Create Invoice
 
@@ -354,22 +416,42 @@ POST /api/v1/invoices
 ```json
 {
   "status": "success",
-  "data": [
-    {
-      "id": "...",
-      "patient_id": "...",
-      "tooth_number": 11,
-      "condition": "healthy",
-      "treatment_status": "planned",
-      "notes": null,
-      "recorded_by": "...",
-      "created_at": "..."
+  "data": {
+    "records": [
+      {
+        "id": "...",
+        "patient_id": "...",
+        "tooth_number": "11",
+        "condition": "healthy",
+        "treatment_status": "planned",
+        "notes": null,
+        "recorded_by": "...",
+        "created_at": "..."
+      }
+    ],
+    "treatment_status_by_tooth": {
+      "11": "in_progress"
     }
-  ]
+  }
 }
 ```
 
-Returns the most recent record for each tooth number (1–48). No pagination.
+`records` is the most recent **condition** row per tooth (1–48). `treatment_status_by_tooth` is derived from open/completed patient treatments (failed > in_progress > planned > completed). No pagination.
+
+### Create Patient Treatment
+
+```json
+POST /api/v1/patient-treatments
+{
+  "patient_id": "...",
+  "treatment_template_id": "...",
+  "tooth_numbers": ["16"],
+  "agreed_price": 1500,
+  "consent_status": "not_required"
+}
+```
+
+Creates the treatment, snapshots `agreed_price`, and opens one invoice line. `tooth_numbers` may be empty, one, or many.
 
 ### Inventory Transaction Request
 
@@ -391,6 +473,10 @@ POST /api/v1/inventory-items/{item}/transactions
 - **Services**: returned with both `name_ar` and `name_en`. The frontend picks based on locale.
 - **Status / Role / Condition values**: always returned as fixed lowercase English strings. The frontend should translate them via `next-intl` or equivalent.
   - Appointment status: `scheduled`, `completed`, `cancelled`, `no_show`
+  - Patient treatment clinical status: `planned`, `in_progress`, `on_hold`, `completed`, `cancelled`, `failed`
+  - Financial status: `unpaid`, `partial`, `paid`
+  - Consent status: `not_required`, `pending`, `obtained`, `declined`
+  - Session status: `scheduled`, `completed`, `cancelled`, `no_show`
   - Invoice status: `unpaid`, `partial`, `paid`, `cancelled`
   - User role: `owner`, `doctor`, `receptionist`
   - Tooth condition: `healthy`, `decayed`, `filled`, `missing`, `crown`, `root_canal`, `needs_extraction`, `impacted`

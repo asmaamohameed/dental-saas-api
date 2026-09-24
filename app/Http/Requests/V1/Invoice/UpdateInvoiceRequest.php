@@ -22,9 +22,8 @@ class UpdateInvoiceRequest extends FormRequest
         return [
             'patient_id' => ['sometimes', 'required', 'uuid', Rule::exists('patients', 'id')->where('tenant_id', app(CurrentTenant::class)->id())],
             'items' => ['sometimes', 'required', 'array', 'min:1'],
-            'items.*.service_id' => ['nullable', 'required_without:items.*.patient_treatment_id', 'uuid', Rule::exists('services', 'id')->where('tenant_id', app(CurrentTenant::class)->id())],
-            'items.*.patient_treatment_id' => ['nullable', 'required_without:items.*.service_id', 'uuid', Rule::exists('patient_treatments', 'id')->where('tenant_id', app(CurrentTenant::class)->id())],
-            'items.*.patient_treatment_visit_id' => ['nullable', 'uuid', Rule::exists('patient_treatment_visits', 'id')->where('tenant_id', app(CurrentTenant::class)->id())],
+            'items.*.service_id' => ['nullable', 'uuid', Rule::exists('services', 'id')->where('tenant_id', app(CurrentTenant::class)->id())],
+            'items.*.patient_treatment_id' => ['nullable', 'uuid', Rule::exists('patient_treatments', 'id')->where('tenant_id', app(CurrentTenant::class)->id())],
             'items.*.description' => ['nullable', 'string', 'max:500'],
             'items.*.price' => ['nullable', 'numeric', 'min:0'],
             'items.*.quantity' => ['required_with:items', 'integer', 'min:1'],

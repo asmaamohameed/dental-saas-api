@@ -2,16 +2,19 @@
 
 namespace App\Http\Controllers\Api\V1;
 
+use App\Enums\ConsentStatus;
 use App\Enums\PatientTreatmentStatus;
-use App\Enums\PatientTreatmentVisitStatus;
-use App\Enums\ToothCondition;
+use App\Enums\SessionStepStatus;
 use App\Enums\TreatmentPriority;
+use App\Enums\TreatmentSessionStatus;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\V1\PatientTreatmentResource;
-use App\Http\Resources\V1\PatientTreatmentVisitResource;
+use App\Http\Resources\V1\TreatmentSessionResource;
+use App\Http\Resources\V1\TreatmentSessionStepResource;
 use App\Models\Patient;
 use App\Models\PatientTreatment;
-use App\Models\PatientTreatmentVisit;
+use App\Models\TreatmentSession;
+use App\Models\TreatmentSessionStep;
 use App\Services\PatientTreatmentService;
 use App\Support\Tenancy\CurrentTenant;
 use Illuminate\Http\JsonResponse;
@@ -27,7 +30,10 @@ class PatientTreatmentController extends Controller
         $perPage = min(max((int) $request->query('per_page', 15), 1), 50);
 
         return $this->paginatedResponse(
-            PatientTreatmentResource::collection($this->patientTreatmentService->list($request->only(['patient_id', 'status', 'doctor_id']), $perPage)),
+            PatientTreatmentResource::collection($this->patientTreatmentService->list(
+                $request->only(['patient_id', 'status', 'clinical_status', 'dentist_id', 'treatment_plan_id']),
+                $perPage
+            )),
             'Patient treatments retrieved successfully.'
         );
     }
@@ -37,7 +43,10 @@ class PatientTreatmentController extends Controller
         $perPage = min(max((int) $request->query('per_page', 50), 1), 100);
 
         return $this->paginatedResponse(
-            PatientTreatmentResource::collection($this->patientTreatmentService->list(['patient_id' => $patient->id, ...$request->only(['status', 'doctor_id'])], $perPage)),
+            PatientTreatmentResource::collection($this->patientTreatmentService->list([
+                'patient_id' => $patient->id,
+                ...$request->only(['status', 'clinical_status', 'dentist_id', 'treatment_plan_id']),
+            ], $perPage)),
             'Patient treatments retrieved successfully.'
         );
     }
@@ -62,7 +71,18 @@ class PatientTreatmentController extends Controller
     public function show(PatientTreatment $patientTreatment): JsonResponse
     {
         return $this->successResponse(
-            new PatientTreatmentResource($patientTreatment->load(['patient', 'template', 'doctor', 'visits.components', 'visits.appointments'])),
+            new PatientTreatmentResource($patientTreatment->load([
+                'patient',
+                'template.steps.components.component',
+                'dentist',
+                'plan',
+                'teeth',
+                'parentTreatment',
+                'sessions.steps.templateStep',
+                'sessions.dentist',
+                'sessions.appointment',
+                'sessions.components',
+            ])),
             'Patient treatment retrieved successfully.'
         );
     }
@@ -82,6 +102,48 @@ class PatientTreatmentController extends Controller
         return $this->successResponse(new PatientTreatmentResource($treatment), 'Patient treatment updated successfully.');
     }
 
+    public function updateStatus(Request $request, PatientTreatment $patientTreatment): JsonResponse
+    {
+        $data = $request->validate([
+            'clinical_status' => ['required', Rule::enum(PatientTreatmentStatus::class)],
+            'cancellation_reason' => ['nullable', 'string'],
+        ]);
+
+        $treatment = $this->patientTreatmentService->updateClinicalStatus($patientTreatment, $data, $request->user()->id);
+
+        return $this->successResponse(new PatientTreatmentResource($treatment), 'Treatment clinical status updated successfully.');
+    }
+
+    public function retreat(Request $request, PatientTreatment $patientTreatment): JsonResponse
+    {
+        $data = $request->validate([
+            'treatment_template_id' => [
+                'nullable',
+                'uuid',
+                Rule::exists('treatment_templates', 'id')->where('tenant_id', app(CurrentTenant::class)->id()),
+            ],
+            'treatment_plan_id' => [
+                'nullable',
+                'uuid',
+                Rule::exists('treatment_plans', 'id')->where('tenant_id', app(CurrentTenant::class)->id()),
+            ],
+            'agreed_price' => ['nullable', 'numeric', 'min:0'],
+            'dentist_id' => [
+                'nullable',
+                'uuid',
+                Rule::exists('users', 'id')->where('tenant_id', app(CurrentTenant::class)->id()),
+            ],
+            'tooth_numbers' => ['sometimes', 'array'],
+            'tooth_numbers.*' => ['string', 'regex:/^[1-4][1-8]$/'],
+            'diagnosis' => ['nullable', 'string'],
+            'notes' => ['nullable', 'string'],
+        ]);
+
+        $treatment = $this->patientTreatmentService->retreat($patientTreatment, $data, $request->user()->id);
+
+        return $this->successResponse(new PatientTreatmentResource($treatment), 'Retreatment created successfully.', 201);
+    }
+
     public function destroy(PatientTreatment $patientTreatment): JsonResponse
     {
         $this->patientTreatmentService->delete($patientTreatment);
@@ -89,43 +151,102 @@ class PatientTreatmentController extends Controller
         return $this->successResponse(null, 'Patient treatment deleted successfully.');
     }
 
-    public function updateVisit(Request $request, PatientTreatmentVisit $visit): JsonResponse
+    public function storeSession(Request $request, PatientTreatment $patientTreatment): JsonResponse
     {
         $data = $request->validate([
-            'status' => ['required', Rule::enum(PatientTreatmentVisitStatus::class)],
-            'scheduled_date' => ['nullable', 'date'],
-            'completed_date' => ['nullable', 'date'],
-            'completed_at' => ['nullable', 'date'],
-            'dentist_id' => [
-                'nullable',
-                'uuid',
-                Rule::exists('users', 'id')->where('tenant_id', app(CurrentTenant::class)->id()),
-            ],
             'appointment_id' => [
                 'nullable',
                 'uuid',
                 Rule::exists('appointments', 'id')->where('tenant_id', app(CurrentTenant::class)->id()),
             ],
-            'status_reason' => ['nullable', 'string'],
-            'visit_price' => ['nullable', 'numeric', 'min:0'],
+            'dentist_id' => [
+                'nullable',
+                'uuid',
+                Rule::exists('users', 'id')->where('tenant_id', app(CurrentTenant::class)->id()),
+            ],
+            'session_date' => ['nullable', 'date'],
+            'status' => ['sometimes', Rule::enum(TreatmentSessionStatus::class)],
+            'notes' => ['nullable', 'string'],
+            'steps' => ['sometimes', 'array'],
+            'steps.*.treatment_template_step_id' => ['nullable', 'uuid'],
+            'steps.*.custom_step_name' => ['nullable', 'string', 'max:255'],
+            'steps.*.custom_step_description' => ['nullable', 'string'],
+            'steps.*.status' => ['sometimes', Rule::enum(SessionStepStatus::class)],
+            'steps.*.notes' => ['nullable', 'string'],
         ]);
 
-        $statusStr = $data['status'] instanceof PatientTreatmentVisitStatus ? $data['status']->value : (string) $data['status'];
-
-        if ($statusStr === PatientTreatmentVisitStatus::COMPLETED->value) {
-            $data['completed_date'] = $data['completed_date'] ?? $data['completed_at'] ?? now();
-            $data['completed_at'] = $data['completed_date'];
-        } else {
-            $data['completed_date'] = null;
-            $data['completed_at'] = null;
-        }
-
-        $result = $this->patientTreatmentService->updateVisit($visit, $data, $request->user()->id);
+        $result = $this->patientTreatmentService->createSession($patientTreatment, $data, $request->user()->id);
 
         return $this->successResponse([
-            'visit' => new PatientTreatmentVisitResource($result['visit']),
+            'session' => new TreatmentSessionResource($result['session']),
             'low_stock_warnings' => $result['low_stock_warnings'],
-        ], 'Treatment visit updated successfully.');
+        ], 'Treatment session created successfully.', 201);
+    }
+
+    public function updateSession(Request $request, TreatmentSession $treatmentSession): JsonResponse
+    {
+        $data = $request->validate([
+            'appointment_id' => [
+                'nullable',
+                'uuid',
+                Rule::exists('appointments', 'id')->where('tenant_id', app(CurrentTenant::class)->id()),
+            ],
+            'dentist_id' => [
+                'nullable',
+                'uuid',
+                Rule::exists('users', 'id')->where('tenant_id', app(CurrentTenant::class)->id()),
+            ],
+            'session_date' => ['nullable', 'date'],
+            'status' => ['sometimes', Rule::enum(TreatmentSessionStatus::class)],
+            'notes' => ['nullable', 'string'],
+        ]);
+
+        $result = $this->patientTreatmentService->updateSession($treatmentSession, $data, $request->user()->id);
+
+        return $this->successResponse([
+            'session' => new TreatmentSessionResource($result['session']),
+            'low_stock_warnings' => $result['low_stock_warnings'],
+        ], 'Treatment session updated successfully.');
+    }
+
+    public function storeSessionStep(Request $request, TreatmentSession $treatmentSession): JsonResponse
+    {
+        $data = $request->validate([
+            'treatment_template_step_id' => ['nullable', 'uuid', 'exists:treatment_template_steps,id'],
+            'custom_step_name' => ['nullable', 'string', 'max:255'],
+            'custom_step_description' => ['nullable', 'string'],
+            'status' => ['sometimes', Rule::enum(SessionStepStatus::class)],
+            'notes' => ['nullable', 'string'],
+        ]);
+
+        $step = $this->patientTreatmentService->addSessionStep($treatmentSession, $data, $request->user()->id);
+
+        return $this->successResponse(
+            new TreatmentSessionStepResource($step),
+            'Session step recorded successfully.',
+            201
+        );
+    }
+
+    public function updateSessionStep(Request $request, TreatmentSessionStep $treatmentSessionStep): JsonResponse
+    {
+        $data = $request->validate([
+            'status' => ['sometimes', Rule::enum(SessionStepStatus::class)],
+            'notes' => ['nullable', 'string'],
+            'custom_step_name' => ['nullable', 'string', 'max:255'],
+            'custom_step_description' => ['nullable', 'string'],
+        ]);
+
+        $step = $this->patientTreatmentService->updateSessionStep($treatmentSessionStep, $data, $request->user()->id);
+
+        return $this->successResponse(new TreatmentSessionStepResource($step), 'Session step updated successfully.');
+    }
+
+    public function destroySessionStep(TreatmentSessionStep $treatmentSessionStep): JsonResponse
+    {
+        $this->patientTreatmentService->deleteSessionStep($treatmentSessionStep, request()->user()->id);
+
+        return $this->successResponse(null, 'Session step deleted successfully.');
     }
 
     private function validated(Request $request, bool $partial = false): array
@@ -143,21 +264,31 @@ class PatientTreatmentController extends Controller
                 'uuid',
                 Rule::exists('treatment_templates', 'id')->where('tenant_id', app(CurrentTenant::class)->id()),
             ],
+            'treatment_plan_id' => [
+                'nullable',
+                'uuid',
+                Rule::exists('treatment_plans', 'id')->where('tenant_id', app(CurrentTenant::class)->id()),
+            ],
+            'dentist_id' => [
+                'nullable',
+                'uuid',
+                Rule::exists('users', 'id')->where('tenant_id', app(CurrentTenant::class)->id()),
+            ],
             'doctor_id' => [
                 'nullable',
                 'uuid',
                 Rule::exists('users', 'id')->where('tenant_id', app(CurrentTenant::class)->id()),
             ],
-            'tooth_number' => ['nullable', 'string', 'regex:/^[1-4][1-8]$/'],
-            'tooth_condition' => ['nullable', Rule::enum(ToothCondition::class)],
+            'tooth_numbers' => ['sometimes', 'array'],
+            'tooth_numbers.*' => ['string', 'regex:/^[1-4][1-8]$/'],
             'diagnosis' => ['nullable', 'string'],
-            'status' => ['sometimes', Rule::enum(PatientTreatmentStatus::class)],
+            'clinical_status' => ['sometimes', Rule::enum(PatientTreatmentStatus::class)],
+            'cancellation_reason' => ['nullable', 'string'],
+            'consent_status' => ['sometimes', Rule::enum(ConsentStatus::class)],
+            'consent_document_ref' => ['nullable', 'string', 'max:255'],
             'priority' => ['sometimes', Rule::enum(TreatmentPriority::class)],
-            'total_visits' => ['sometimes', 'integer', 'min:1', 'max:50'],
-            'actual_price' => ['sometimes', 'numeric', 'min:0'],
+            'agreed_price' => ['sometimes', 'numeric', 'min:0'],
             'notes' => ['nullable', 'string'],
-            'started_at' => ['nullable', 'date'],
-            'completed_at' => ['nullable', 'date'],
         ]);
     }
 }

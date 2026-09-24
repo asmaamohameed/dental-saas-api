@@ -97,7 +97,7 @@
                                 "method": "GET",
                                 "header": [
                                     {
-                                       "key": "Accept",
+                                        "key": "Accept",
                                         "value": "application/json"
                                     }
                                 ],
@@ -1017,7 +1017,7 @@
                         },
                         "body": {
                             "mode": "raw",
-                            "raw": "{\n    \"patient_id\": \"{{patient_id}}\",\n    \"doctor_id\": \"{{doctor_id}}\",\n    \"scheduled_at\": \"2026-08-15 10:00:00\",\n    \"duration_minutes\": 30,\n    \"notes\": \"Regular checkup\"\n}",
+                            "raw": "{\n    \"patient_id\": \"{{patient_id}}\",\n    \"doctor_id\": \"{{doctor_id}}\",\n    \"scheduled_at\": \"2026-08-15 10:00:00\",\n    \"duration_minutes\": 30,\n    \"notes\": \"Regular checkup\",\n    \"patient_treatment_ids\": [\n        \"{{patient_treatment_id}}\"\n    ]\n}",
                             "options": {
                                 "raw": {
                                     "language": "json"
@@ -2124,6 +2124,763 @@
             ]
         },
         {
+            "name": "Treatments",
+            "item": [
+                {
+                    "name": "GET /api/v1/treatment-templates",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/api/v1/treatment-templates",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "treatment-templates"
+                            ]
+                        },
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{token}}",
+                                    "type": "string"
+                                }
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "POST /api/v1/treatment-templates",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/api/v1/treatment-templates",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "treatment-templates"
+                            ]
+                        },
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{token}}",
+                                    "type": "string"
+                                }
+                            ]
+                        },
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"name_ar\": \"علاج عصب\",\n    \"name_en\": \"Root Canal Treatment\",\n    \"category\": \"medical\",\n    \"default_price\": 1500,\n    \"estimated_duration_minutes\": 180,\n    \"steps\": [\n        {\n            \"step_order\": 1,\n            \"name_ar\": \"فتح الحجرة\",\n            \"name_en\": \"Access cavity\",\n            \"default_duration_minutes\": 30,\n            \"is_optional\": false,\n            \"is_repeatable\": false\n        },\n        {\n            \"step_order\": 2,\n            \"name_ar\": \"غسيل\",\n            \"name_en\": \"Irrigation\",\n            \"default_duration_minutes\": 30,\n            \"is_optional\": false,\n            \"is_repeatable\": true\n        }\n    ]\n}",
+                            "options": {
+                                "raw": {
+                                    "language": "json"
+                                }
+                            }
+                        }
+                    },
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "if ([200,201].includes(pm.response.code)) {",
+                                    "    const data = pm.response.json();",
+                                    "    const id = data.id || (data.data && data.data.id);",
+                                    "    if (id) pm.environment.set('template_id', id);",
+                                    "}"
+                                ]
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "GET /api/v1/treatment-templates/{{template_id}}",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/api/v1/treatment-templates/{{template_id}}",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "treatment-templates",
+                                "{{template_id}}"
+                            ]
+                        },
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{token}}",
+                                    "type": "string"
+                                }
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "GET /api/v1/treatment-templates/{{template_id}}/versions",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/api/v1/treatment-templates/{{template_id}}/versions",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "treatment-templates",
+                                "{{template_id}}",
+                                "versions"
+                            ]
+                        },
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{token}}",
+                                    "type": "string"
+                                }
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "PUT /api/v1/treatment-templates/{{template_id}}",
+                    "request": {
+                        "method": "PUT",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/api/v1/treatment-templates/{{template_id}}",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "treatment-templates",
+                                "{{template_id}}"
+                            ]
+                        },
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{token}}",
+                                    "type": "string"
+                                }
+                            ]
+                        },
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"name_ar\": \"علاج عصب محدث\",\n    \"name_en\": \"Updated Root Canal\",\n    \"category\": \"medical\",\n    \"default_price\": 1600,\n    \"estimated_duration_minutes\": 180,\n    \"steps\": [\n        {\n            \"step_order\": 1,\n            \"name_ar\": \"فتح الحجرة\",\n            \"name_en\": \"Access cavity\",\n            \"default_duration_minutes\": 30,\n            \"is_optional\": false,\n            \"is_repeatable\": false\n        }\n    ]\n}",
+                            "options": {
+                                "raw": {
+                                    "language": "json"
+                                }
+                            }
+                        }
+                    }
+                },
+                {
+                    "name": "GET /api/v1/patients/{{patient_id}}/treatment-plans",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/api/v1/patients/{{patient_id}}/treatment-plans",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "patients",
+                                "{{patient_id}}",
+                                "treatment-plans"
+                            ]
+                        },
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{token}}",
+                                    "type": "string"
+                                }
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "POST /api/v1/patients/{{patient_id}}/treatment-plans",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/api/v1/patients/{{patient_id}}/treatment-plans",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "patients",
+                                "{{patient_id}}",
+                                "treatment-plans"
+                            ]
+                        },
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{token}}",
+                                    "type": "string"
+                                }
+                            ]
+                        },
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"title\": \"Upper arch plan\",\n    \"status\": \"active\"\n}",
+                            "options": {
+                                "raw": {
+                                    "language": "json"
+                                }
+                            }
+                        }
+                    },
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "if ([200,201].includes(pm.response.code)) {",
+                                    "    const data = pm.response.json();",
+                                    "    const id = data.id || (data.data && data.data.id);",
+                                    "    if (id) pm.environment.set('treatment_plan_id', id);",
+                                    "}"
+                                ]
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "GET /api/v1/patients/{{patient_id}}/treatments",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/api/v1/patients/{{patient_id}}/treatments",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "patients",
+                                "{{patient_id}}",
+                                "treatments"
+                            ]
+                        },
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{token}}",
+                                    "type": "string"
+                                }
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "GET /api/v1/patients/{{patient_id}}/next-treatment",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/api/v1/patients/{{patient_id}}/next-treatment",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "patients",
+                                "{{patient_id}}",
+                                "next-treatment"
+                            ]
+                        },
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{token}}",
+                                    "type": "string"
+                                }
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "POST /api/v1/patient-treatments",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/api/v1/patient-treatments",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "patient-treatments"
+                            ]
+                        },
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{token}}",
+                                    "type": "string"
+                                }
+                            ]
+                        },
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"patient_id\": \"{{patient_id}}\",\n    \"treatment_template_id\": \"{{template_id}}\",\n    \"tooth_numbers\": [\n        \"16\"\n    ],\n    \"agreed_price\": 1500,\n    \"consent_status\": \"not_required\"\n}",
+                            "options": {
+                                "raw": {
+                                    "language": "json"
+                                }
+                            }
+                        }
+                    },
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "if ([200,201].includes(pm.response.code)) {",
+                                    "    const data = pm.response.json();",
+                                    "    const id = data.id || (data.data && data.data.id);",
+                                    "    if (id) pm.environment.set('patient_treatment_id', id);",
+                                    "}"
+                                ]
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "GET /api/v1/patient-treatments/{{patient_treatment_id}}",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/api/v1/patient-treatments/{{patient_treatment_id}}",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "patient-treatments",
+                                "{{patient_treatment_id}}"
+                            ]
+                        },
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{token}}",
+                                    "type": "string"
+                                }
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "PATCH /api/v1/patient-treatments/{{patient_treatment_id}}/status",
+                    "request": {
+                        "method": "PATCH",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/api/v1/patient-treatments/{{patient_treatment_id}}/status",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "patient-treatments",
+                                "{{patient_treatment_id}}",
+                                "status"
+                            ]
+                        },
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{token}}",
+                                    "type": "string"
+                                }
+                            ]
+                        },
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"clinical_status\": \"cancelled\",\n    \"cancellation_reason\": \"Patient declined\"\n}",
+                            "options": {
+                                "raw": {
+                                    "language": "json"
+                                }
+                            }
+                        }
+                    }
+                },
+                {
+                    "name": "POST /api/v1/patient-treatments/{{patient_treatment_id}}/retreat",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/api/v1/patient-treatments/{{patient_treatment_id}}/retreat",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "patient-treatments",
+                                "{{patient_treatment_id}}",
+                                "retreat"
+                            ]
+                        },
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{token}}",
+                                    "type": "string"
+                                }
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "GET /api/v1/patient-treatments/{{patient_treatment_id}}/invoice-summary",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/api/v1/patient-treatments/{{patient_treatment_id}}/invoice-summary",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "patient-treatments",
+                                "{{patient_treatment_id}}",
+                                "invoice-summary"
+                            ]
+                        },
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{token}}",
+                                    "type": "string"
+                                }
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "POST /api/v1/patient-treatments/{{patient_treatment_id}}/sessions",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/api/v1/patient-treatments/{{patient_treatment_id}}/sessions",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "patient-treatments",
+                                "{{patient_treatment_id}}",
+                                "sessions"
+                            ]
+                        },
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{token}}",
+                                    "type": "string"
+                                }
+                            ]
+                        },
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"dentist_id\": \"{{doctor_id}}\",\n    \"status\": \"completed\",\n    \"notes\": \"First session\",\n    \"steps\": [\n        {\n            \"treatment_template_step_id\": \"{{template_step_id}}\",\n            \"status\": \"done\"\n        }\n    ]\n}",
+                            "options": {
+                                "raw": {
+                                    "language": "json"
+                                }
+                            }
+                        }
+                    },
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "if ([200,201].includes(pm.response.code)) {",
+                                    "    const data = pm.response.json();",
+                                    "    const id = data.id || (data.data && data.data.id);",
+                                    "    if (id) pm.environment.set('treatment_session_id', id);",
+                                    "}"
+                                ]
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "PATCH /api/v1/treatment-sessions/{{treatment_session_id}}",
+                    "request": {
+                        "method": "PATCH",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/api/v1/treatment-sessions/{{treatment_session_id}}",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "treatment-sessions",
+                                "{{treatment_session_id}}"
+                            ]
+                        },
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{token}}",
+                                    "type": "string"
+                                }
+                            ]
+                        },
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"status\": \"completed\",\n    \"notes\": \"Session completed\"\n}",
+                            "options": {
+                                "raw": {
+                                    "language": "json"
+                                }
+                            }
+                        }
+                    }
+                },
+                {
+                    "name": "POST /api/v1/treatment-sessions/{{treatment_session_id}}/steps",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/api/v1/treatment-sessions/{{treatment_session_id}}/steps",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "treatment-sessions",
+                                "{{treatment_session_id}}",
+                                "steps"
+                            ]
+                        },
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{token}}",
+                                    "type": "string"
+                                }
+                            ]
+                        },
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"custom_step_name\": \"Extra irrigation\",\n    \"status\": \"done\"\n}",
+                            "options": {
+                                "raw": {
+                                    "language": "json"
+                                }
+                            }
+                        }
+                    }
+                },
+                {
+                    "name": "POST /api/v1/invoices/from-treatment/{{patient_treatment_id}}",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Accept",
+                                "value": "application/json"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/api/v1/invoices/from-treatment/{{patient_treatment_id}}",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "invoices",
+                                "from-treatment",
+                                "{{patient_treatment_id}}"
+                            ]
+                        },
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{token}}",
+                                    "type": "string"
+                                }
+                            ]
+                        }
+                    }
+                }
+            ]
+        },
+        {
             "name": "Inventory",
             "item": [
                 {
@@ -2569,6 +3326,31 @@
         },
         {
             "key": "inventory_item_id",
+            "value": "",
+            "type": "string"
+        },
+        {
+            "key": "template_id",
+            "value": "",
+            "type": "string"
+        },
+        {
+            "key": "template_step_id",
+            "value": "",
+            "type": "string"
+        },
+        {
+            "key": "treatment_plan_id",
+            "value": "",
+            "type": "string"
+        },
+        {
+            "key": "patient_treatment_id",
+            "value": "",
+            "type": "string"
+        },
+        {
+            "key": "treatment_session_id",
             "value": "",
             "type": "string"
         }

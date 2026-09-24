@@ -24,7 +24,6 @@ class Appointment extends Model
     protected $fillable = [
         'patient_id',
         'doctor_id',
-        'patient_treatment_visit_id',
         'created_by',
         'scheduled_at',
         'duration_minutes',
@@ -59,9 +58,9 @@ class Appointment extends Model
         return $this->belongsTo(User::class, 'created_by');
     }
 
-    public function patientTreatmentVisit(): BelongsTo
+    public function treatmentSessions(): HasMany
     {
-        return $this->belongsTo(PatientTreatmentVisit::class);
+        return $this->hasMany(TreatmentSession::class);
     }
 
     public function toothRecords(): HasMany

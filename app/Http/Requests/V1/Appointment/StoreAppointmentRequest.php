@@ -33,10 +33,10 @@ class StoreAppointmentRequest extends FormRequest
                         ->where('tenant_id', $this->user()->tenant_id);
                 }),
             ],
-            'patient_treatment_visit_id' => [
-                'nullable',
+            'patient_treatment_ids' => ['sometimes', 'array'],
+            'patient_treatment_ids.*' => [
                 'uuid',
-                Rule::exists('patient_treatment_visits', 'id')->where(function ($query) {
+                Rule::exists('patient_treatments', 'id')->where(function ($query) {
                     $query->where('tenant_id', $this->user()->tenant_id);
                 }),
             ],

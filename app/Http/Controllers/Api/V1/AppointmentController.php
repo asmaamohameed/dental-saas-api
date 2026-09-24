@@ -4,7 +4,7 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Enums\AppointmentStatus;
 use App\Enums\AppointmentType;
-use App\Enums\PatientTreatmentVisitStatus;
+use App\Enums\TreatmentSessionStatus;
 use App\Events\PatientCheckedIn;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\V1\Appointment\StoreAppointmentRequest;
@@ -12,7 +12,6 @@ use App\Http\Requests\V1\Appointment\UpdateAppointmentRequest;
 use App\Http\Requests\V1\Appointment\UpdateAppointmentStatusRequest;
 use App\Http\Resources\V1\AppointmentResource;
 use App\Models\Appointment;
-use App\Models\PatientTreatmentVisit;
 use App\Services\PatientTreatmentService;
 use App\Traits\ApiResponse;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
@@ -28,7 +27,7 @@ class AppointmentController extends Controller
     {
         $this->authorize('viewAny', Appointment::class);
 
-        $query = Appointment::query()->with(['patient', 'doctor', 'patientTreatmentVisit.treatment']);
+        $query = Appointment::query()->with(['patient', 'doctor', 'treatmentSessions.treatment.template']);
 
         if ($request->filled('patient_id')) {
             $query->where('patient_id', $request->input('patient_id'));
@@ -55,26 +54,33 @@ class AppointmentController extends Controller
         return $this->paginatedResponse(AppointmentResource::collection($appointments));
     }
 
-    /**
-     * Store a newly created resource in storage.
-     */
     public function store(StoreAppointmentRequest $request)
     {
         $this->authorize('create', Appointment::class);
 
         $data = $request->validated();
+        $treatmentIds = $data['patient_treatment_ids'] ?? [];
+        unset($data['patient_treatment_ids']);
+
         $data['created_by'] = auth()->id();
         $data['status'] = AppointmentStatus::SCHEDULED;
-        $data['appointment_type'] ??= isset($data['patient_treatment_visit_id'])
+        $data['appointment_type'] ??= $treatmentIds !== []
             ? AppointmentType::TREATMENT_VISIT
             : AppointmentType::CONSULTATION;
 
         $appointment = Appointment::create($data);
-        if ($appointment->patient_treatment_visit_id) {
-            $appointment->patientTreatmentVisit()->update(['status' => PatientTreatmentVisitStatus::SCHEDULED]);
+
+        if ($treatmentIds !== []) {
+            $this->patientTreatmentService->attachTreatmentsToAppointment(
+                $appointment->id,
+                $treatmentIds,
+                $appointment->doctor_id,
+                $appointment->scheduled_at->toDateTimeString(),
+                $request->user()->id
+            );
         }
 
-        $appointment->load(['patient', 'doctor', 'patientTreatmentVisit.treatment']);
+        $appointment->load(['patient', 'doctor', 'treatmentSessions.treatment.template']);
 
         return $this->successResponse(
             new AppointmentResource($appointment),
@@ -83,39 +89,36 @@ class AppointmentController extends Controller
         );
     }
 
-    /**
-     * Display the specified resource.
-     */
     public function show(Appointment $appointment)
     {
         $this->authorize('view', $appointment);
 
-        $appointment->load(['patient', 'doctor', 'patientTreatmentVisit.treatment']);
+        $appointment->load(['patient', 'doctor', 'treatmentSessions.treatment.template', 'treatmentSessions.steps']);
 
         return $this->successResponse(new AppointmentResource($appointment));
     }
 
-    /**
-     * Update the specified resource in storage.
-     */
     public function update(UpdateAppointmentRequest $request, Appointment $appointment)
     {
         $this->authorize('update', $appointment);
 
-        $previousVisitId = $appointment->patient_treatment_visit_id;
+        $data = $request->validated();
+        $treatmentIds = $data['patient_treatment_ids'] ?? null;
+        unset($data['patient_treatment_ids']);
 
-        $appointment->update($request->validated());
+        $appointment->update($data);
 
-        if ($previousVisitId && $previousVisitId !== $appointment->patient_treatment_visit_id) {
-            $appointment->patientTreatmentVisit()->getModel()::whereKey($previousVisitId)
-                ->update(['status' => PatientTreatmentVisitStatus::PLANNED]);
+        if (is_array($treatmentIds)) {
+            $this->patientTreatmentService->attachTreatmentsToAppointment(
+                $appointment->id,
+                $treatmentIds,
+                $appointment->doctor_id,
+                $appointment->scheduled_at->toDateTimeString(),
+                $request->user()->id
+            );
         }
 
-        if ($appointment->patient_treatment_visit_id) {
-            $appointment->patientTreatmentVisit()->update(['status' => PatientTreatmentVisitStatus::SCHEDULED]);
-        }
-
-        $appointment->load(['patient', 'doctor', 'patientTreatmentVisit.treatment']);
+        $appointment->load(['patient', 'doctor', 'treatmentSessions.treatment.template']);
 
         return $this->successResponse(
             new AppointmentResource($appointment),
@@ -123,9 +126,6 @@ class AppointmentController extends Controller
         );
     }
 
-    /**
-     * Remove the specified resource from storage.
-     */
     public function destroy(Appointment $appointment)
     {
         $this->authorize('delete', $appointment);
@@ -135,9 +135,6 @@ class AppointmentController extends Controller
         return $this->successResponse(null, 'Appointment deleted successfully.');
     }
 
-    /**
-     * Update the status of the specified appointment.
-     */
     public function updateStatus(UpdateAppointmentStatusRequest $request, Appointment $appointment)
     {
         $data = $request->validated();
@@ -155,26 +152,22 @@ class AppointmentController extends Controller
 
         $appointment->save();
 
-        if ($appointment->patient_treatment_visit_id) {
-            $visitStatus = match ($appointment->status) {
-                AppointmentStatus::CANCELLED, AppointmentStatus::NO_SHOW => PatientTreatmentVisitStatus::PLANNED,
-                AppointmentStatus::COMPLETED => PatientTreatmentVisitStatus::COMPLETED,
-                AppointmentStatus::CHECKED_IN => PatientTreatmentVisitStatus::IN_PROGRESS,
-                default => PatientTreatmentVisitStatus::SCHEDULED,
-            };
+        $sessionStatus = match ($appointment->status) {
+            AppointmentStatus::CANCELLED => TreatmentSessionStatus::CANCELLED,
+            AppointmentStatus::NO_SHOW => TreatmentSessionStatus::NO_SHOW,
+            AppointmentStatus::COMPLETED => TreatmentSessionStatus::COMPLETED,
+            default => null,
+        };
 
-            /** @var PatientTreatmentVisit|null $visit */
-            $visit = PatientTreatmentVisit::query()->find($appointment->patient_treatment_visit_id);
-
-            if ($visit) {
-                $this->patientTreatmentService->updateVisit($visit, [
-                    'status' => $visitStatus,
-                    'completed_date' => $visitStatus === PatientTreatmentVisitStatus::COMPLETED ? now() : null,
-                ], $request->user()->id);
-            }
+        if ($sessionStatus) {
+            $this->patientTreatmentService->syncSessionsFromAppointment(
+                $appointment->id,
+                $sessionStatus,
+                $request->user()->id
+            );
         }
 
-        $appointment->load(['patient', 'doctor', 'patientTreatmentVisit.treatment']);
+        $appointment->load(['patient', 'doctor', 'treatmentSessions.treatment.template']);
 
         if (
             $appointment->status === AppointmentStatus::CHECKED_IN

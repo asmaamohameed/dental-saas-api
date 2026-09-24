@@ -14,7 +14,9 @@ class UpdatePaymentRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'amount' => ['sometimes', 'required', 'numeric', 'min:0.01'],
+            'amount' => ['sometimes', 'required', 'numeric', 'min:0'],
+            'deduct_amount' => ['nullable', 'numeric', 'min:0'],
+            'deduct_reason' => ['nullable', 'string', 'max:500'],
             'paid_at' => ['nullable', 'date'],
             'method' => ['sometimes', 'required', 'string', 'in:cash,card,transfer,other'],
             'notes' => ['nullable', 'string', 'max:500'],
@@ -27,20 +29,40 @@ class UpdatePaymentRequest extends FormRequest
             $invoice = $this->route('invoice');
             $payment = $this->route('payment');
 
-            if ($invoice && $payment && $this->has('amount')) {
-                $newAmount = (float) $this->input('amount');
-                $otherPaymentsTotal = (float) $invoice->payments()
-                    ->where('id', '!=', $payment->id)
-                    ->sum('amount');
+            if (! $invoice || ! $payment) {
+                return;
+            }
 
-                $maxAllowed = (float) $invoice->total_amount - $otherPaymentsTotal;
+            $newAmount = (float) $this->input('amount', $payment->amount);
+            $newDeduct = (float) $this->input('deduct_amount', $payment->deduct_amount ?? 0);
+            $newReason = $this->input('deduct_reason', $payment->deduct_reason);
 
-                if ($newAmount > $maxAllowed) {
-                    $validator->errors()->add(
-                        'amount',
-                        "Updated payment amount ({$newAmount}) exceeds max allowable balance ({$maxAllowed})."
-                    );
-                }
+            if ($newAmount + $newDeduct <= 0) {
+                $validator->errors()->add(
+                    'amount',
+                    'Enter a payment amount or a deduct amount greater than zero.'
+                );
+            }
+
+            if ($newDeduct > 0 && blank($newReason)) {
+                $validator->errors()->add(
+                    'deduct_reason',
+                    'A deduct reason is required when deducting from the invoice.'
+                );
+            }
+
+            $otherApplied = (float) $invoice->payments()
+                ->where('id', '!=', $payment->id)
+                ->get()
+                ->sum(fn ($other) => (float) $other->amount + (float) ($other->deduct_amount ?? 0));
+
+            $maxAllowed = (float) $invoice->total_amount - $otherApplied;
+
+            if ($newAmount + $newDeduct > $maxAllowed + 0.0001) {
+                $validator->errors()->add(
+                    'amount',
+                    "Updated payment plus deduct exceeds max allowable balance ({$maxAllowed})."
+                );
             }
         });
     }

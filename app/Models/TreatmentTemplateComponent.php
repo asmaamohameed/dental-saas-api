@@ -13,7 +13,7 @@ class TreatmentTemplateComponent extends Model
     use BelongsToTenant, HasFactory, HasUuids;
 
     protected $fillable = [
-        'treatment_template_visit_id',
+        'treatment_template_step_id',
         'component_id',
         'quantity',
         'free_quantity',
@@ -29,9 +29,9 @@ class TreatmentTemplateComponent extends Model
         ];
     }
 
-    public function visit(): BelongsTo
+    public function step(): BelongsTo
     {
-        return $this->belongsTo(TreatmentTemplateVisit::class, 'treatment_template_visit_id');
+        return $this->belongsTo(TreatmentTemplateStep::class, 'treatment_template_step_id');
     }
 
     public function component(): BelongsTo

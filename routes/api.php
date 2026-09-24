@@ -19,6 +19,7 @@ use App\Http\Controllers\Api\V1\PatientController;
 use App\Http\Controllers\Api\V1\PatientTreatmentController;
 use App\Http\Controllers\Api\V1\PaymentController;
 use App\Http\Controllers\Api\V1\ServiceController;
+use App\Http\Controllers\Api\V1\TreatmentPlanController;
 use App\Http\Controllers\Api\V1\TreatmentTemplateController;
 use App\Http\Controllers\Api\V1\ToothRecordController;
 use App\Http\Controllers\Api\V1\UserController;
@@ -54,6 +55,7 @@ Route::prefix('v1')->group(function () {
         Route::get('patients/{patient}/odontogram', [ToothRecordController::class, 'odontogram']);
         Route::get('patients/{patient}/treatments', [PatientTreatmentController::class, 'forPatient']);
         Route::get('patients/{patient}/next-treatment', [PatientTreatmentController::class, 'next']);
+        Route::get('patients/{patient}/treatment-plans', [TreatmentPlanController::class, 'index']);
 
         // Appointments API Resource + Custom Endpoint
         Route::apiResource('appointments', AppointmentController::class);
@@ -68,13 +70,18 @@ Route::prefix('v1')->group(function () {
         Route::apiResource('treatment-templates', TreatmentTemplateController::class)
             ->parameters(['treatment-templates' => 'treatmentTemplate'])
             ->only(['index', 'show']);
+        Route::get('treatment-templates/{treatmentTemplate}/versions', [TreatmentTemplateController::class, 'versions']);
         Route::apiResource('patient-treatments', PatientTreatmentController::class)
             ->parameters(['patient-treatments' => 'patientTreatment'])
             ->only(['index', 'show']);
         Route::get('patient-treatments/{patientTreatment}/invoice-summary', [PatientTreatmentController::class, 'invoiceSummary']);
 
         Route::middleware(EnsureUserRole::using(UserRole::OWNER, UserRole::RECEPTIONIST, UserRole::DOCTOR))->group(function () {
-            Route::patch('patient-treatment-visits/{visit}', [PatientTreatmentController::class, 'updateVisit']);
+            Route::post('patient-treatments/{patientTreatment}/sessions', [PatientTreatmentController::class, 'storeSession']);
+            Route::patch('treatment-sessions/{treatmentSession}', [PatientTreatmentController::class, 'updateSession']);
+            Route::post('treatment-sessions/{treatmentSession}/steps', [PatientTreatmentController::class, 'storeSessionStep']);
+            Route::patch('treatment-session-steps/{treatmentSessionStep}', [PatientTreatmentController::class, 'updateSessionStep']);
+            Route::delete('treatment-session-steps/{treatmentSessionStep}', [PatientTreatmentController::class, 'destroySessionStep']);
         });
 
         Route::get('invoices', [InvoiceController::class, 'index']);
@@ -115,8 +122,12 @@ Route::prefix('v1')->group(function () {
             Route::post('treatment-templates', [TreatmentTemplateController::class, 'store']);
             Route::put('treatment-templates/{treatmentTemplate}', [TreatmentTemplateController::class, 'update']);
             Route::patch('treatment-templates/{treatmentTemplate}/toggle-active', [TreatmentTemplateController::class, 'toggleActive']);
+            Route::post('patients/{patient}/treatment-plans', [TreatmentPlanController::class, 'store']);
+            Route::put('treatment-plans/{treatmentPlan}', [TreatmentPlanController::class, 'update']);
             Route::post('patient-treatments', [PatientTreatmentController::class, 'store']);
             Route::put('patient-treatments/{patientTreatment}', [PatientTreatmentController::class, 'update']);
+            Route::patch('patient-treatments/{patientTreatment}/status', [PatientTreatmentController::class, 'updateStatus']);
+            Route::post('patient-treatments/{patientTreatment}/retreat', [PatientTreatmentController::class, 'retreat']);
             Route::delete('patient-treatments/{patientTreatment}', [PatientTreatmentController::class, 'destroy']);
 
             Route::post('invoices', [InvoiceController::class, 'store']);
@@ -140,6 +151,7 @@ Route::prefix('v1')->group(function () {
             Route::delete('services/{service}', [ServiceController::class, 'destroy']);
             Route::delete('components/{component}', [ComponentController::class, 'destroy']);
             Route::delete('treatment-templates/{treatmentTemplate}', [TreatmentTemplateController::class, 'destroy']);
+            Route::delete('treatment-plans/{treatmentPlan}', [TreatmentPlanController::class, 'destroy']);
             Route::delete('invoices/{invoice}', [InvoiceController::class, 'destroy']);
             Route::put('invoices/{invoice}/payments/{payment}', [PaymentController::class, 'update']);
             Route::delete('invoices/{invoice}/payments/{payment}', [PaymentController::class, 'destroy']);

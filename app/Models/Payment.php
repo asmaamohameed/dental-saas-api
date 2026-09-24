@@ -15,6 +15,8 @@ use Illuminate\Support\Carbon;
  * @property string $id
  * @property string $invoice_id
  * @property string $amount
+ * @property string $deduct_amount
+ * @property string|null $deduct_reason
  * @property Carbon|null $paid_at
  * @property string $method
  * @property string $received_by
@@ -30,6 +32,8 @@ class Payment extends Model
     protected $fillable = [
         'invoice_id',
         'amount',
+        'deduct_amount',
+        'deduct_reason',
         'paid_at',
         'method',
         'received_by',
@@ -40,6 +44,7 @@ class Payment extends Model
     {
         return [
             'amount' => 'decimal:2',
+            'deduct_amount' => 'decimal:2',
             'paid_at' => 'datetime',
         ];
     }

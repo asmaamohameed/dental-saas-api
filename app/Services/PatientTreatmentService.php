@@ -2,18 +2,22 @@
 
 namespace App\Services;
 
-use App\Enums\PatientTreatmentStatus;
-use App\Enums\PatientTreatmentVisitStatus;
-use App\Enums\ToothCondition;
-use App\Enums\ToothTreatmentStatus;
+use App\Enums\ConsentStatus;
+use App\Enums\FinancialStatus;
 use App\Enums\InvoiceStatus;
+use App\Enums\PatientTreatmentStatus;
+use App\Enums\SessionStepStatus;
+use App\Enums\TreatmentSessionStatus;
+use App\Enums\TreatmentType;
 use App\Models\Component;
 use App\Models\Invoice;
 use App\Models\InvoiceItem;
 use App\Models\PatientTreatment;
-use App\Models\PatientTreatmentVisit;
-use App\Models\ToothRecord;
+use App\Models\Payment;
+use App\Models\TreatmentSession;
+use App\Models\TreatmentSessionStep;
 use App\Models\TreatmentTemplate;
+use App\Models\TreatmentTemplateStep;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -24,19 +28,26 @@ class PatientTreatmentService
 
     public function list(array $filters = [], int $perPage = 15): LengthAwarePaginator
     {
-        $query = PatientTreatment::query()
-            ->with(['patient', 'template', 'doctor', 'visits.components', 'visits.dentist', 'visits.appointment']);
+        $query = PatientTreatment::query()->with($this->listRelations());
 
-        if (!empty($filters['patient_id'])) {
+        if (! empty($filters['patient_id'])) {
             $query->where('patient_id', $filters['patient_id']);
         }
 
-        if (!empty($filters['status'])) {
-            $query->where('status', $filters['status']);
+        if (! empty($filters['status'])) {
+            $query->where('clinical_status', $filters['status']);
         }
 
-        if (!empty($filters['doctor_id'])) {
-            $query->where('doctor_id', $filters['doctor_id']);
+        if (! empty($filters['clinical_status'])) {
+            $query->where('clinical_status', $filters['clinical_status']);
+        }
+
+        if (! empty($filters['dentist_id'])) {
+            $query->where('dentist_id', $filters['dentist_id']);
+        }
+
+        if (! empty($filters['treatment_plan_id'])) {
+            $query->where('treatment_plan_id', $filters['treatment_plan_id']);
         }
 
         return $query->latest()->paginate($perPage);
@@ -47,71 +58,90 @@ class PatientTreatmentService
         return DB::transaction(function () use ($data, $userId) {
             /** @var TreatmentTemplate $template */
             $template = TreatmentTemplate::query()
-                ->with(['visits.components.component'])
+                ->with(['steps.components.component'])
                 ->findOrFail($data['treatment_template_id']);
 
-            $templateVisitCount = count($template->visits);
-            $totalVisits = isset($data['total_visits']) ? (int) $data['total_visits'] : max(1, $templateVisitCount);
+            $toothNumbers = $this->normalizeToothNumbers($data['tooth_numbers'] ?? []);
 
             $treatment = PatientTreatment::create([
                 'patient_id' => $data['patient_id'],
+                'treatment_plan_id' => $data['treatment_plan_id'] ?? null,
                 'treatment_template_id' => $template->id,
-                'doctor_id' => $data['doctor_id'] ?? null,
-                'tooth_number' => $data['tooth_number'] ?? null,
+                'treatment_template_version' => $template->version,
+                'agreed_price' => $data['agreed_price'] ?? $template->default_price,
+                'clinical_status' => $data['clinical_status'] ?? PatientTreatmentStatus::PLANNED,
+                'financial_status' => FinancialStatus::UNPAID,
+                'consent_status' => $data['consent_status'] ?? ConsentStatus::NOT_REQUIRED,
+                'consent_document_ref' => $data['consent_document_ref'] ?? null,
+                'parent_treatment_id' => $data['parent_treatment_id'] ?? null,
+                'treatment_type' => $data['treatment_type'] ?? TreatmentType::ORIGINAL,
+                'dentist_id' => $data['dentist_id'] ?? $data['doctor_id'] ?? null,
                 'diagnosis' => $data['diagnosis'] ?? null,
-                'status' => $data['status'] ?? PatientTreatmentStatus::PLANNED,
                 'priority' => $data['priority'] ?? 'routine',
-                'total_visits' => $totalVisits,
-                'actual_price' => $data['actual_price'] ?? $template->default_price,
                 'notes' => $data['notes'] ?? null,
                 'created_by' => $userId,
             ]);
 
-            $toothCondition = $data['tooth_condition'] ?? null;
+            $this->syncTeeth($treatment, $toothNumbers);
 
-            if ($templateVisitCount > 0) {
-                foreach ($template->visits as $templateVisit) {
-                    $visit = $treatment->visits()->create([
-                        'visit_order' => $templateVisit->visit_order,
-                        'name' => $templateVisit->name_en ?: $templateVisit->name_ar,
-                        'description' => $templateVisit->description,
-                        'status' => PatientTreatmentVisitStatus::PLANNED,
-                        'dentist_id' => $data['doctor_id'] ?? null,
-                    ]);
+            $treatment = $this->freshTreatment($treatment);
+            $this->invoiceService->createInitialInvoiceForTreatment($treatment, $userId);
+            $this->invoiceService->recomputeFinancialStatus($treatment);
 
-                    foreach ($templateVisit->components as $templateComponent) {
-                        $component = $templateComponent->component;
+            return $this->freshTreatment($treatment);
+        });
+    }
 
-                        $visit->components()->create([
-                            'component_id' => $component?->id,
-                            'name' => $component?->name_en ?: $component?->name_ar ?: 'Component',
-                            'unit_price' => $templateComponent->unit_price,
-                            'quantity' => $templateComponent->quantity,
-                            'free_quantity' => $templateComponent->free_quantity,
-                            'unit' => $component?->unit ?: 'piece',
-                            'inventory_item_id' => $component?->inventory_item_id,
-                        ]);
-                    }
-                }
-            } else {
-                for ($i = 1; $i <= $totalVisits; $i++) {
-                    $treatment->visits()->create([
-                        'visit_order' => $i,
-                        'name' => "Visit {$i}",
-                        'description' => null,
-                        'status' => PatientTreatmentVisitStatus::PLANNED,
-                        'dentist_id' => $data['doctor_id'] ?? null,
-                    ]);
-                }
+    public function update(PatientTreatment $treatment, array $data, string $userId): PatientTreatment
+    {
+        return DB::transaction(function () use ($treatment, $data, $userId) {
+            $toothNumbers = array_key_exists('tooth_numbers', $data)
+                ? $this->normalizeToothNumbers($data['tooth_numbers'])
+                : null;
+            unset($data['tooth_numbers'], $data['tooth_number'], $data['status'], $data['doctor_id'], $data['actual_price']);
+
+            if (isset($data['clinical_status'])) {
+                $this->applyClinicalStatus($treatment, $data);
             }
 
-            $this->syncToothRecord($treatment->fresh(['template']), $userId, $toothCondition);
+            $allowed = collect($data)->only([
+                'treatment_plan_id',
+                'dentist_id',
+                'diagnosis',
+                'priority',
+                'notes',
+                'consent_status',
+                'consent_document_ref',
+                'agreed_price',
+            ])->all();
 
-            $treatment = $treatment->load(['patient', 'template', 'doctor', 'visits.components', 'visits.dentist', 'visits.appointment']);
+            if ($allowed !== []) {
+                if (array_key_exists('agreed_price', $allowed) && $treatment->sessions()->exists()) {
+                    throw ValidationException::withMessages([
+                        'agreed_price' => 'Agreed price is locked after the first session is recorded.',
+                    ]);
+                }
 
-            $this->invoiceService->createInitialInvoiceForTreatment($treatment, $userId);
+                $treatment->update($allowed);
+            }
 
-            return $treatment->fresh(['patient', 'template', 'doctor', 'visits.components', 'visits.dentist', 'visits.appointment']);
+            if ($toothNumbers !== null) {
+                $this->syncTeeth($treatment, $toothNumbers);
+            }
+
+            unset($userId);
+
+            return $this->freshTreatment($treatment);
+        });
+    }
+
+    public function updateClinicalStatus(PatientTreatment $treatment, array $data, string $userId): PatientTreatment
+    {
+        return DB::transaction(function () use ($treatment, $data, $userId) {
+            $this->applyClinicalStatus($treatment, $data);
+            unset($userId);
+
+            return $this->freshTreatment($treatment);
         });
     }
 
@@ -124,106 +154,186 @@ class PatientTreatmentService
         });
     }
 
-    public function update(PatientTreatment $treatment, array $data, string $userId): PatientTreatment
+    public function retreat(PatientTreatment $treatment, array $data, string $userId): PatientTreatment
     {
         return DB::transaction(function () use ($treatment, $data, $userId) {
-            $toothCondition = $data['tooth_condition'] ?? null;
-            unset($data['tooth_condition']);
+            $status = $treatment->clinical_status instanceof PatientTreatmentStatus
+                ? $treatment->clinical_status
+                : PatientTreatmentStatus::from((string) $treatment->clinical_status);
 
-            $previousTooth = $treatment->tooth_number;
-            $previousStatus = $treatment->status;
-
-            $newStatus = $data['status'] ?? null;
-            $cancelling = $newStatus === PatientTreatmentStatus::CANCELLED
-                || $newStatus === PatientTreatmentStatus::CANCELLED->value;
-
-            if ($cancelling) {
-                $this->assertTreatmentBillingLocked($treatment);
+            if (! in_array($status, [PatientTreatmentStatus::FAILED, PatientTreatmentStatus::COMPLETED], true)) {
+                $treatment->clinical_status = PatientTreatmentStatus::FAILED;
+                $treatment->save();
+            } elseif ($status === PatientTreatmentStatus::COMPLETED) {
+                $treatment->clinical_status = PatientTreatmentStatus::FAILED;
+                $treatment->save();
             }
 
-            $treatment->update($data);
+            $payload = [
+                'patient_id' => $treatment->patient_id,
+                'treatment_plan_id' => $data['treatment_plan_id'] ?? $treatment->treatment_plan_id,
+                'treatment_template_id' => $data['treatment_template_id'] ?? $treatment->treatment_template_id,
+                'agreed_price' => $data['agreed_price'] ?? $treatment->template?->default_price ?? $treatment->agreed_price,
+                'dentist_id' => $data['dentist_id'] ?? $treatment->dentist_id,
+                'diagnosis' => $data['diagnosis'] ?? $treatment->diagnosis,
+                'priority' => $data['priority'] ?? $treatment->priority?->value ?? 'routine',
+                'notes' => $data['notes'] ?? null,
+                'consent_status' => $data['consent_status'] ?? $treatment->consent_status?->value,
+                'parent_treatment_id' => $treatment->id,
+                'treatment_type' => TreatmentType::RETREATMENT->value,
+                'tooth_numbers' => $data['tooth_numbers'] ?? $treatment->teeth()->pluck('tooth_number')->all(),
+            ];
 
-            if ($cancelling) {
-                $treatment->visits()
-                    ->whereNot('status', PatientTreatmentVisitStatus::COMPLETED)
-                    ->update(['status' => PatientTreatmentVisitStatus::CANCELLED]);
-            }
-
-            $shouldSync = ($data['tooth_number'] ?? $previousTooth)
-                && (
-                    array_key_exists('tooth_number', $data)
-                    || array_key_exists('status', $data)
-                    || $toothCondition
-                    || (string) $previousTooth !== (string) $treatment->tooth_number
-                    || $previousStatus !== $treatment->status
-                );
-
-            if ($shouldSync) {
-                $this->syncToothRecord($treatment->fresh(['template']), $userId, $toothCondition);
-            }
-
-            return $treatment->load(['patient', 'template', 'doctor', 'visits.components', 'visits.dentist', 'visits.appointment']);
+            return $this->createFromTemplate($payload, $userId);
         });
     }
 
     /**
-     * @return array{visit: PatientTreatmentVisit, low_stock_warnings: array<int, array<string, mixed>>}
+     * @return array{session: TreatmentSession, low_stock_warnings: array<int, array<string, mixed>>}
      */
-    public function updateVisit(PatientTreatmentVisit $visit, array $data, string $userId): array
+    public function createSession(PatientTreatment $treatment, array $data, string $userId): array
     {
-        return DB::transaction(function () use ($visit, $data, $userId) {
-            $visit->load(['components', 'treatment.visits']);
-            $previousStatus = $this->visitStatusValue($visit);
-            $newStatus = $data['status'] instanceof PatientTreatmentVisitStatus
-                ? $data['status']->value
-                : (string) $data['status'];
-
-            $this->assertVisitUpdateOrder($visit, $previousStatus, $newStatus);
-
-            $lowStockWarnings = [];
-
-            if ($previousStatus !== PatientTreatmentVisitStatus::COMPLETED->value && $newStatus === PatientTreatmentVisitStatus::COMPLETED->value) {
-                $lowStockWarnings = $this->deductVisitComponents($visit);
+        return DB::transaction(function () use ($treatment, $data, $userId) {
+            $clinical = $this->clinical($treatment);
+            if ($clinical->isTerminal()) {
+                throw ValidationException::withMessages([
+                    'session' => 'Cannot add a session to a cancelled or failed treatment.',
+                ]);
             }
 
-            if ($previousStatus === PatientTreatmentVisitStatus::COMPLETED->value && $newStatus !== PatientTreatmentVisitStatus::COMPLETED->value) {
-                $this->restoreVisitComponents($visit);
+            $session = $treatment->sessions()->create([
+                'appointment_id' => $data['appointment_id'] ?? null,
+                'dentist_id' => $data['dentist_id'] ?? $treatment->dentist_id,
+                'session_date' => $data['session_date'] ?? now(),
+                'status' => $data['status'] ?? TreatmentSessionStatus::SCHEDULED,
+                'notes' => $data['notes'] ?? null,
+            ]);
+
+            foreach ($data['steps'] ?? [] as $stepData) {
+                $this->recordSessionStep($session, $stepData, false);
             }
 
-            $visit->update($data);
-
-            /** @var PatientTreatment $treatment */
-            $treatment = $visit->treatment()->first();
-            $this->recomputeTreatmentStatus($treatment, $userId);
+            $warnings = $this->afterSessionMutation($session->fresh(['steps', 'components', 'treatment.template.steps', 'treatment.sessions.steps']), $userId);
 
             return [
-                'visit' => $visit->fresh(['components', 'appointments', 'dentist', 'appointment']),
-                'low_stock_warnings' => $lowStockWarnings,
+                'session' => $session->fresh(['steps.templateStep', 'dentist', 'appointment', 'components']),
+                'low_stock_warnings' => $warnings,
             ];
         });
     }
 
+    /**
+     * @return array{session: TreatmentSession, low_stock_warnings: array<int, array<string, mixed>>}
+     */
+    public function updateSession(TreatmentSession $session, array $data, string $userId): array
+    {
+        return DB::transaction(function () use ($session, $data, $userId) {
+            $session->load(['steps', 'components', 'treatment.template.steps', 'treatment.sessions.steps']);
+            $previous = $this->sessionStatus($session);
+
+            $session->update(collect($data)->only([
+                'appointment_id',
+                'dentist_id',
+                'session_date',
+                'status',
+                'notes',
+            ])->all());
+
+            $session->refresh();
+            $warnings = $this->syncSessionStock($session, $previous, $this->sessionStatus($session));
+            $this->recomputeClinicalStatus($session->treatment, $userId);
+
+            return [
+                'session' => $session->fresh(['steps.templateStep', 'dentist', 'appointment', 'components']),
+                'low_stock_warnings' => $warnings,
+            ];
+        });
+    }
+
+    public function addSessionStep(TreatmentSession $session, array $data, string $userId): TreatmentSessionStep
+    {
+        return DB::transaction(function () use ($session, $data, $userId) {
+            $step = $this->recordSessionStep($session, $data, true);
+            $this->afterSessionMutation($session->fresh(['steps', 'components', 'treatment.template.steps', 'treatment.sessions.steps']), $userId);
+
+            return $step->fresh(['templateStep']);
+        });
+    }
+
+    public function updateSessionStep(TreatmentSessionStep $step, array $data, string $userId): TreatmentSessionStep
+    {
+        return DB::transaction(function () use ($step, $data, $userId) {
+            $step->update(collect($data)->only(['status', 'notes', 'custom_step_name', 'custom_step_description'])->all());
+            $session = $step->session()->with(['steps', 'components', 'treatment.template.steps', 'treatment.sessions.steps'])->first();
+            $this->afterSessionMutation($session, $userId);
+
+            return $step->fresh(['templateStep']);
+        });
+    }
+
+    public function deleteSessionStep(TreatmentSessionStep $step, string $userId): void
+    {
+        DB::transaction(function () use ($step, $userId) {
+            $session = $step->session()->with(['steps', 'components', 'treatment.template.steps', 'treatment.sessions.steps'])->first();
+            $step->delete();
+            $this->afterSessionMutation($session->fresh(['steps', 'components', 'treatment.template.steps', 'treatment.sessions.steps']), $userId);
+        });
+    }
+
+    public function syncSessionsFromAppointment(string $appointmentId, TreatmentSessionStatus $status, string $userId): void
+    {
+        $sessions = TreatmentSession::query()
+            ->where('appointment_id', $appointmentId)
+            ->where('status', TreatmentSessionStatus::SCHEDULED)
+            ->with(['steps', 'components', 'treatment.template.steps', 'treatment.sessions.steps'])
+            ->get();
+
+        foreach ($sessions as $session) {
+            $previous = $this->sessionStatus($session);
+            $session->update(['status' => $status]);
+            $session->refresh();
+            $this->syncSessionStock($session, $previous, $status);
+            $this->recomputeClinicalStatus($session->treatment, $userId);
+        }
+    }
+
+    public function attachTreatmentsToAppointment(string $appointmentId, array $treatmentIds, string $dentistId, string $sessionDate, string $userId): void
+    {
+        foreach ($treatmentIds as $treatmentId) {
+            $treatment = PatientTreatment::query()->find($treatmentId);
+            if (! $treatment) {
+                continue;
+            }
+
+            $exists = $treatment->sessions()
+                ->where('appointment_id', $appointmentId)
+                ->exists();
+
+            if ($exists) {
+                continue;
+            }
+
+            $this->createSession($treatment, [
+                'appointment_id' => $appointmentId,
+                'dentist_id' => $dentistId,
+                'session_date' => $sessionDate,
+                'status' => TreatmentSessionStatus::SCHEDULED->value,
+            ], $userId);
+        }
+    }
+
     public function getInvoiceSummary(PatientTreatment $treatment): array
     {
-        $treatment->load(['visits', 'template']);
-
         $items = InvoiceItem::query()
             ->where('patient_treatment_id', $treatment->id)
-            ->with(['invoice.payments', 'patientTreatmentVisit'])
+            ->with(['invoice.payments'])
             ->get();
 
         $invoiceIds = $items->pluck('invoice_id')->unique();
         $invoices = Invoice::query()->whereIn('id', $invoiceIds)->with('payments')->get()->keyBy('id');
 
         $totalBilled = (float) $items->sum(fn ($item) => (float) $item->price * (int) $item->quantity);
-
-        $totalPaid = 0.0;
-        foreach ($invoiceIds as $invoiceId) {
-            $invoice = $invoices->get($invoiceId);
-            if ($invoice) {
-                $totalPaid += (float) $invoice->payments->sum('amount');
-            }
-        }
+        $totalPaid = $this->allocatedPaidAmount($items, $invoices);
 
         $openInvoiceExists = Invoice::query()
             ->where('patient_id', $treatment->patient_id)
@@ -231,33 +341,13 @@ class PatientTreatmentService
             ->whereHas('items', fn ($q) => $q->where('patient_treatment_id', $treatment->id))
             ->exists();
 
-        $visits = $treatment->visits->map(function (PatientTreatmentVisit $visit) use ($items, $invoices) {
-            $visitItems = $items->where('patient_treatment_visit_id', $visit->id);
-            $item = $visitItems->first();
-            $invoice = $item ? $invoices->get($item->invoice_id) : null;
-
-            return [
-                'visit_id' => $visit->id,
-                'visit_order' => $visit->visit_order,
-                'name' => $visit->name,
-                'status' => $this->visitStatusValue($visit),
-                'invoice_item' => $item ? [
-                    'id' => $item->id,
-                    'invoice_id' => $item->invoice_id,
-                    'price' => (float) $item->price,
-                    'amount' => (float) $item->price * (int) $item->quantity,
-                    'invoice_status' => $invoice?->status?->value ?? (string) $invoice?->status,
-                ] : null,
-            ];
-        })->values();
-
         $primaryInvoice = Invoice::query()
             ->whereHas('items', fn ($q) => $q->where('patient_treatment_id', $treatment->id))
             ->whereIn('status', [InvoiceStatus::UNPAID, InvoiceStatus::PARTIAL])
             ->latest()
             ->first();
 
-        if (!$primaryInvoice) {
+        if (! $primaryInvoice) {
             $primaryInvoice = Invoice::query()
                 ->whereHas('items', fn ($q) => $q->where('patient_treatment_id', $treatment->id))
                 ->latest()
@@ -271,248 +361,284 @@ class PatientTreatmentService
             'total_paid' => $totalPaid,
             'outstanding' => max(0, $totalBilled - $totalPaid),
             'has_open_invoice' => $openInvoiceExists,
-            'visits' => $visits,
+            'financial_status' => $treatment->financial_status,
         ];
     }
 
-    public function recomputeTreatmentStatus(PatientTreatment $treatment, string $userId): void
+    /**
+     * @return array<string, string>
+     */
+    public function toothStatusMap(string $patientId): array
     {
-        if ($treatment->status === PatientTreatmentStatus::CANCELLED) {
-            return;
-        }
+        $treatments = PatientTreatment::query()
+            ->with('teeth')
+            ->where('patient_id', $patientId)
+            ->where('clinical_status', '!=', PatientTreatmentStatus::CANCELLED)
+            ->get();
 
-        $visits = $treatment->visits()->get();
-        $totalVisits = $visits->count();
+        $byTooth = [];
 
-        if ($totalVisits === 0) {
-            return;
-        }
-
-        $completedVisits = 0;
-        $cancelledVisits = 0;
-        $pendingVisits = 0;
-
-        foreach ($visits as $visit) {
-            $status = $this->visitStatusValue($visit);
-            if ($status === PatientTreatmentVisitStatus::COMPLETED->value) {
-                $completedVisits++;
-            } elseif ($status === PatientTreatmentVisitStatus::CANCELLED->value) {
-                $cancelledVisits++;
-            } elseif (in_array($status, [
-                PatientTreatmentVisitStatus::PLANNED->value,
-                PatientTreatmentVisitStatus::SCHEDULED->value,
-                PatientTreatmentVisitStatus::IN_PROGRESS->value,
-            ], true)) {
-                $pendingVisits++;
+        foreach ($treatments as $treatment) {
+            foreach ($treatment->teeth as $tooth) {
+                $byTooth[(string) $tooth->tooth_number][] = $this->clinical($treatment);
             }
         }
 
-        if ($cancelledVisits === $totalVisits) {
-            $treatment->status = PatientTreatmentStatus::CANCELLED;
-            $treatment->completed_at = null;
-        } elseif ($pendingVisits === 0 && $completedVisits > 0 && ($completedVisits + $cancelledVisits) === $totalVisits) {
-            $treatment->status = PatientTreatmentStatus::COMPLETED;
-            $treatment->completed_at = now();
-        } elseif ($completedVisits === 0) {
-            if (in_array($treatment->status, [PatientTreatmentStatus::IN_PROGRESS, PatientTreatmentStatus::COMPLETED], true)) {
-                $treatment->status = PatientTreatmentStatus::PLANNED;
-                $treatment->completed_at = null;
-            }
-        } elseif ($completedVisits > 0 && $pendingVisits > 0) {
-            $treatment->status = PatientTreatmentStatus::IN_PROGRESS;
-            if (!$treatment->started_at) {
-                $treatment->started_at = now();
-            }
-            $treatment->completed_at = null;
-        } elseif ($completedVisits === $totalVisits) {
-            $treatment->status = PatientTreatmentStatus::COMPLETED;
-            $treatment->completed_at = now();
+        $map = [];
+        foreach ($byTooth as $number => $statuses) {
+            $map[$number] = $this->priorityColor($statuses);
         }
 
-        $treatment->total_visits = max($totalVisits, $treatment->total_visits ?: 1);
-        $treatment->save();
-
-        $this->syncToothRecord($treatment->fresh(['template']), $userId);
+        return $map;
     }
 
     public function nextForPatient(string $patientId): ?PatientTreatment
     {
-        $nonCompleted = PatientTreatment::query()
-            ->with(['template', 'doctor', 'visits.components', 'visits.dentist', 'visits.appointment'])
+        $open = PatientTreatment::query()
+            ->with($this->listRelations())
             ->where('patient_id', $patientId)
-            ->whereNotIn('status', [PatientTreatmentStatus::COMPLETED, PatientTreatmentStatus::CANCELLED])
+            ->where('clinical_status', PatientTreatmentStatus::IN_PROGRESS)
             ->get();
 
-        if ($nonCompleted->isEmpty()) {
+        if ($open->isEmpty()) {
             return null;
         }
 
-        // Sort treatments by the scheduled_date of their current (first non-completed) visit
-        $sorted = $nonCompleted->sortBy(function ($treatment) {
-            $currentVisit = $treatment->visits->first(function ($v) {
-                $s = $v->status instanceof PatientTreatmentVisitStatus ? $v->status->value : (string) $v->status;
-                return $s !== 'completed';
-            });
-
-            if (!$currentVisit) {
-                return 9999999999;
-            }
-
-            if ($currentVisit->scheduled_date) {
-                return $currentVisit->scheduled_date->timestamp;
-            }
-
-            // Fallback: priority score
-            $pScore = match ($treatment->priority) {
-                'high' => 10,
-                'medium' => 20,
-                'low' => 30,
-                default => 40,
-            };
-
-            return 1000000000 + $pScore + $currentVisit->visit_order;
-        });
-
-        return $sorted->first();
+        return $open->sortBy(function (PatientTreatment $treatment) {
+            return $treatment->started_at?->timestamp
+                ?? $treatment->created_at?->timestamp
+                ?? PHP_INT_MAX;
+        })->first();
     }
 
-    private function syncToothRecord(PatientTreatment $treatment, string $userId, ?string $condition = null): void
+    public function recomputeClinicalStatus(PatientTreatment $treatment, string $userId): void
     {
-        if (!$treatment->tooth_number) {
+        $treatment->load(['template.steps', 'sessions.steps']);
+        $clinical = $this->clinical($treatment);
+
+        if (in_array($clinical, [PatientTreatmentStatus::CANCELLED, PatientTreatmentStatus::FAILED, PatientTreatmentStatus::ON_HOLD], true)) {
             return;
         }
 
-        $latest = ToothRecord::query()
-            ->where('patient_id', $treatment->patient_id)
-            ->where('tooth_number', $treatment->tooth_number)
-            ->latest()
-            ->first();
+        $hasCompletedSession = $treatment->sessions->contains(
+            fn (TreatmentSession $session) => $this->sessionStatus($session) === TreatmentSessionStatus::COMPLETED
+        );
+        $hasDoneStep = $treatment->sessions->flatMap->steps->contains(
+            fn (TreatmentSessionStep $step) => $this->stepStatus($step) === SessionStepStatus::DONE
+        );
 
-        $treatmentStatusStr = $treatment->status instanceof PatientTreatmentStatus ? $treatment->status->value : (string) $treatment->status;
-
-        $toothStatus = match ($treatmentStatusStr) {
-            'in_progress' => ToothTreatmentStatus::IN_PROGRESS,
-            'completed' => ToothTreatmentStatus::COMPLETED,
-            default => ToothTreatmentStatus::PLANNED,
-        };
-
-        $resolvedCondition = $condition
-            ?? ($latest?->condition instanceof ToothCondition ? $latest->condition->value : $latest?->condition)
-            ?? ToothCondition::DECAYED->value;
-
-        // If treatment was completed and was e.g. filling or root canal, resolve condition appropriately if default
-        if ($treatmentStatusStr === 'completed' && !$condition) {
-            $tmpl = strtolower($treatment->template?->name_en ?: '');
-            if (str_contains($tmpl, 'fill')) {
-                $resolvedCondition = ToothCondition::FILLED->value;
-            } elseif (str_contains($tmpl, 'root canal')) {
-                $resolvedCondition = ToothCondition::ROOT_CANAL->value;
-            } elseif (str_contains($tmpl, 'crown')) {
-                $resolvedCondition = ToothCondition::CROWN->value;
-            }
+        if ($clinical === PatientTreatmentStatus::PLANNED && ($hasCompletedSession || $hasDoneStep)) {
+            $treatment->clinical_status = PatientTreatmentStatus::IN_PROGRESS;
+            $treatment->started_at ??= now();
+            $treatment->completed_at = null;
+            $treatment->save();
+            $clinical = PatientTreatmentStatus::IN_PROGRESS;
         }
 
-        $templateName = $treatment->template?->name_en ?: $treatment->template?->name_ar;
-        $statusNote = $treatmentStatusStr === 'cancelled' ? 'Treatment Cancelled' : null;
-        $notes = collect([$templateName, $treatment->diagnosis, $statusNote])->filter()->implode(' — ') ?: null;
+        if ($clinical === PatientTreatmentStatus::COMPLETED && ! $this->requiredStepsSatisfied($treatment)) {
+            $treatment->clinical_status = PatientTreatmentStatus::IN_PROGRESS;
+            $treatment->completed_at = null;
+            $treatment->save();
 
-        ToothRecord::create([
-            'patient_id' => $treatment->patient_id,
-            'appointment_id' => null,
-            'recorded_by' => $userId,
-            'tooth_number' => $treatment->tooth_number,
-            'condition' => $resolvedCondition,
-            'treatment_status' => $toothStatus,
-            'notes' => $notes,
-        ]);
+            return;
+        }
+
+        if ($clinical === PatientTreatmentStatus::IN_PROGRESS && $this->requiredStepsSatisfied($treatment)) {
+            $treatment->clinical_status = PatientTreatmentStatus::COMPLETED;
+            $treatment->completed_at = now();
+            $treatment->save();
+        }
+
+        unset($userId);
     }
 
-    private function visitStatusValue(PatientTreatmentVisit $visit): string
+    private function applyClinicalStatus(PatientTreatment $treatment, array $data): void
     {
-        return $visit->status instanceof PatientTreatmentVisitStatus
-            ? $visit->status->value
-            : (string) $visit->status;
-    }
+        $target = $data['clinical_status'] instanceof PatientTreatmentStatus
+            ? $data['clinical_status']
+            : PatientTreatmentStatus::from((string) $data['clinical_status']);
 
-    private function assertVisitUpdateOrder(PatientTreatmentVisit $visit, string $previousStatus, string $newStatus): void
-    {
-        /** @var PatientTreatment $treatment */
-        $treatment = $visit->treatment;
-        $visits = $treatment->visits->sortBy('visit_order')->values();
+        $current = $this->clinical($treatment);
 
-        $current = $visits->first(function (PatientTreatmentVisit $v) {
-            $status = $this->visitStatusValue($v);
+        if ($current === $target) {
+            if ($target === PatientTreatmentStatus::CANCELLED && empty($treatment->cancellation_reason) && empty($data['cancellation_reason'])) {
+                throw ValidationException::withMessages([
+                    'cancellation_reason' => 'A cancellation reason is required.',
+                ]);
+            }
 
-            return !in_array($status, [
-                PatientTreatmentVisitStatus::COMPLETED->value,
-                PatientTreatmentVisitStatus::CANCELLED->value,
-            ], true);
-        });
+            return;
+        }
 
-        $isUndoLatestComplete = $previousStatus === PatientTreatmentVisitStatus::COMPLETED->value
-            && $newStatus !== PatientTreatmentVisitStatus::COMPLETED->value
-            && $this->isLatestCompletedVisit($visit, $visits);
-
-        if ($current && $current->id !== $visit->id && !$isUndoLatestComplete) {
+        if (! $current->canTransitionTo($target)) {
             throw ValidationException::withMessages([
-                'status' => "Update visits in order. Work on Visit {$current->visit_order} first.",
+                'clinical_status' => "Cannot change clinical status from {$current->value} to {$target->value}.",
             ]);
         }
 
-        if ($newStatus === PatientTreatmentVisitStatus::COMPLETED->value) {
-            foreach ($visits as $priorVisit) {
-                if ($priorVisit->visit_order >= $visit->visit_order) {
-                    break;
-                }
-
-                $priorStatus = $this->visitStatusValue($priorVisit);
-                if (!in_array($priorStatus, [
-                    PatientTreatmentVisitStatus::COMPLETED->value,
-                    PatientTreatmentVisitStatus::CANCELLED->value,
-                ], true)) {
-                    throw ValidationException::withMessages([
-                        'status' => "Visit {$priorVisit->visit_order} must be completed or cancelled before completing Visit {$visit->visit_order}.",
-                    ]);
-                }
+        if ($target === PatientTreatmentStatus::CANCELLED) {
+            if (empty($data['cancellation_reason'])) {
+                throw ValidationException::withMessages([
+                    'cancellation_reason' => 'A cancellation reason is required.',
+                ]);
             }
+
+            $this->assertTreatmentBillingLocked($treatment);
+            $treatment->cancellation_reason = $data['cancellation_reason'];
+            $treatment->cancelled_at = now();
+            $this->invoiceService->removeUnpaidInvoicesForTreatment($treatment);
         }
+
+        if ($target === PatientTreatmentStatus::COMPLETED) {
+            $treatment->completed_at = now();
+            $treatment->started_at ??= now();
+        }
+
+        if ($target === PatientTreatmentStatus::IN_PROGRESS) {
+            $treatment->started_at ??= now();
+            $treatment->completed_at = null;
+        }
+
+        if ($target === PatientTreatmentStatus::PLANNED) {
+            $treatment->completed_at = null;
+        }
+
+        $treatment->clinical_status = $target;
+        $treatment->save();
     }
 
-    private function isLatestCompletedVisit(PatientTreatmentVisit $visit, $visits): bool
+    private function recordSessionStep(TreatmentSession $session, array $data, bool $persistOccurrenceCheck): TreatmentSessionStep
     {
-        if ($this->visitStatusValue($visit) !== PatientTreatmentVisitStatus::COMPLETED->value) {
-            return false;
+        $templateStepId = $data['treatment_template_step_id'] ?? null;
+        $status = isset($data['status'])
+            ? SessionStepStatus::from((string) ($data['status'] instanceof SessionStepStatus ? $data['status']->value : $data['status']))
+            : SessionStepStatus::DONE;
+
+        if (! $templateStepId && empty($data['custom_step_name'])) {
+            throw ValidationException::withMessages([
+                'custom_step_name' => 'Provide a template step or a custom step name.',
+            ]);
         }
 
-        $laterCompletedExists = $visits->contains(function (PatientTreatmentVisit $v) use ($visit) {
-            return $v->visit_order > $visit->visit_order
-                && $this->visitStatusValue($v) === PatientTreatmentVisitStatus::COMPLETED->value;
-        });
+        $occurrence = 1;
 
-        if ($laterCompletedExists) {
-            return false;
+        if ($templateStepId) {
+            /** @var TreatmentTemplateStep $templateStep */
+            $templateStep = TreatmentTemplateStep::query()->findOrFail($templateStepId);
+            $treatment = $session->treatment()->first();
+
+            if ($templateStep->treatment_template_id !== $treatment->treatment_template_id) {
+                throw ValidationException::withMessages([
+                    'treatment_template_step_id' => 'This step does not belong to the treatment template version.',
+                ]);
+            }
+
+            $doneCount = TreatmentSessionStep::query()
+                ->whereHas('session', fn ($q) => $q->where('patient_treatment_id', $session->patient_treatment_id))
+                ->where('treatment_template_step_id', $templateStepId)
+                ->where('status', SessionStepStatus::DONE)
+                ->count();
+
+            if ($persistOccurrenceCheck && ! $templateStep->is_repeatable && $status === SessionStepStatus::DONE && $doneCount > 0) {
+                throw ValidationException::withMessages([
+                    'treatment_template_step_id' => 'This step is not repeatable and has already been recorded as done.',
+                ]);
+            }
+
+            $occurrence = TreatmentSessionStep::query()
+                ->whereHas('session', fn ($q) => $q->where('patient_treatment_id', $session->patient_treatment_id))
+                ->where('treatment_template_step_id', $templateStepId)
+                ->count() + 1;
         }
 
-        return true;
-    }
-
-    private function billableComponentQuantity(float $quantity, float $freeQuantity): string
-    {
-        $deduct = max(0, $quantity - $freeQuantity);
-
-        return number_format($deduct, 2, '.', '');
+        return $session->steps()->create([
+            'treatment_template_step_id' => $templateStepId,
+            'custom_step_name' => $data['custom_step_name'] ?? null,
+            'custom_step_description' => $data['custom_step_description'] ?? null,
+            'occurrence_number' => $data['occurrence_number'] ?? $occurrence,
+            'status' => $status,
+            'notes' => $data['notes'] ?? null,
+        ]);
     }
 
     /**
      * @return array<int, array<string, mixed>>
      */
-    private function deductVisitComponents(PatientTreatmentVisit $visit): array
+    private function afterSessionMutation(TreatmentSession $session, string $userId): array
+    {
+        $previousApplied = (bool) $session->stock_applied;
+        $current = $this->sessionStatus($session);
+        $warnings = $this->syncSessionStock(
+            $session,
+            $previousApplied ? TreatmentSessionStatus::COMPLETED : TreatmentSessionStatus::SCHEDULED,
+            $current
+        );
+        $this->recomputeClinicalStatus($session->treatment, $userId);
+
+        return $warnings;
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function syncSessionStock(TreatmentSession $session, TreatmentSessionStatus $previous, TreatmentSessionStatus $current): array
     {
         $warnings = [];
-        $visitComponents = $visit->components()->get();
 
-        foreach ($visitComponents as $ptc) {
-            if (!$ptc->component_id) {
+        if ($previous !== TreatmentSessionStatus::COMPLETED && $current === TreatmentSessionStatus::COMPLETED && ! $session->stock_applied) {
+            $this->copyStepComponentsOntoSession($session);
+            $warnings = $this->deductSessionComponents($session);
+            $session->update(['stock_applied' => true]);
+        }
+
+        if ($previous === TreatmentSessionStatus::COMPLETED && $current !== TreatmentSessionStatus::COMPLETED && $session->stock_applied) {
+            $this->restoreSessionComponents($session);
+            $session->update(['stock_applied' => false]);
+        }
+
+        return $warnings;
+    }
+
+    private function copyStepComponentsOntoSession(TreatmentSession $session): void
+    {
+        if ($session->components()->exists()) {
+            return;
+        }
+
+        $session->unsetRelation('components');
+        $session->load(['steps.templateStep.components.component']);
+
+        foreach ($session->steps as $step) {
+            if ($this->stepStatus($step) !== SessionStepStatus::DONE) {
+                continue;
+            }
+
+            foreach ($step->templateStep?->components ?? [] as $templateComponent) {
+                $component = $templateComponent->component;
+                $session->components()->create([
+                    'component_id' => $component?->id,
+                    'name' => $component?->name_en ?: $component?->name_ar ?: 'Component',
+                    'unit_price' => $templateComponent->unit_price,
+                    'quantity' => $templateComponent->quantity,
+                    'free_quantity' => $templateComponent->free_quantity,
+                    'unit' => $component?->unit ?: 'piece',
+                    'inventory_item_id' => $component?->inventory_item_id,
+                ]);
+            }
+        }
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function deductSessionComponents(TreatmentSession $session): array
+    {
+        $warnings = [];
+        $session->unsetRelation('components');
+        $session->load('components');
+
+        foreach ($session->components as $ptc) {
+            if (! $ptc->component_id) {
                 continue;
             }
 
@@ -523,7 +649,7 @@ class PatientTreatmentService
 
             /** @var Component|null $component */
             $component = Component::query()->whereKey($ptc->component_id)->lockForUpdate()->first();
-            if (!$component) {
+            if (! $component) {
                 throw ValidationException::withMessages([
                     'status' => 'One or more linked components could not be found for stock deduction.',
                 ]);
@@ -553,12 +679,12 @@ class PatientTreatmentService
         return $warnings;
     }
 
-    private function restoreVisitComponents(PatientTreatmentVisit $visit): void
+    private function restoreSessionComponents(TreatmentSession $session): void
     {
-        $visit->loadMissing('components');
+        $session->loadMissing('components');
 
-        foreach ($visit->components as $ptc) {
-            if (!$ptc->component_id) {
+        foreach ($session->components as $ptc) {
+            if (! $ptc->component_id) {
                 continue;
             }
 
@@ -569,12 +695,92 @@ class PatientTreatmentService
 
             /** @var Component|null $component */
             $component = Component::query()->whereKey($ptc->component_id)->lockForUpdate()->first();
-            if (!$component) {
+            if (! $component) {
                 continue;
             }
 
             $restored = bcadd((string) ($component->current_quantity ?? 0), $deduct, 2);
             $component->update(['current_quantity' => $restored]);
+        }
+    }
+
+    private function requiredStepsSatisfied(PatientTreatment $treatment): bool
+    {
+        $required = $treatment->template?->steps?->filter(fn (TreatmentTemplateStep $step) => (bool) $step->is_required) ?? collect();
+
+        if ($required->isEmpty()) {
+            return false;
+        }
+
+        $doneStepIds = $treatment->sessions
+            ->flatMap->steps
+            ->filter(fn (TreatmentSessionStep $step) => $this->stepStatus($step) === SessionStepStatus::DONE)
+            ->pluck('treatment_template_step_id')
+            ->filter()
+            ->unique();
+
+        foreach ($required as $step) {
+            if (! $doneStepIds->contains($step->id)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * @param  list<PatientTreatmentStatus>  $statuses
+     */
+    private function priorityColor(array $statuses): string
+    {
+        if (collect($statuses)->contains(PatientTreatmentStatus::FAILED)) {
+            return 'failed';
+        }
+        if (collect($statuses)->contains(PatientTreatmentStatus::IN_PROGRESS)) {
+            return 'in_progress';
+        }
+        if (collect($statuses)->contains(PatientTreatmentStatus::ON_HOLD)) {
+            return 'in_progress';
+        }
+        if (collect($statuses)->contains(PatientTreatmentStatus::PLANNED)) {
+            return 'planned';
+        }
+        if ($statuses !== [] && collect($statuses)->every(fn (PatientTreatmentStatus $s) => $s === PatientTreatmentStatus::COMPLETED)) {
+            return 'completed';
+        }
+
+        return 'default';
+    }
+
+    /**
+     * @param  list<string|int>  $toothNumbers
+     * @return list<string>
+     */
+    private function normalizeToothNumbers(array $toothNumbers): array
+    {
+        return collect($toothNumbers)
+            ->filter(fn ($n) => $n !== null && $n !== '')
+            ->map(fn ($n) => (string) $n)
+            ->unique()
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @param  list<string>  $toothNumbers
+     */
+    private function syncTeeth(PatientTreatment $treatment, array $toothNumbers): void
+    {
+        $treatment->teeth()->delete();
+
+        foreach ($toothNumbers as $number) {
+            if (! preg_match('/^[1-4][1-8]$/', $number)) {
+                throw ValidationException::withMessages([
+                    'tooth_numbers' => "Invalid tooth number: {$number}.",
+                ]);
+            }
+
+            $treatment->teeth()->create(['tooth_number' => $number]);
         }
     }
 
@@ -587,13 +793,19 @@ class PatientTreatmentService
 
         if ($hasPaidOrPartialInvoice) {
             throw ValidationException::withMessages([
-                'status' => 'Cannot cancel a treatment with a partially or fully paid invoice. Please issue a refund first.',
+                'clinical_status' => 'Cannot cancel a treatment with a partially or fully paid invoice. Please issue a refund first.',
             ]);
         }
     }
 
     private function assertTreatmentCanBeDeleted(PatientTreatment $treatment): void
     {
+        if ($treatment->sessions()->exists()) {
+            throw ValidationException::withMessages([
+                'treatment' => 'Cannot delete a treatment that already has sessions. Cancel it instead.',
+            ]);
+        }
+
         $hasPaidOrPartialInvoice = InvoiceItem::query()
             ->where('patient_treatment_id', $treatment->id)
             ->whereHas('invoice', fn ($q) => $q->whereIn('status', [InvoiceStatus::PAID, InvoiceStatus::PARTIAL]))
@@ -615,5 +827,108 @@ class PatientTreatmentService
                 'treatment' => 'Cannot delete a treatment while its invoice has recorded payments.',
             ]);
         }
+    }
+
+    private function billableComponentQuantity(float $quantity, float $freeQuantity): string
+    {
+        $deduct = max(0, $quantity - $freeQuantity);
+
+        return number_format($deduct, 2, '.', '');
+    }
+
+    private function clinical(PatientTreatment $treatment): PatientTreatmentStatus
+    {
+        return $treatment->clinical_status instanceof PatientTreatmentStatus
+            ? $treatment->clinical_status
+            : PatientTreatmentStatus::from((string) $treatment->clinical_status);
+    }
+
+    private function sessionStatus(TreatmentSession $session): TreatmentSessionStatus
+    {
+        return $session->status instanceof TreatmentSessionStatus
+            ? $session->status
+            : TreatmentSessionStatus::from((string) $session->status);
+    }
+
+    private function stepStatus(TreatmentSessionStep $step): SessionStepStatus
+    {
+        return $step->status instanceof SessionStepStatus
+            ? $step->status
+            : SessionStepStatus::from((string) $step->status);
+    }
+
+    private function freshTreatment(PatientTreatment $treatment): PatientTreatment
+    {
+        return $treatment->fresh($this->detailRelations());
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function listRelations(): array
+    {
+        return [
+            'patient',
+            'template.steps',
+            'dentist',
+            'plan',
+            'teeth',
+            'parentTreatment',
+            'sessions.steps.templateStep',
+            'sessions.dentist',
+            'sessions.appointment',
+            'invoiceItems',
+        ];
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function detailRelations(): array
+    {
+        return [
+            'patient',
+            'template.steps.components.component',
+            'dentist',
+            'plan',
+            'teeth',
+            'parentTreatment',
+            'sessions.steps.templateStep',
+            'sessions.dentist',
+            'sessions.appointment',
+            'sessions.components',
+            'invoiceItems',
+        ];
+    }
+
+    /**
+     * @param  \Illuminate\Support\Collection<int, InvoiceItem>  $items
+     * @param  \Illuminate\Support\Collection<string, Invoice>  $invoices
+     */
+    private function allocatedPaidAmount($items, $invoices): float
+    {
+        $paid = 0.0;
+
+        foreach ($items->groupBy('invoice_id') as $invoiceId => $invoiceItems) {
+            /** @var Invoice|null $invoice */
+            $invoice = $invoices->get($invoiceId);
+            if (! $invoice) {
+                continue;
+            }
+
+            $invoiceTotal = (float) $invoice->total_amount;
+            $invoicePaid = (float) $invoice->payments->sum(function (Payment $payment) {
+                return (float) $payment->amount + (float) ($payment->deduct_amount ?? 0);
+            });
+            $treatmentAmount = (float) $invoiceItems->sum(fn ($item) => (float) $item->price * (int) $item->quantity);
+
+            if ($invoiceTotal <= 0) {
+                continue;
+            }
+
+            $paid += $invoicePaid * ($treatmentAmount / $invoiceTotal);
+        }
+
+        return round($paid, 2);
     }
 }

@@ -13,7 +13,7 @@ class PatientTreatmentComponent extends Model
     use BelongsToTenant, HasFactory, HasUuids;
 
     protected $fillable = [
-        'patient_treatment_visit_id',
+        'treatment_session_id',
         'component_id',
         'name',
         'unit_price',
@@ -32,9 +32,9 @@ class PatientTreatmentComponent extends Model
         ];
     }
 
-    public function visit(): BelongsTo
+    public function session(): BelongsTo
     {
-        return $this->belongsTo(PatientTreatmentVisit::class, 'patient_treatment_visit_id');
+        return $this->belongsTo(TreatmentSession::class, 'treatment_session_id');
     }
 
     public function component(): BelongsTo

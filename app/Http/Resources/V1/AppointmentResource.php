@@ -17,7 +17,6 @@ class AppointmentResource extends JsonResource
             'id' => $this->id,
             'patient_id' => $this->patient_id,
             'doctor_id' => $this->doctor_id,
-            'patient_treatment_visit_id' => $this->patient_treatment_visit_id,
             'scheduled_at' => $this->scheduled_at,
             'duration_minutes' => $this->duration_minutes,
             'status' => $this->status,
@@ -38,19 +37,7 @@ class AppointmentResource extends JsonResource
                     'name' => $this->doctor->name,
                 ];
             }),
-            'patient_treatment_visit' => $this->whenLoaded('patientTreatmentVisit', function () {
-                return [
-                    'id' => $this->patientTreatmentVisit->id,
-                    'name' => $this->patientTreatmentVisit->name,
-                    'visit_order' => $this->patientTreatmentVisit->visit_order,
-                    'status' => $this->patientTreatmentVisit->status,
-                    'treatment' => $this->patientTreatmentVisit->relationLoaded('treatment') ? [
-                        'id' => $this->patientTreatmentVisit->treatment?->id,
-                        'tooth_number' => $this->patientTreatmentVisit->treatment?->tooth_number,
-                        'status' => $this->patientTreatmentVisit->treatment?->status,
-                    ] : null,
-                ];
-            }),
+            'treatment_sessions' => TreatmentSessionResource::collection($this->whenLoaded('treatmentSessions')),
         ];
     }
 }

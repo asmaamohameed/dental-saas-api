@@ -28,7 +28,6 @@ class InvoiceItem extends Model
         'invoice_id',
         'service_id',
         'patient_treatment_id',
-        'patient_treatment_visit_id',
         'description',
         'price',
         'quantity',
@@ -67,8 +66,4 @@ class InvoiceItem extends Model
         return $this->belongsTo(PatientTreatment::class);
     }
 
-    public function patientTreatmentVisit(): BelongsTo
-    {
-        return $this->belongsTo(PatientTreatmentVisit::class);
-    }
 }

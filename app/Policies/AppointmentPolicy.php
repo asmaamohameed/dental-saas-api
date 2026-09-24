@@ -6,6 +6,7 @@ use App\Enums\AppointmentStatus;
 use App\Enums\UserRole;
 use App\Models\Appointment;
 use App\Models\User;
+use Illuminate\Auth\Access\Response;
 
 class AppointmentPolicy
 {
@@ -48,10 +49,10 @@ class AppointmentPolicy
     /**
      * Determine whether the user can update the model.
      */
-    public function update(User $user, Appointment $appointment): bool
+    public function update(User $user, Appointment $appointment): bool|Response
     {
         if ($appointment->status === AppointmentStatus::COMPLETED) {
-            return false;
+            return Response::deny('You cannot update a completed appointment.');
         }
 
         return $user->tenant_id === $appointment->tenant_id
@@ -74,7 +75,6 @@ class AppointmentPolicy
             return false;
         }
 
-        // تصحيح غلطة: من completed لـ cancelled/no_show - owner بس
         if ($appointment->status === AppointmentStatus::COMPLETED) {
             return $user->role === UserRole::OWNER;
         }
@@ -89,8 +89,12 @@ class AppointmentPolicy
     /**
      * Determine whether the user can delete the model.
      */
-    public function delete(User $user, Appointment $appointment): bool
+    public function delete(User $user, Appointment $appointment): bool|Response
     {
+        if ($appointment->status === AppointmentStatus::COMPLETED) {
+            return Response::deny('You cannot delete a completed appointment.');
+        }
+
         return $user->tenant_id === $appointment->tenant_id
             && $user->role === UserRole::OWNER;
     }

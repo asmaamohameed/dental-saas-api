@@ -33,7 +33,7 @@ class ComponentController extends Controller
 
         if ($request->filled('search')) {
             $search = str_replace(['\\', '%', '_'], ['\\\\', '\%', '\_'], $request->query('search'));
-            $query->where(fn($q) => $q->where('name_ar', 'like', "%{$search}%")->orWhere('name_en', 'like', "%{$search}%"));
+            $query->where(fn ($q) => $q->where('name_ar', 'like', "%{$search}%")->orWhere('name_en', 'like', "%{$search}%"));
         }
 
         return $this->paginatedResponse(
@@ -70,7 +70,7 @@ class ComponentController extends Controller
 
     public function toggleActive(Component $component): JsonResponse
     {
-        $component->update(['is_active' => !$component->is_active]);
+        $component->update(['is_active' => ! $component->is_active]);
 
         return $this->successResponse(new ComponentResource($component), 'Component active status updated successfully.');
     }

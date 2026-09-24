@@ -18,9 +18,7 @@ class InvoiceController extends Controller
 {
     use AuthorizesRequests;
 
-    public function __construct(private readonly InvoiceService $invoiceService)
-    {
-    }
+    public function __construct(private readonly InvoiceService $invoiceService) {}
 
     public function index(Request $request): JsonResponse
     {

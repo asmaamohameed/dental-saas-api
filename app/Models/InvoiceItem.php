@@ -41,6 +41,8 @@ class InvoiceItem extends Model
     {
         return [
             'price' => 'decimal:2',
+            'created_at' => 'datetime',
+            'updated_at' => 'datetime',
         ];
     }
 
@@ -51,19 +53,27 @@ class InvoiceItem extends Model
     }
 
     // Relationships
+    /**
+     * @return BelongsTo<Invoice, $this>
+     */
     public function invoice(): BelongsTo
     {
         return $this->belongsTo(Invoice::class);
     }
 
+    /**
+     * @return BelongsTo<Service, $this>
+     */
     public function service(): BelongsTo
     {
         return $this->belongsTo(Service::class);
     }
 
+    /**
+     * @return BelongsTo<PatientTreatment, $this>
+     */
     public function patientTreatment(): BelongsTo
     {
         return $this->belongsTo(PatientTreatment::class);
     }
-
 }

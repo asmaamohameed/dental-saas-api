@@ -34,6 +34,9 @@ class TreatmentSession extends Model
         ];
     }
 
+    /**
+     * @return BelongsTo<PatientTreatment, $this>
+     */
     public function treatment(): BelongsTo
     {
         return $this->belongsTo(PatientTreatment::class, 'patient_treatment_id');

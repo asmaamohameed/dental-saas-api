@@ -34,11 +34,17 @@ class TreatmentTemplateStep extends Model
         ];
     }
 
+    /**
+     * @return BelongsTo<TreatmentTemplate, $this>
+     */
     public function template(): BelongsTo
     {
         return $this->belongsTo(TreatmentTemplate::class, 'treatment_template_id');
     }
 
+    /**
+     * @return HasMany<TreatmentTemplateComponent, $this>
+     */
     public function components(): HasMany
     {
         return $this->hasMany(TreatmentTemplateComponent::class)->with('component');

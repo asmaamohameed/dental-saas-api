@@ -3,6 +3,8 @@
 namespace App\Http\Resources\V1;
 
 use App\Models\Appointment;
+use App\Models\Patient;
+use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -26,15 +28,25 @@ class AppointmentResource extends JsonResource
             'created_at' => $this->created_at,
             'updated_at' => $this->updated_at,
             'patient' => $this->whenLoaded('patient', function () {
+                /**
+                 * @var Patient $patient
+                 */
+                $patient = $this->patient;
+
                 return [
-                    'id' => $this->patient->id,
-                    'name' => $this->patient->full_name,
+                    'id' => $patient->id,
+                    'name' => $patient->full_name,
                 ];
             }),
             'doctor' => $this->whenLoaded('doctor', function () {
+                /**
+                 * @var User $doctor
+                 */
+                $doctor = $this->doctor;
+
                 return [
-                    'id' => $this->doctor->id,
-                    'name' => $this->doctor->name,
+                    'id' => $doctor->id,
+                    'name' => $doctor->name,
                 ];
             }),
             'treatment_sessions' => TreatmentSessionResource::collection($this->whenLoaded('treatmentSessions')),

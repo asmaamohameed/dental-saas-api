@@ -19,9 +19,9 @@ use App\Http\Controllers\Api\V1\PatientController;
 use App\Http\Controllers\Api\V1\PatientTreatmentController;
 use App\Http\Controllers\Api\V1\PaymentController;
 use App\Http\Controllers\Api\V1\ServiceController;
+use App\Http\Controllers\Api\V1\ToothRecordController;
 use App\Http\Controllers\Api\V1\TreatmentPlanController;
 use App\Http\Controllers\Api\V1\TreatmentTemplateController;
-use App\Http\Controllers\Api\V1\ToothRecordController;
 use App\Http\Controllers\Api\V1\UserController;
 use App\Http\Middleware\EnsureUserRole;
 use Illuminate\Support\Facades\Route;
@@ -43,6 +43,7 @@ Route::prefix('v1')->group(function () {
         Route::prefix('auth')->group(function () {
             Route::post('logout', LogoutController::class);
             Route::get('me', [ProfileController::class, 'show']);
+            Route::match(['put', 'patch'], 'me', [ProfileController::class, 'update']);
         });
 
         // Patients API Resource

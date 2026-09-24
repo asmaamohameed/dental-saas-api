@@ -11,6 +11,9 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
+/**
+ * @property-read bool $is_low_stock
+ */
 class Component extends Model
 {
     use BelongsToTenant, HasFactory, HasUuids;
@@ -33,6 +36,8 @@ class Component extends Model
             'current_quantity' => 'decimal:2',
             'minimum_threshold' => 'decimal:2',
             'is_active' => 'boolean',
+            'created_at' => 'datetime',
+            'updated_at' => 'datetime',
         ];
     }
 

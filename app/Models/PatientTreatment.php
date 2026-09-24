@@ -15,7 +15,15 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Carbon;
 
+/**
+ * @property PatientTreatmentStatus $status
+ * @property TreatmentPriority $priority
+ * @property int $total_visits
+ * @property Carbon|null $started_at
+ * @property Carbon|null $completed_at
+ */
 class PatientTreatment extends Model
 {
     use Auditable, BelongsToTenant, HasFactory, HasUuids;
@@ -69,6 +77,9 @@ class PatientTreatment extends Model
         return $this->belongsTo(TreatmentPlan::class, 'treatment_plan_id');
     }
 
+    /**
+     * @return BelongsTo<TreatmentTemplate, $this>
+     */
     public function template(): BelongsTo
     {
         return $this->belongsTo(TreatmentTemplate::class, 'treatment_template_id');
@@ -104,6 +115,9 @@ class PatientTreatment extends Model
         return $this->hasMany(TreatmentSession::class)->orderBy('session_date');
     }
 
+    /**
+     * @return HasMany<InvoiceItem, $this>
+     */
     public function invoiceItems(): HasMany
     {
         return $this->hasMany(InvoiceItem::class);

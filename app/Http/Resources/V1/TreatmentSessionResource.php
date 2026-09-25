@@ -14,6 +14,7 @@ class TreatmentSessionResource extends JsonResource
         return [
             'id' => $this->id,
             'patient_treatment_id' => $this->patient_treatment_id,
+            'treatment' => new PatientTreatmentResource($this->whenLoaded('treatment')),
             'appointment_id' => $this->appointment_id,
             'dentist_id' => $this->dentist_id,
             'session_date' => $this->session_date->toISOString(),

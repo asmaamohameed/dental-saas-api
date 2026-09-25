@@ -59,14 +59,11 @@ class AppointmentController extends Controller
         $this->authorize('create', Appointment::class);
 
         $data = $request->validated();
-        $treatmentIds = $data['patient_treatment_ids'] ?? [];
+        $treatmentIds = $this->treatmentIdsForType($data, $data['patient_treatment_ids'] ?? []);
         unset($data['patient_treatment_ids']);
 
         $data['created_by'] = auth()->id();
         $data['status'] = AppointmentStatus::SCHEDULED;
-        $data['appointment_type'] ??= $treatmentIds !== []
-            ? AppointmentType::TREATMENT_VISIT
-            : AppointmentType::CONSULTATION;
 
         $appointment = Appointment::create($data);
 
@@ -93,7 +90,7 @@ class AppointmentController extends Controller
     {
         $this->authorize('view', $appointment);
 
-        $appointment->load(['patient', 'doctor', 'treatmentSessions.treatment.template', 'treatmentSessions.steps']);
+        $appointment->load(['patient', 'doctor', 'treatmentSessions.treatment.template', 'treatmentSessions.treatment.teeth', 'treatmentSessions.steps']);
 
         return $this->successResponse(new AppointmentResource($appointment));
     }
@@ -103,12 +100,18 @@ class AppointmentController extends Controller
         $this->authorize('update', $appointment);
 
         $data = $request->validated();
-        $treatmentIds = $data['patient_treatment_ids'] ?? null;
+        $submittedTreatmentIds = array_key_exists('patient_treatment_ids', $data)
+            ? $data['patient_treatment_ids']
+            : null;
         unset($data['patient_treatment_ids']);
 
         $appointment->update($data);
 
-        if (is_array($treatmentIds)) {
+        if (is_array($submittedTreatmentIds)) {
+            $treatmentIds = $this->treatmentIdsForType(
+                ['appointment_type' => $data['appointment_type'] ?? $appointment->appointment_type],
+                $submittedTreatmentIds
+            );
             $this->patientTreatmentService->attachTreatmentsToAppointment(
                 $appointment->id,
                 $treatmentIds,
@@ -180,5 +183,20 @@ class AppointmentController extends Controller
             new AppointmentResource($appointment),
             'Appointment status updated successfully.'
         );
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     * @param  array<int, string>  $treatmentIds
+     * @return array<int, string>
+     */
+    private function treatmentIdsForType(array $data, array $treatmentIds): array
+    {
+        $type = $data['appointment_type'] ?? AppointmentType::CONSULTATION;
+        if ($type instanceof AppointmentType) {
+            return $type === AppointmentType::TREATMENT_VISIT ? $treatmentIds : [];
+        }
+
+        return $type === AppointmentType::TREATMENT_VISIT->value ? $treatmentIds : [];
     }
 }

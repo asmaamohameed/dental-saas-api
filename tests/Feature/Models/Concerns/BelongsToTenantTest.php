@@ -2,7 +2,7 @@
 
 namespace Tests\Feature\Models\Concerns;
 
-use App\Models\Service;
+use App\Models\Patient;
 use App\Models\Tenant;
 use App\Support\Tenancy\CurrentTenant;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -17,7 +17,7 @@ class BelongsToTenantTest extends TestCase
         $this->expectException(\RuntimeException::class);
         $this->expectExceptionMessage('without a tenant context');
 
-        Service::query()->get();
+        Patient::query()->get();
     }
 
     public function test_creating_a_tenant_scoped_model_without_tenant_context_throws(): void
@@ -25,7 +25,7 @@ class BelongsToTenantTest extends TestCase
         $this->expectException(\RuntimeException::class);
         $this->expectExceptionMessage('without a tenant context');
 
-        Service::factory()->create();
+        Patient::factory()->create();
     }
 
     public function test_creating_a_model_auto_assigns_the_current_tenant_id(): void
@@ -33,9 +33,9 @@ class BelongsToTenantTest extends TestCase
         $tenant = Tenant::factory()->create();
         app(CurrentTenant::class)->set($tenant->id);
 
-        $service = Service::factory()->create();
+        $patient = Patient::factory()->create();
 
-        $this->assertSame($tenant->id, $service->tenant_id);
+        $this->assertSame($tenant->id, $patient->tenant_id);
     }
 
     public function test_the_global_scope_prevents_seeing_another_tenants_records(): void
@@ -44,15 +44,15 @@ class BelongsToTenantTest extends TestCase
         $tenantB = Tenant::factory()->create();
 
         app(CurrentTenant::class)->set($tenantA->id);
-        $serviceA = Service::factory()->create();
+        $patientA = Patient::factory()->create();
 
         app(CurrentTenant::class)->set($tenantB->id);
-        $serviceB = Service::factory()->create();
+        $patientB = Patient::factory()->create();
 
-        $visibleIds = Service::query()->pluck('id')->all();
+        $visibleIds = Patient::query()->pluck('id')->all();
 
-        $this->assertContains($serviceB->id, $visibleIds);
-        $this->assertNotContains($serviceA->id, $visibleIds);
+        $this->assertContains($patientB->id, $visibleIds);
+        $this->assertNotContains($patientA->id, $visibleIds);
     }
 
     public function test_tenant_relation_returns_the_owning_tenant(): void
@@ -60,8 +60,8 @@ class BelongsToTenantTest extends TestCase
         $tenant = Tenant::factory()->create();
         app(CurrentTenant::class)->set($tenant->id);
 
-        $service = Service::factory()->create();
+        $patient = Patient::factory()->create();
 
-        $this->assertTrue($service->tenant->is($tenant));
+        $this->assertTrue($patient->tenant->is($tenant));
     }
 }

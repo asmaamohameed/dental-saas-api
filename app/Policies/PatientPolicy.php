@@ -19,43 +19,33 @@ class PatientPolicy
 
     public function viewAny(User $user): bool
     {
-        return in_array($user->role, [
-            UserRole::DOCTOR,
-            UserRole::RECEPTIONIST,
-        ]);
+        return $user->role?->isReceptionist() || $user->canAccessClinicalData();
     }
 
     public function view(User $user, Patient $patient): bool
     {
         return $user->tenant_id === $patient->tenant_id
-            && in_array($user->role, [
-                UserRole::DOCTOR,
-                UserRole::RECEPTIONIST,
-            ]);
+            && ($user->role?->isReceptionist() || $user->canAccessClinicalData());
     }
 
     public function viewMedicalHistory(User $user): bool
     {
-        return $user->role === UserRole::DOCTOR;
+        return $user->canAccessClinicalData();
     }
 
     public function create(User $user): bool
     {
-        return in_array($user->role, [
-            UserRole::OWNER,
-            UserRole::DOCTOR,
-            UserRole::RECEPTIONIST,
-        ]);
+        return $user->role?->isOwner()
+            || $user->role?->isReceptionist()
+            || $user->canAccessClinicalData();
     }
 
     public function update(User $user, Patient $patient): bool
     {
         return $user->tenant_id === $patient->tenant_id
-            && in_array($user->role, [
-                UserRole::OWNER,
-                UserRole::DOCTOR,
-                UserRole::RECEPTIONIST,
-            ]);
+            && ($user->role?->isOwner()
+                || $user->role?->isReceptionist()
+                || $user->canAccessClinicalData());
     }
 
     public function delete(User $user, Patient $patient): bool

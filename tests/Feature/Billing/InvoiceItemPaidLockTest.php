@@ -5,7 +5,6 @@ namespace Tests\Feature\Billing;
 use App\Enums\UserRole;
 use App\Models\Invoice;
 use App\Models\InvoiceItem;
-use App\Models\Service;
 use Tests\TestCase;
 
 class InvoiceItemPaidLockTest extends TestCase
@@ -14,11 +13,9 @@ class InvoiceItemPaidLockTest extends TestCase
     {
         $this->actingAsTenantUser(role: UserRole::OWNER);
         $invoice = Invoice::factory()->paid()->create();
-        $service = Service::factory()->create();
-
         $this->postJson("/api/v1/invoices/{$invoice->id}/items", [
-            'service_id' => $service->id,
             'price' => 100,
+            'description' => 'Manual billing line item',
             'quantity' => 1,
         ])->assertForbidden();
     }

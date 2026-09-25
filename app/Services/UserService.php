@@ -31,19 +31,37 @@ class UserService
         return $query->latest()->paginate($perPage);
     }
 
-    public function listDoctors(): Collection
+    public function listDoctors(?string $day = null): Collection
     {
-        return User::query()
-            ->where('role', UserRole::DOCTOR)
-            ->where('is_active', true)
+        $query = User::query()->where('is_active', true);
+
+        if ($day === null) {
+            return $query
+                ->where('role', UserRole::DOCTOR)
+                ->orderBy('name')
+                ->get(['id', 'name']);
+        }
+
+        $staff = $query
+            ->whereIn('role', [UserRole::DOCTOR, UserRole::ASSISTANT])
             ->orderBy('name')
-            ->get(['id', 'name']);
+            ->get(['id', 'name', 'working_days']);
+
+        return $staff
+            ->sortBy([
+                fn (User $user) => in_array($day, $user->working_days ?? [], true) ? 0 : 1,
+                fn (User $user) => $user->name,
+            ])
+            ->values();
     }
 
     public function create(array $data): User
     {
         $data['password_hash'] = Hash::make($data['password']);
         unset($data['password']);
+
+        $role = UserRole::from($data['role']);
+        $this->applyWorkingDaysForRole($data, $role, isUpdate: false);
 
         return User::create($data);
     }
@@ -55,9 +73,30 @@ class UserService
         }
         unset($data['password']);
 
+        $role = isset($data['role']) ? UserRole::from($data['role']) : $user->role;
+        $this->applyWorkingDaysForRole($data, $role, isUpdate: true);
+
         $user->update($data);
 
         return $user->fresh();
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     */
+    private function applyWorkingDaysForRole(array &$data, UserRole $role, bool $isUpdate): void
+    {
+        $scheduleRole = in_array($role, [UserRole::DOCTOR, UserRole::ASSISTANT], true);
+
+        if (! $scheduleRole) {
+            $data['working_days'] = null;
+
+            return;
+        }
+
+        if ($isUpdate && ! array_key_exists('working_days', $data)) {
+            unset($data['working_days']);
+        }
     }
 
     public function toggleActive(User $user): User

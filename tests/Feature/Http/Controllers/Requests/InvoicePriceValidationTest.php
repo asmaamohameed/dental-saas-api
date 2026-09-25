@@ -6,7 +6,6 @@ use App\Enums\InvoiceStatus;
 use App\Enums\UserRole;
 use App\Models\Invoice;
 use App\Models\Patient;
-use App\Models\Service;
 use App\Models\Tenant;
 use App\Models\User;
 use App\Support\Tenancy\CurrentTenant;
@@ -28,68 +27,46 @@ class InvoicePriceValidationTest extends TestCase
         return $user;
     }
 
-    public function test_store_does_not_require_price_for_a_regular_service(): void
-    {
-        $this->actingAsRole(UserRole::RECEPTIONIST);
-        $patient = Patient::factory()->create();
-        $service = Service::factory()->create(['default_price' => 120, 'is_other' => false]);
-
-        $this->postJson('/api/v1/invoices', [
-            'patient_id' => $patient->id,
-            'items' => [['service_id' => $service->id, 'quantity' => 1]],
-        ])->assertCreated()->assertJsonPath('data.total_amount', 120);
-    }
-
-    public function test_store_requires_price_for_the_other_service(): void
-    {
-        $this->actingAsRole(UserRole::RECEPTIONIST);
-        $patient = Patient::factory()->create();
-        $otherService = Service::factory()->create(['is_other' => true]);
-
-        $this->postJson('/api/v1/invoices', [
-            'patient_id' => $patient->id,
-            'items' => [['service_id' => $otherService->id, 'description' => 'Custom', 'quantity' => 1]],
-        ])->assertStatus(422)->assertJsonValidationErrors(['items.0.price']);
-    }
-
-    public function test_store_accepts_price_for_the_other_service_when_provided(): void
-    {
-        $this->actingAsRole(UserRole::RECEPTIONIST);
-        $patient = Patient::factory()->create();
-        $otherService = Service::factory()->create(['is_other' => true]);
-
-        $this->postJson('/api/v1/invoices', [
-            'patient_id' => $patient->id,
-            'items' => [
-                [
-                    'service_id' => $otherService->id,
-                    'description' => 'Custom work',
-                    'price' => 300,
-                    'quantity' => 1,
-                ],
-            ],
-        ])->assertCreated()->assertJsonPath('data.total_amount', 300);
-    }
-
-    public function test_update_does_not_require_price_for_a_regular_service(): void
+    public function test_update_accepts_manual_line_item(): void
     {
         $this->actingAsRole(UserRole::OWNER);
         $invoice = Invoice::factory()->create(['status' => InvoiceStatus::UNPAID]);
-        $service = Service::factory()->create(['default_price' => 90, 'is_other' => false]);
 
         $this->putJson("/api/v1/invoices/{$invoice->id}", [
-            'items' => [['service_id' => $service->id, 'quantity' => 1]],
+            'items' => [['price' => 90, 'description' => 'Manual billing line', 'quantity' => 1]],
         ])->assertOk()->assertJsonPath('data.total_amount', 90);
     }
 
-    public function test_update_requires_price_for_the_other_service(): void
+    public function test_store_requires_description_when_no_treatment_is_selected(): void
     {
-        $this->actingAsRole(UserRole::OWNER);
-        $invoice = Invoice::factory()->create(['status' => InvoiceStatus::UNPAID]);
-        $otherService = Service::factory()->create(['is_other' => true]);
+        $this->actingAsRole(UserRole::RECEPTIONIST);
+        $patient = Patient::factory()->create();
 
-        $this->putJson("/api/v1/invoices/{$invoice->id}", [
-            'items' => [['service_id' => $otherService->id, 'description' => 'Custom', 'quantity' => 1]],
-        ])->assertStatus(422)->assertJsonValidationErrors(['items.0.price']);
+        $this->postJson('/api/v1/invoices', [
+            'patient_id' => $patient->id,
+            'items' => [['price' => 50, 'quantity' => 1]],
+        ])->assertStatus(422)->assertJsonValidationErrors(['items.0.description']);
+    }
+
+    public function test_store_rejects_short_note_when_no_treatment_is_selected(): void
+    {
+        $this->actingAsRole(UserRole::RECEPTIONIST);
+        $patient = Patient::factory()->create();
+
+        $this->postJson('/api/v1/invoices', [
+            'patient_id' => $patient->id,
+            'items' => [['price' => 50, 'description' => 'abc', 'quantity' => 1]],
+        ])->assertStatus(422)->assertJsonValidationErrors(['items.0.description']);
+    }
+
+    public function test_store_accepts_amount_only_line_with_description(): void
+    {
+        $this->actingAsRole(UserRole::RECEPTIONIST);
+        $patient = Patient::factory()->create();
+
+        $this->postJson('/api/v1/invoices', [
+            'patient_id' => $patient->id,
+            'items' => [['price' => 50, 'description' => 'Consultation fee', 'quantity' => 1]],
+        ])->assertCreated()->assertJsonPath('data.total_amount', 50);
     }
 }

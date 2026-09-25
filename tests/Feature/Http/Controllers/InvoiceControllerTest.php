@@ -7,7 +7,6 @@ use App\Enums\UserRole;
 use App\Models\Invoice;
 use App\Models\Patient;
 use App\Models\Payment;
-use App\Models\Service;
 use App\Models\Tenant;
 use App\Models\User;
 use App\Support\Tenancy\CurrentTenant;
@@ -41,6 +40,18 @@ class InvoiceControllerTest extends TestCase
         $this->assertCount(3, $response->json('data.items'));
     }
 
+    public function test_index_orders_invoices_newest_first(): void
+    {
+        $this->actingAsRole(UserRole::RECEPTIONIST);
+        $older = Invoice::factory()->create(['created_at' => now()->subDays(2)]);
+        $newer = Invoice::factory()->create(['created_at' => now()->subDay()]);
+
+        $items = $this->getJson('/api/v1/invoices')->assertOk()->json('data.items');
+
+        $this->assertSame($newer->id, $items[0]['id']);
+        $this->assertSame($older->id, $items[1]['id']);
+    }
+
     public function test_index_filters_by_status(): void
     {
         $this->actingAsRole(UserRole::RECEPTIONIST);
@@ -62,6 +73,22 @@ class InvoiceControllerTest extends TestCase
         $response = $this->getJson("/api/v1/invoices?patient_id={$patient->id}")->assertOk();
 
         $this->assertCount(1, $response->json('data.items'));
+    }
+
+    public function test_index_filters_by_search(): void
+    {
+        $this->actingAsRole(UserRole::RECEPTIONIST);
+        $patient = Patient::factory()->create(['full_name' => 'Unique Patient Alpha']);
+        $invoice = Invoice::factory()->create(['patient_id' => $patient->id]);
+        Invoice::factory()->create();
+
+        $byPatient = $this->getJson('/api/v1/invoices?search=Unique+Patient')->assertOk();
+        $this->assertCount(1, $byPatient->json('data.items'));
+        $this->assertSame($invoice->id, $byPatient->json('data.items.0.id'));
+
+        $byId = $this->getJson("/api/v1/invoices?search={$invoice->id}")->assertOk();
+        $this->assertCount(1, $byId->json('data.items'));
+        $this->assertSame($invoice->id, $byId->json('data.items.0.id'));
     }
 
     public function test_index_does_not_return_another_tenants_invoices(): void
@@ -87,11 +114,9 @@ class InvoiceControllerTest extends TestCase
     {
         $this->actingAsRole(UserRole::DOCTOR);
         $patient = Patient::factory()->create();
-        $service = Service::factory()->create(['is_other' => false]);
-
         $this->postJson('/api/v1/invoices', [
             'patient_id' => $patient->id,
-            'items' => [['service_id' => $service->id, 'quantity' => 1]],
+            'items' => [['price' => 100, 'description' => 'Manual charge line', 'quantity' => 1]],
         ])->assertStatus(403);
     }
 
@@ -99,11 +124,9 @@ class InvoiceControllerTest extends TestCase
     {
         $user = $this->actingAsRole(UserRole::RECEPTIONIST);
         $patient = Patient::factory()->create();
-        $service = Service::factory()->create(['default_price' => 120, 'is_other' => false]);
-
         $response = $this->postJson('/api/v1/invoices', [
             'patient_id' => $patient->id,
-            'items' => [['service_id' => $service->id, 'quantity' => 1]],
+            'items' => [['price' => 120, 'description' => 'Treatment billing line', 'quantity' => 1]],
         ])->assertCreated();
 
         $this->assertEquals(120, $response->json('data.total_amount'));
@@ -120,11 +143,9 @@ class InvoiceControllerTest extends TestCase
         $foreignPatient = Patient::factory()->create();
         app(CurrentTenant::class)->set($myTenantId);
 
-        $service = Service::factory()->create(['is_other' => false]);
-
         $this->postJson('/api/v1/invoices', [
             'patient_id' => $foreignPatient->id,
-            'items' => [['service_id' => $service->id, 'quantity' => 1]],
+            'items' => [['price' => 50, 'description' => 'Manual charge line', 'quantity' => 1]],
         ])->assertStatus(422)->assertJsonValidationErrors(['patient_id']);
     }
 
@@ -159,10 +180,8 @@ class InvoiceControllerTest extends TestCase
     {
         $this->actingAsRole(UserRole::DOCTOR);
         $invoice = Invoice::factory()->create(['status' => InvoiceStatus::UNPAID]);
-        $service = Service::factory()->create(['is_other' => false]);
-
         $this->putJson("/api/v1/invoices/{$invoice->id}", [
-            'items' => [['service_id' => $service->id, 'quantity' => 1]],
+            'items' => [['price' => 100, 'description' => 'Manual charge line', 'quantity' => 1]],
         ])->assertStatus(403);
     }
 
@@ -170,10 +189,8 @@ class InvoiceControllerTest extends TestCase
     {
         $this->actingAsRole(UserRole::RECEPTIONIST);
         $invoice = Invoice::factory()->create(['status' => InvoiceStatus::UNPAID, 'total_amount' => 100]);
-        $service = Service::factory()->create(['default_price' => 60, 'is_other' => false]);
-
         $this->putJson("/api/v1/invoices/{$invoice->id}", [
-            'items' => [['service_id' => $service->id, 'quantity' => 1]],
+            'items' => [['price' => 60, 'description' => 'Updated billing line', 'quantity' => 1]],
         ])->assertOk()->assertJsonPath('data.total_amount', 60);
     }
 

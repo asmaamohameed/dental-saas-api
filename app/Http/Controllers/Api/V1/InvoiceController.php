@@ -25,7 +25,7 @@ class InvoiceController extends Controller
         $perPage = (int) $request->query('per_page', 15);
         $perPage = min(max($perPage, 1), 50);
 
-        $filters = $request->only(['status', 'patient_id', 'date_from', 'date_to']);
+        $filters = $request->only(['status', 'patient_id', 'date_from', 'date_to', 'search']);
 
         $invoices = $this->invoiceService->list($filters, $perPage);
 

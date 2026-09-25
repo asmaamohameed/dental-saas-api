@@ -29,6 +29,9 @@ class ExpenseService
     public function create(array $data, string $userId): Expense
     {
         $data['created_by'] = $userId;
+        $data['title'] = trim((string) ($data['title'] ?? ''));
+        $data['amount'] = (int) $data['amount'];
+        $data['expense_date'] = now()->toDateString();
 
         return Expense::create($data);
     }

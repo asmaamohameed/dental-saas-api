@@ -97,6 +97,40 @@ class StaffCrudTest extends TestCase
         ]);
     }
 
+    public function test_creating_a_doctor_with_working_days_persists_them(): void
+    {
+        Sanctum::actingAs($this->owner, ['*']);
+
+        $this->postJson('/api/v1/staff', [
+            'name' => 'Dr. Schedule',
+            'email' => 'schedule@example.com',
+            'password' => 'password123',
+            'role' => UserRole::DOCTOR->value,
+            'working_days' => ['saturday', 'monday'],
+        ])->assertCreated();
+
+        $user = User::query()->where('email', 'schedule@example.com')->first();
+
+        $this->assertSame(['saturday', 'monday'], $user->working_days);
+    }
+
+    public function test_working_days_submitted_for_a_receptionist_are_ignored(): void
+    {
+        Sanctum::actingAs($this->owner, ['*']);
+
+        $this->postJson('/api/v1/staff', [
+            'name' => 'Front Desk',
+            'email' => 'reception@example.com',
+            'password' => 'password123',
+            'role' => UserRole::RECEPTIONIST->value,
+            'working_days' => ['saturday', 'monday'],
+        ])->assertCreated();
+
+        $user = User::query()->where('email', 'reception@example.com')->first();
+
+        $this->assertNull($user->working_days);
+    }
+
     public function test_cannot_create_an_owner_via_staff_endpoint(): void
     {
         Sanctum::actingAs($this->owner, ['*']);

@@ -3,7 +3,7 @@
 namespace Tests\Unit\Middleware;
 
 use App\Enums\UserRole;
-use App\Models\Service;
+use App\Models\Invoice;
 use App\Models\Tenant;
 use App\Models\User;
 use App\Support\Tenancy\CurrentTenant;
@@ -29,7 +29,7 @@ class EnsureUserRoleTest extends TestCase
     {
         $this->actingAsRole(UserRole::DOCTOR);
 
-        $this->postJson('/api/v1/services', [])
+        $this->postJson('/api/v1/components', [])
             ->assertStatus(403)
             ->assertJson(['message' => 'Forbidden. Insufficient role permissions.']);
     }
@@ -38,24 +38,24 @@ class EnsureUserRoleTest extends TestCase
     {
         $this->actingAsRole(UserRole::RECEPTIONIST);
 
-        $this->postJson('/api/v1/services', [])->assertStatus(422);
+        $this->postJson('/api/v1/components', [])->assertStatus(422);
     }
 
     public function test_doctor_is_forbidden_on_an_owner_only_route(): void
     {
         $this->actingAsRole(UserRole::DOCTOR);
-        $service = Service::factory()->create();
+        $invoice = Invoice::factory()->create();
 
-        $this->deleteJson("/api/v1/services/{$service->id}")
+        $this->deleteJson("/api/v1/invoices/{$invoice->id}")
             ->assertStatus(403);
     }
 
     public function test_receptionist_is_forbidden_on_an_owner_only_route(): void
     {
         $this->actingAsRole(UserRole::RECEPTIONIST);
-        $service = Service::factory()->create();
+        $invoice = Invoice::factory()->create();
 
-        $this->deleteJson("/api/v1/services/{$service->id}")
+        $this->deleteJson("/api/v1/invoices/{$invoice->id}")
             ->assertStatus(403);
     }
 }

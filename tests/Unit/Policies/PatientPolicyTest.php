@@ -38,9 +38,10 @@ class PatientPolicyTest extends TestCase
         $this->assertNull($this->policy->before($this->user(UserRole::DOCTOR), 'view'));
     }
 
-    public function test_view_any_allows_only_doctor_and_receptionist(): void
+    public function test_view_any_allows_doctor_assistant_and_receptionist(): void
     {
         $this->assertTrue($this->policy->viewAny($this->user(UserRole::DOCTOR)));
+        $this->assertTrue($this->policy->viewAny($this->user(UserRole::ASSISTANT)));
         $this->assertTrue($this->policy->viewAny($this->user(UserRole::RECEPTIONIST)));
     }
 
@@ -52,9 +53,10 @@ class PatientPolicyTest extends TestCase
         $this->assertFalse($this->policy->view($doctor, $this->patient('tenant-b')));
     }
 
-    public function test_view_medical_history_is_doctor_only(): void
+    public function test_view_medical_history_is_clinical_staff_only(): void
     {
         $this->assertTrue($this->policy->viewMedicalHistory($this->user(UserRole::DOCTOR)));
+        $this->assertTrue($this->policy->viewMedicalHistory($this->user(UserRole::ASSISTANT)));
         $this->assertFalse($this->policy->viewMedicalHistory($this->user(UserRole::RECEPTIONIST)));
     }
 

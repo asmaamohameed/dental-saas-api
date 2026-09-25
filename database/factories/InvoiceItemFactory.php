@@ -4,7 +4,6 @@ namespace Database\Factories;
 
 use App\Models\Invoice;
 use App\Models\InvoiceItem;
-use App\Models\Service;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 /**
@@ -18,7 +17,6 @@ class InvoiceItemFactory extends Factory
     {
         return [
             'invoice_id' => Invoice::factory(),
-            'service_id' => Service::factory(),
             'description' => fake()->sentence(),
             'price' => 250.00,
             'quantity' => 2,

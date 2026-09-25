@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Facades\Storage;
 
 /**
  * @property string $id
@@ -15,6 +16,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property string $subdomain
  * @property string $locale
  * @property TenantStatus $status
+ * @property string|null $logo_path
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  */
@@ -27,6 +29,7 @@ class Tenant extends Model
         'subdomain',
         'locale',
         'status',
+        'logo_path',
     ];
 
     protected function casts(): array
@@ -57,9 +60,9 @@ class Tenant extends Model
         return $this->hasMany(Appointment::class);
     }
 
-    public function services(): HasMany
+    public function treatmentTemplates(): HasMany
     {
-        return $this->hasMany(Service::class);
+        return $this->hasMany(TreatmentTemplate::class);
     }
 
     public function invoices(): HasMany
@@ -80,5 +83,23 @@ class Tenant extends Model
     public function auditLogs(): HasMany
     {
         return $this->hasMany(AuditLog::class);
+    }
+
+    public function logoPublicUrl(): ?string
+    {
+        if (! $this->logo_path) {
+            return null;
+        }
+
+        $publicFile = public_path($this->logo_path);
+        if (is_file($publicFile)) {
+            return url($this->logo_path);
+        }
+
+        if (Storage::disk('public')->exists($this->logo_path)) {
+            return Storage::disk('public')->url($this->logo_path);
+        }
+
+        return null;
     }
 }

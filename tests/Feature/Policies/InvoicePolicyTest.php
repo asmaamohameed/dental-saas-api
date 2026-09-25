@@ -6,7 +6,6 @@ use App\Enums\InvoiceStatus;
 use App\Enums\UserRole;
 use App\Models\Invoice;
 use App\Models\Patient;
-use App\Models\Service;
 use App\Models\Tenant;
 use App\Models\User;
 use App\Support\Tenancy\CurrentTenant;
@@ -44,13 +43,11 @@ class InvoicePolicyTest extends TestCase
 
     private function validItemsPayload(): array
     {
-        $service = Service::factory()->create(['tenant_id' => $this->tenant->id, 'is_other' => false]);
-
         return [
             'items' => [
                 [
-                    'service_id' => $service->id,
                     'price' => 100,
+                    'description' => 'Manual billing line item',
                     'quantity' => 1,
                 ],
             ],

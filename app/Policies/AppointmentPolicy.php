@@ -15,11 +15,9 @@ class AppointmentPolicy
      */
     public function viewAny(User $user): bool
     {
-        return in_array($user->role, [
-            UserRole::OWNER,
-            UserRole::DOCTOR,
-            UserRole::RECEPTIONIST,
-        ]);
+        return $user->role?->isOwner()
+            || $user->role?->isReceptionist()
+            || $user->canAccessClinicalData();
     }
 
     /**
@@ -28,11 +26,9 @@ class AppointmentPolicy
     public function view(User $user, Appointment $appointment): bool
     {
         return $user->tenant_id === $appointment->tenant_id
-            && in_array($user->role, [
-                UserRole::OWNER,
-                UserRole::DOCTOR,
-                UserRole::RECEPTIONIST,
-            ], true);
+            && ($user->role?->isOwner()
+                || $user->role?->isReceptionist()
+                || $user->canAccessClinicalData());
     }
 
     /**

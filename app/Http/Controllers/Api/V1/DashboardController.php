@@ -50,6 +50,14 @@ class DashboardController extends Controller
         return $this->successResponse($data, 'Expense breakdown retrieved successfully.');
     }
 
+    public function componentStock(): JsonResponse
+    {
+        return $this->successResponse(
+            $this->dashboardService->getComponentStock(),
+            'Component stock analytics retrieved successfully.'
+        );
+    }
+
     public function invoiceStatus(Request $request): JsonResponse
     {
         $range = $request->query('range');

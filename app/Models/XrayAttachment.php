@@ -11,7 +11,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class XrayAttachment extends Model
 {
-    use Auditable, BelongsToTenant, HasFactory,HasUuids;
+    use Auditable, BelongsToTenant, HasFactory, HasUuids;
 
     protected $fillable = [
         'patient_id',

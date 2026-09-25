@@ -17,9 +17,8 @@ class StoreExpenseRequest extends FormRequest
     {
         return [
             'category' => ['required', 'string', Rule::enum(ExpenseCategory::class)],
-            'title' => ['required', 'string', 'max:255'],
-            'amount' => ['required', 'numeric', 'min:0.01'],
-            'expense_date' => ['required', 'date'],
+            'title' => ['nullable', 'string', 'max:255'],
+            'amount' => ['required', 'integer', 'min:1'],
             'notes' => ['nullable', 'string', 'max:1000'],
         ];
     }

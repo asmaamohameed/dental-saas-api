@@ -8,5 +8,7 @@ enum ExpenseCategory: string
     case INTERNET = 'internet';
     case RENT = 'rent';
     case WATER = 'water';
+    case SALARY = 'salary';
+    case LAB = 'lab';
     case OTHER = 'other';
 }

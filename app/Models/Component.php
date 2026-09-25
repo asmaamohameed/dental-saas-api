@@ -13,6 +13,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 /**
  * @property-read bool $is_low_stock
+ * @property float|string|null $default_price
  */
 class Component extends Model
 {
@@ -60,6 +61,11 @@ class Component extends Model
     public function templateComponents(): HasMany
     {
         return $this->hasMany(TreatmentTemplateComponent::class);
+    }
+
+    public function movements(): HasMany
+    {
+        return $this->hasMany(ComponentStockMovement::class);
     }
 
     public function scopeActive(Builder $query): Builder

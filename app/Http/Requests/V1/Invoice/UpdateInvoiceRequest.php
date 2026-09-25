@@ -5,7 +5,6 @@ namespace App\Http\Requests\V1\Invoice;
 use App\Enums\InvoiceStatus;
 use App\Models\Appointment;
 use App\Models\PatientTreatment;
-use App\Models\Service;
 use App\Support\Tenancy\CurrentTenant;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -22,7 +21,6 @@ class UpdateInvoiceRequest extends FormRequest
         return [
             'patient_id' => ['sometimes', 'required', 'uuid', Rule::exists('patients', 'id')->where('tenant_id', app(CurrentTenant::class)->id())],
             'items' => ['sometimes', 'required', 'array', 'min:1'],
-            'items.*.service_id' => ['nullable', 'uuid', Rule::exists('services', 'id')->where('tenant_id', app(CurrentTenant::class)->id())],
             'items.*.patient_treatment_id' => ['nullable', 'uuid', Rule::exists('patient_treatments', 'id')->where('tenant_id', app(CurrentTenant::class)->id())],
             'items.*.description' => ['nullable', 'string', 'max:500'],
             'items.*.price' => ['nullable', 'numeric', 'min:0'],
@@ -69,30 +67,26 @@ class UpdateInvoiceRequest extends FormRequest
 
             $items = $this->input('items', []);
             foreach ($items as $index => $item) {
-                if (! empty($item['service_id'])) {
-                    $service = Service::where('tenant_id', $tenantId)->find($item['service_id']);
-                    if ($service && $service->is_other) {
-                        if (empty($item['description'])) {
-                            $validator->errors()->add(
-                                "items.{$index}.description",
-                                'Description is required when selecting the "Other" service.'
-                            );
-                        }
-                        if (! isset($item['price'])) {
-                            $validator->errors()->add(
-                                "items.{$index}.price",
-                                'Price is required when selecting the "Other" service.'
-                            );
-                        }
-                    }
-                }
+                $hasTreatment = ! empty($item['patient_treatment_id']);
 
-                if (! empty($item['patient_treatment_id'])) {
+                if ($hasTreatment) {
                     $treatment = PatientTreatment::where('tenant_id', $tenantId)->find($item['patient_treatment_id']);
                     if ($treatment && $patientId && (string) $treatment->patient_id !== (string) $patientId) {
                         $validator->errors()->add(
                             "items.{$index}.patient_treatment_id",
                             'The selected treatment does not belong to this patient.'
+                        );
+                    }
+                } elseif (! isset($item['price'])) {
+                    $validator->errors()->add("items.{$index}.price", 'Price is required when no treatment is selected.');
+                }
+
+                if (! $hasTreatment) {
+                    $description = trim((string) ($item['description'] ?? ''));
+                    if (mb_strlen($description) < 5) {
+                        $validator->errors()->add(
+                            "items.{$index}.description",
+                            'A note of at least 5 characters is required when no treatment is selected.'
                         );
                     }
                 }

@@ -73,6 +73,17 @@ class PatientMedicalHistoryVisibilityTest extends TestCase
         $response->assertJsonPath('data.notes', 'Anxious during procedures - prefers morning slots');
     }
 
+    public function test_assistant_can_see_medical_history_and_notes(): void
+    {
+        $this->actingAsRole(UserRole::ASSISTANT);
+
+        $response = $this->getJson($this->showPatientUrl());
+
+        $response->assertOk();
+        $response->assertJsonPath('data.medical_history', 'Diabetes type 2, on Metformin');
+        $response->assertJsonPath('data.notes', 'Anxious during procedures - prefers morning slots');
+    }
+
     public function test_receptionist_cannot_see_medical_history_or_notes(): void
     {
         $this->actingAsRole(UserRole::RECEPTIONIST);

@@ -62,4 +62,11 @@ class PaymentPolicyTest extends TestCase
 
         $this->assertFalse($this->policy->delete($receptionist, $payment));
     }
+
+    public function test_view_any_denies_assistant(): void
+    {
+        $assistant = $this->user(UserRole::ASSISTANT, 'tenant-a');
+
+        $this->assertFalse($this->policy->viewAny($assistant, $this->invoice('tenant-a')));
+    }
 }

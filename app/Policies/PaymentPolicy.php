@@ -2,7 +2,6 @@
 
 namespace App\Policies;
 
-use App\Enums\UserRole;
 use App\Models\Invoice;
 use App\Models\Payment;
 use App\Models\User;
@@ -21,25 +20,19 @@ class PaymentPolicy
     public function viewAny(User $user, Invoice $invoice): bool
     {
         return $user->tenant_id === $invoice->tenant_id
-            && in_array($user->role, [
-                UserRole::DOCTOR,
-                UserRole::RECEPTIONIST,
-            ], true);
+            && $user->canManageFinance();
     }
 
     public function view(User $user, Payment $payment): bool
     {
         return $user->tenant_id === $payment->invoice->tenant_id
-            && in_array($user->role, [
-                UserRole::DOCTOR,
-                UserRole::RECEPTIONIST,
-            ], true);
+            && $user->canManageFinance();
     }
 
     public function create(User $user, Invoice $invoice): bool
     {
         return $user->tenant_id === $invoice->tenant_id
-            && $user->role === UserRole::RECEPTIONIST;
+            && $user->role?->isReceptionist();
     }
 
     public function update(User $user, Payment $payment): bool

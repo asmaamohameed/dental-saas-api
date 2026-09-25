@@ -9,9 +9,11 @@ use App\Http\Resources\V1\DoctorResource;
 use App\Http\Resources\V1\StaffResource;
 use App\Models\User;
 use App\Services\UserService;
+use App\Support\WorkingDay;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 
 class UserController extends Controller
 {
@@ -73,9 +75,13 @@ class UserController extends Controller
         );
     }
 
-    public function doctors(): JsonResponse
+    public function doctors(Request $request): JsonResponse
     {
-        $doctors = $this->userService->listDoctors();
+        $validated = $request->validate([
+            'day' => ['sometimes', 'string', Rule::in(WorkingDay::values())],
+        ]);
+
+        $doctors = $this->userService->listDoctors($validated['day'] ?? null);
 
         return $this->successResponse(
             DoctorResource::collection($doctors),

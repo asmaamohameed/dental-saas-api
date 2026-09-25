@@ -3,7 +3,6 @@
 namespace App\Policies;
 
 use App\Enums\InvoiceStatus;
-use App\Enums\UserRole;
 use App\Models\Invoice;
 use App\Models\User;
 
@@ -21,11 +20,11 @@ class InvoicePolicy
     public function updateItems(User $user, Invoice $invoice): bool
     {
 
-        if (! in_array($user->role, [UserRole::OWNER, UserRole::RECEPTIONIST], true)) {
+        if (! $user->role?->isOwner() && ! $user->role?->isReceptionist()) {
             return false;
         }
 
-        if ($user->role === UserRole::RECEPTIONIST && $invoice->status === InvoiceStatus::PARTIAL) {
+        if ($user->role?->isReceptionist() && $invoice->status === InvoiceStatus::PARTIAL) {
             return false;
         }
 

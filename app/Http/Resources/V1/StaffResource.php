@@ -21,6 +21,7 @@ class StaffResource extends JsonResource
             'role' => $this->role->value,
             'is_active' => $this->is_active,
             'locale' => $this->locale,
+            'working_days' => $this->working_days,
             'created_at' => $this->created_at?->toISOString(),
             'updated_at' => $this->updated_at?->toISOString(),
         ];

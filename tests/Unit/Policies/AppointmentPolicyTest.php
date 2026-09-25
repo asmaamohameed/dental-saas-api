@@ -40,10 +40,11 @@ class AppointmentPolicyTest extends TestCase
         return $appointment;
     }
 
-    public function test_view_any_allows_owner_doctor_and_receptionist(): void
+    public function test_view_any_allows_owner_doctor_assistant_and_receptionist(): void
     {
         $this->assertTrue($this->policy->viewAny($this->user(UserRole::OWNER)));
         $this->assertTrue($this->policy->viewAny($this->user(UserRole::DOCTOR)));
+        $this->assertTrue($this->policy->viewAny($this->user(UserRole::ASSISTANT)));
         $this->assertTrue($this->policy->viewAny($this->user(UserRole::RECEPTIONIST)));
     }
 

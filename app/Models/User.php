@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Enums\UserRole;
 use App\Models\Concerns\BelongsToTenant;
+use Illuminate\Database\Eloquent\Builder;
 use App\Notifications\ResetPasswordNotification;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
@@ -17,6 +18,7 @@ use Laravel\Sanctum\HasApiTokens;
 /**
  * @property string|null $tenant_id
  * @property UserRole|null $role
+ * @property list<string>|null $working_days
  * @property-read Tenant|null $tenant
  */
 class User extends Authenticatable
@@ -36,6 +38,7 @@ class User extends Authenticatable
         'password_hash',
         'role',
         'locale',
+        'working_days',
         'is_active',
     ];
 
@@ -68,7 +71,17 @@ class User extends Authenticatable
             'email_verified_at' => 'datetime',
             'is_active' => 'boolean',
             'role' => UserRole::class,
+            'working_days' => 'array',
         ];
+    }
+
+    /**
+     * @param  Builder<User>  $query
+     * @return Builder<User>
+     */
+    public function scopeWorkingOn(Builder $query, string $day): Builder
+    {
+        return $query->whereJsonContains('working_days', $day);
     }
 
     // Relationships
@@ -98,5 +111,15 @@ class User extends Authenticatable
     public function sendPasswordResetNotification($token): void
     {
         $this->notify(new ResetPasswordNotification($token, $this->email));
+    }
+
+    public function canAccessClinicalData(): bool
+    {
+        return in_array($this->role, [UserRole::DOCTOR, UserRole::ASSISTANT], true);
+    }
+
+    public function canManageFinance(): bool
+    {
+        return in_array($this->role, [UserRole::DOCTOR, UserRole::RECEPTIONIST], true);
     }
 }

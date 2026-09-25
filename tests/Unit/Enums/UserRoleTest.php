@@ -28,10 +28,19 @@ class UserRoleTest extends TestCase
         $this->assertTrue(UserRole::RECEPTIONIST->isReceptionist());
     }
 
+    public function test_assistant_role_helpers(): void
+    {
+        $this->assertFalse(UserRole::ASSISTANT->isOwner());
+        $this->assertFalse(UserRole::ASSISTANT->isDoctor());
+        $this->assertTrue(UserRole::ASSISTANT->isAssistant());
+        $this->assertFalse(UserRole::ASSISTANT->isReceptionist());
+    }
+
     public function test_role_string_values(): void
     {
         $this->assertSame('owner', UserRole::OWNER->value);
         $this->assertSame('doctor', UserRole::DOCTOR->value);
+        $this->assertSame('assistant', UserRole::ASSISTANT->value);
         $this->assertSame('receptionist', UserRole::RECEPTIONIST->value);
     }
 }

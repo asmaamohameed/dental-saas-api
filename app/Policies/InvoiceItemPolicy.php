@@ -3,7 +3,6 @@
 namespace App\Policies;
 
 use App\Enums\InvoiceStatus;
-use App\Enums\UserRole;
 use App\Models\Invoice;
 use App\Models\InvoiceItem;
 use App\Models\User;
@@ -27,7 +26,7 @@ class InvoiceItemPolicy
     public function viewAny(User $user, Invoice $invoice): bool
     {
         return $user->tenant_id === $invoice->tenant_id
-            && in_array($user->role, [UserRole::DOCTOR, UserRole::RECEPTIONIST], true);
+            && $user->canManageFinance();
     }
 
     public function create(User $user, Invoice $invoice): bool
@@ -41,7 +40,7 @@ class InvoiceItemPolicy
         }
 
         return $user->tenant_id === $invoice->tenant_id
-            && $user->role === UserRole::RECEPTIONIST
+            && $user->role?->isReceptionist()
             && Gate::forUser($user)->allows('updateItems', $invoice);
     }
 
@@ -56,7 +55,7 @@ class InvoiceItemPolicy
         }
 
         return $user->tenant_id === $invoiceItem->invoice->tenant_id
-            && $user->role === UserRole::RECEPTIONIST
+            && $user->role?->isReceptionist()
             && Gate::forUser($user)->allows('updateItems', $invoiceItem->invoice);
     }
 
@@ -71,7 +70,7 @@ class InvoiceItemPolicy
         }
 
         return $user->tenant_id === $invoiceItem->invoice->tenant_id
-            && $user->role === UserRole::RECEPTIONIST
+            && $user->role?->isReceptionist()
             && Gate::forUser($user)->allows('updateItems', $invoiceItem->invoice);
     }
 }

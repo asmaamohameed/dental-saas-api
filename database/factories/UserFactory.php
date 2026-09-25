@@ -49,4 +49,9 @@ class UserFactory extends Factory
     {
         return $this->state(fn () => ['role' => UserRole::RECEPTIONIST]);
     }
+
+    public function assistant(): static
+    {
+        return $this->state(fn () => ['role' => UserRole::ASSISTANT]);
+    }
 }

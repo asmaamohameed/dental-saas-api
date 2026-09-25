@@ -11,11 +11,18 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Carbon;
 
 /**
+ * @property string $id
+ * @property string $patient_id
+ * @property string $doctor_id
+ * @property Carbon $scheduled_at
+ * @property int $duration_minutes
+ * @property AppointmentStatus $status
+ * @property AppointmentType $appointment_type
  * @property-read Patient|null $patient
  * @property-read User|null $doctor
- * @property AppointmentStatus $status
  */
 class Appointment extends Model
 {
@@ -24,7 +31,6 @@ class Appointment extends Model
     protected $fillable = [
         'patient_id',
         'doctor_id',
-        'patient_treatment_visit_id',
         'created_by',
         'scheduled_at',
         'duration_minutes',
@@ -61,9 +67,9 @@ class Appointment extends Model
         return $this->belongsTo(User::class, 'created_by');
     }
 
-    public function patientTreatmentVisit(): BelongsTo
+    public function treatmentSessions(): HasMany
     {
-        return $this->belongsTo(PatientTreatmentVisit::class);
+        return $this->hasMany(TreatmentSession::class);
     }
 
     public function toothRecords(): HasMany

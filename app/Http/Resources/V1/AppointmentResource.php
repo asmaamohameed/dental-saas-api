@@ -4,8 +4,6 @@ namespace App\Http\Resources\V1;
 
 use App\Models\Appointment;
 use App\Models\Patient;
-use App\Models\PatientTreatment;
-use App\Models\PatientTreatmentVisit;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
@@ -21,7 +19,6 @@ class AppointmentResource extends JsonResource
             'id' => $this->id,
             'patient_id' => $this->patient_id,
             'doctor_id' => $this->doctor_id,
-            'patient_treatment_visit_id' => $this->patient_treatment_visit_id,
             'scheduled_at' => $this->scheduled_at,
             'duration_minutes' => $this->duration_minutes,
             'status' => $this->status,
@@ -52,28 +49,7 @@ class AppointmentResource extends JsonResource
                     'name' => $doctor->name,
                 ];
             }),
-            'patient_treatment_visit' => $this->whenLoaded('patientTreatmentVisit', function () {
-                /**
-                 * @var PatientTreatmentVisit $patientTreatmentVisit
-                 */
-                $patientTreatmentVisit = $this->patientTreatmentVisit;
-                /**
-                 * @var PatientTreatment $treatment
-                 */
-                $treatment = $patientTreatmentVisit->treatment;
-
-                return [
-                    'id' => $patientTreatmentVisit->id,
-                    'name' => $patientTreatmentVisit->name,
-                    'visit_order' => $patientTreatmentVisit->visit_order,
-                    'status' => $patientTreatmentVisit->status,
-                    'treatment' => $patientTreatmentVisit->relationLoaded('treatment') ? [
-                        'id' => $treatment->id,
-                        'tooth_number' => $treatment->tooth_number,
-                        'status' => $treatment->status,
-                    ] : null,
-                ];
-            }),
+            'treatment_sessions' => TreatmentSessionResource::collection($this->whenLoaded('treatmentSessions')),
         ];
     }
 }

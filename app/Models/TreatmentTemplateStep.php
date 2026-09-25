@@ -3,30 +3,42 @@
 namespace App\Models;
 
 use App\Models\Concerns\BelongsToTenant;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
-class TreatmentTemplateVisit extends Model
+/**
+ * @property string $id
+ * @property string $treatment_template_id
+ * @property bool $is_required
+ * @property bool $is_repeatable
+ * @property-read Collection<int, TreatmentTemplateComponent> $components
+ */
+class TreatmentTemplateStep extends Model
 {
     use BelongsToTenant, HasFactory, HasUuids;
 
     protected $fillable = [
         'treatment_template_id',
-        'visit_order',
         'name_ar',
         'name_en',
         'description',
-        'estimated_duration_minutes',
+        'step_order',
+        'is_required',
+        'is_repeatable',
+        'default_duration_minutes',
     ];
 
     protected function casts(): array
     {
         return [
-            'visit_order' => 'integer',
-            'estimated_duration_minutes' => 'integer',
+            'step_order' => 'integer',
+            'is_required' => 'boolean',
+            'is_repeatable' => 'boolean',
+            'default_duration_minutes' => 'integer',
         ];
     }
 

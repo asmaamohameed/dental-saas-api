@@ -66,11 +66,11 @@ class LoadTestSeeder extends Seeder
         |--------------------------------------------------------------------------
         */
 
-        $tenantCount = 5; // Set to 1 for testing, 10 for full run
-        $patientsPerTenant = 1_000;
-        $appointmentsPerTenant = 5_000;
+        $tenantCount = 1; // Set to 1 for testing, 10 for full run
+        $patientsPerTenant = 1_00;
+        $appointmentsPerTenant = 50;
         $servicesPerTenant = 10; // 19 regular + 1 "Other"
-        $chunkSize = 2_000;
+        $chunkSize = 2_0;
         $passwordHash = Hash::make('password');
 
         // Appointment status distribution: 60% completed, 20% scheduled, 10% cancelled, 10% no_show

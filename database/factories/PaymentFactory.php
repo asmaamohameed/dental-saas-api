@@ -19,6 +19,8 @@ class PaymentFactory extends Factory
         return [
             'invoice_id' => Invoice::factory(),
             'amount' => 50,
+            'deduct_amount' => 0,
+            'deduct_reason' => null,
             'paid_at' => now(),
             'method' => 'cash',
             'received_by' => User::factory()->receptionist(),

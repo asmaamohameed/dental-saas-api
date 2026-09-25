@@ -18,6 +18,8 @@ class PaymentResource extends JsonResource
             'id' => $this->id,
             'invoice_id' => $this->invoice_id,
             'amount' => (float) $this->amount,
+            'deduct_amount' => (float) ($this->deduct_amount ?? 0),
+            'deduct_reason' => $this->deduct_reason,
             'paid_at' => $this->paid_at?->toISOString(),
             'method' => $this->method,
             'received_by' => $this->received_by,

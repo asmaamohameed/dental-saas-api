@@ -20,6 +20,13 @@ class AppointmentDoctorAvailable implements ValidationRule
 
     public function validate(string $attribute, mixed $value, Closure $fail): void
     {
+        if ($message = $this->conflictMessage()) {
+            $fail($message);
+        }
+    }
+
+    public function conflictMessage(): ?string
+    {
         $newStart = $this->scheduledAt;
         $newEnd = $this->scheduledAt->copy()->addMinutes($this->durationMinutes);
 
@@ -35,7 +42,9 @@ class AppointmentDoctorAvailable implements ValidationRule
             ->exists();
 
         if ($exists) {
-            $fail('This doctor already has an appointment during this time slot.');
+            return 'This doctor already has an appointment during this time slot.';
         }
+
+        return null;
     }
 }

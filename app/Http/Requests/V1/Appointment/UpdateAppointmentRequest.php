@@ -5,6 +5,7 @@ namespace App\Http\Requests\V1\Appointment;
 use App\Enums\AppointmentType;
 use App\Enums\UserRole;
 use App\Rules\AppointmentDoctorAvailable;
+use App\Rules\AppointmentPatientAvailable;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Support\Carbon;
 use Illuminate\Translation\PotentiallyTranslatedString;
@@ -33,11 +34,10 @@ class UpdateAppointmentRequest extends FormRequest
                         ->where('tenant_id', $this->user()->tenant_id);
                 }),
             ],
-            'patient_treatment_visit_id' => [
-                'sometimes',
-                'nullable',
+            'patient_treatment_ids' => ['sometimes', 'array'],
+            'patient_treatment_ids.*' => [
                 'uuid',
-                Rule::exists('patient_treatment_visits', 'id')->where(function ($query) {
+                Rule::exists('patient_treatments', 'id')->where(function ($query) {
                     $query->where('tenant_id', $this->user()->tenant_id);
                 }),
             ],
@@ -63,14 +63,15 @@ class UpdateAppointmentRequest extends FormRequest
                 $validator->errors()->add('scheduled_at', 'The scheduled time must be in the future.');
             }
 
-            if ($validator->errors()->has('scheduled_at') || $validator->errors()->has('doctor_id') || $validator->errors()->has('duration_minutes')) {
+            if ($validator->errors()->has('scheduled_at') || $validator->errors()->has('doctor_id') || $validator->errors()->has('patient_id') || $validator->errors()->has('duration_minutes')) {
                 return;
             }
 
             $doctorId = $this->input('doctor_id', $appointment->doctor_id);
+            $patientId = $this->input('patient_id', $appointment->patient_id);
             $duration = (int) $this->input('duration_minutes', $appointment->duration_minutes);
 
-            $rule = new AppointmentDoctorAvailable(
+            $doctorRule = new AppointmentDoctorAvailable(
                 tenantId: $this->user()->tenant_id,
                 doctorId: $doctorId,
                 scheduledAt: $newScheduledAt,
@@ -78,8 +79,22 @@ class UpdateAppointmentRequest extends FormRequest
                 ignoreAppointmentId: $appointment->id,
             );
 
-            $rule->validate('doctor_id', null, function (string $message, ?string $translate = null) use ($validator): PotentiallyTranslatedString {
-                $validator->errors()->add('doctor_id', $message);
+            if ($doctorConflictMessage = $doctorRule->conflictMessage()) {
+                $validator->errors()->add('doctor_id', $doctorConflictMessage);
+
+                return;
+            }
+
+            $patientRule = new AppointmentPatientAvailable(
+                tenantId: $this->user()->tenant_id,
+                patientId: $patientId,
+                scheduledAt: $newScheduledAt,
+                durationMinutes: $duration,
+                ignoreAppointmentId: $appointment->id,
+            );
+
+            $patientRule->validate('patient_id', null, function (string $message, ?string $translate = null) use ($validator): PotentiallyTranslatedString {
+                $validator->errors()->add('patient_id', $message);
 
                 return new PotentiallyTranslatedString($message, app('translator'));
             });

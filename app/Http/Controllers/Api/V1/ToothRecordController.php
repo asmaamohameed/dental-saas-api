@@ -7,6 +7,7 @@ use App\Http\Requests\V1\ToothRecord\StoreToothRecordRequest;
 use App\Http\Resources\V1\ToothRecordResource;
 use App\Models\Patient;
 use App\Models\ToothRecord;
+use App\Services\PatientTreatmentService;
 use App\Traits\ApiResponse;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\Request;
@@ -14,6 +15,8 @@ use Illuminate\Http\Request;
 class ToothRecordController extends Controller
 {
     use ApiResponse, AuthorizesRequests;
+
+    public function __construct(private readonly PatientTreatmentService $patientTreatmentService) {}
 
     public function index(Request $request, Patient $patient)
     {
@@ -57,6 +60,9 @@ class ToothRecordController extends Controller
 
         $records = ToothRecord::latestPerTooth($patient->id);
 
-        return $this->successResponse(ToothRecordResource::collection($records));
+        return $this->successResponse([
+            'records' => ToothRecordResource::collection($records),
+            'treatment_status_by_tooth' => $this->patientTreatmentService->toothStatusMap($patient->id),
+        ]);
     }
 }

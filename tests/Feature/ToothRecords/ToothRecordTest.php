@@ -73,8 +73,10 @@ class ToothRecordTest extends TestCase
 
         $response = $this->getJson("/api/v1/patients/{$patient->id}/odontogram")->assertOk();
 
-        $records = collect($response->json('data'));
+        $payload = $response->json('data');
+        $records = collect($payload['records'] ?? []);
 
+        $this->assertArrayHasKey('treatment_status_by_tooth', $payload);
         $this->assertCount(1, $records->where('tooth_number', 11));
         $this->assertSame('filled', $records->firstWhere('tooth_number', 11)['condition']);
     }

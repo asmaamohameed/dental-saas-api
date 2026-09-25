@@ -2,19 +2,11 @@
 
 namespace App\Http\Resources\V1;
 
-use App\Models\Patient;
 use App\Models\PatientTreatment;
-use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
-use Illuminate\Support\Carbon;
 
-/**
- * @mixin PatientTreatment
- *
- * @property Carbon|null $started_at
- * @property Carbon|null $completed_at
- */
+/** @mixin PatientTreatment */
 class PatientTreatmentResource extends JsonResource
 {
     public function toArray(Request $request): array
@@ -22,41 +14,55 @@ class PatientTreatmentResource extends JsonResource
         return [
             'id' => $this->id,
             'patient_id' => $this->patient_id,
+            'treatment_plan_id' => $this->treatment_plan_id,
             'treatment_template_id' => $this->treatment_template_id,
-            'doctor_id' => $this->doctor_id,
-            'tooth_number' => $this->tooth_number,
+            'treatment_template_version' => (int) $this->treatment_template_version,
+            'agreed_price' => (float) $this->agreed_price,
+            'clinical_status' => $this->clinical_status,
+            'status' => $this->clinical_status,
+            'cancellation_reason' => $this->cancellation_reason,
+            'financial_status' => $this->financial_status,
+            'consent_status' => $this->consent_status,
+            'consent_document_ref' => $this->consent_document_ref,
+            'parent_treatment_id' => $this->parent_treatment_id,
+            'treatment_type' => $this->treatment_type,
+            'dentist_id' => $this->dentist_id,
+            'doctor_id' => $this->dentist_id,
             'diagnosis' => $this->diagnosis,
-            'status' => $this->status,
             'priority' => $this->priority,
-            'total_visits' => (int) ($this->total_visits ?: ($this->relationLoaded('visits') ? count($this->visits) : 1)),
-            'actual_price' => (float) $this->actual_price,
             'notes' => $this->notes,
             'started_at' => $this->started_at?->toISOString(),
             'completed_at' => $this->completed_at?->toISOString(),
+            'cancelled_at' => $this->cancelled_at?->toISOString(),
             'created_by' => $this->created_by,
-            'patient' => $this->whenLoaded('patient', function () {
-                /** @var Patient|null $patient */
-                $patient = $this->patient;
-
-                return [
-                    'id' => $patient?->id,
-                    'full_name' => $patient?->full_name,
-                    'phone' => $patient?->phone,
-                ];
-            }),
+            'tooth_numbers' => $this->whenLoaded('teeth', fn () => $this->teeth->pluck('tooth_number')->values()->all()),
+            'invoice_id' => $this->whenLoaded('invoiceItems', fn () => $this->invoiceItems->sortByDesc('created_at')->first()?->invoice_id),
+            'patient' => $this->whenLoaded('patient', fn () => [
+                'id' => $this->patient->id,
+                'full_name' => $this->patient->full_name,
+                'phone' => $this->patient->phone,
+            ]),
+            'plan' => $this->whenLoaded('plan', fn () => $this->plan ? [
+                'id' => $this->plan->id,
+                'title' => $this->plan->title,
+                'status' => $this->plan->status,
+            ] : null),
             'template' => new TreatmentTemplateResource($this->whenLoaded('template')),
-            'doctor' => $this->whenLoaded('doctor', function () {
-                /** @var User|null $doctor */
-                $doctor = $this->doctor;
-
-                return [
-                    'id' => $doctor?->id,
-                    'name' => $doctor?->name,
-                ];
-            }),
-            'visits' => PatientTreatmentVisitResource::collection($this->whenLoaded('visits')),
-            'created_at' => $this->created_at?->toISOString(),
-            'updated_at' => $this->updated_at?->toISOString(),
+            'dentist' => $this->whenLoaded('dentist', fn () => $this->dentist ? [
+                'id' => $this->dentist->id,
+                'name' => $this->dentist->name,
+            ] : null),
+            'doctor' => $this->whenLoaded('dentist', fn () => $this->dentist ? [
+                'id' => $this->dentist->id,
+                'name' => $this->dentist->name,
+            ] : null),
+            'parent_treatment' => $this->whenLoaded('parentTreatment', fn () => $this->parentTreatment ? [
+                'id' => $this->parentTreatment->id,
+                'clinical_status' => $this->parentTreatment->clinical_status,
+            ] : null),
+            'sessions' => TreatmentSessionResource::collection($this->whenLoaded('sessions')),
+            'created_at' => $this->created_at->toISOString(),
+            'updated_at' => $this->updated_at->toISOString(),
         ];
     }
 }

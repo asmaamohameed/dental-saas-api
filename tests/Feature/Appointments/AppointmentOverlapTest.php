@@ -129,12 +129,53 @@ class AppointmentOverlapTest extends TestCase
             ->assertJsonValidationErrors(['doctor_id']);
     }
 
-    public function test_can_book_the_same_slot_with_a_different_doctor(): void
+    public function test_cannot_book_the_same_slot_with_a_different_doctor_for_the_same_patient(): void
     {
         $this->makeAppointment([
             'doctor_id' => $this->doctor->id,
             'scheduled_at' => Carbon::parse('2026-10-05 09:00:00'),
             'duration_minutes' => 30,
+        ]);
+
+        $response = $this->postJson('/api/v1/appointments', [
+            'patient_id' => $this->patient->id,
+            'doctor_id' => $this->otherDoctor->id,
+            'scheduled_at' => '2026-10-05 09:00:00',
+            'duration_minutes' => 30,
+        ]);
+
+        $response->assertStatus(422)
+            ->assertJsonValidationErrors(['patient_id']);
+    }
+
+    public function test_can_book_the_same_slot_with_a_different_doctor_for_a_different_patient(): void
+    {
+        $otherPatient = Patient::factory()->create([
+            'tenant_id' => $this->tenant->id,
+        ]);
+
+        $this->makeAppointment([
+            'doctor_id' => $this->doctor->id,
+            'scheduled_at' => Carbon::parse('2026-10-05 09:00:00'),
+            'duration_minutes' => 30,
+        ]);
+
+        $response = $this->postJson('/api/v1/appointments', [
+            'patient_id' => $otherPatient->id,
+            'doctor_id' => $this->otherDoctor->id,
+            'scheduled_at' => '2026-10-05 09:00:00',
+            'duration_minutes' => 30,
+        ]);
+
+        $response->assertStatus(201);
+    }
+
+    public function test_a_cancelled_appointment_does_not_block_the_same_patient_slot(): void
+    {
+        $this->makeAppointment([
+            'scheduled_at' => Carbon::parse('2026-10-05 09:00:00'),
+            'duration_minutes' => 30,
+            'status' => AppointmentStatus::CANCELLED,
         ]);
 
         $response = $this->postJson('/api/v1/appointments', [

@@ -69,11 +69,17 @@ class Invoice extends Model
         return $this->belongsTo(User::class, 'created_by');
     }
 
+    /**
+     * @return HasMany<InvoiceItem, $this>
+     */
     public function items(): HasMany
     {
         return $this->hasMany(InvoiceItem::class);
     }
 
+    /**
+     * @return HasMany<Payment, $this>
+     */
     public function payments(): HasMany
     {
         return $this->hasMany(Payment::class);
@@ -82,15 +88,52 @@ class Invoice extends Model
     // Computed Attributes
     public function getRemainingAmountAttribute(): float
     {
+        $applied = $this->appliedCredits();
+
+        return max(0, (float) $this->total_amount - $applied);
+    }
+
+    public function appliedCredits(): float
+    {
         if ($this->relationLoaded('payments')) {
-            $paid = (float) $this->payments->sum('amount');
-        } elseif (array_key_exists('paid_amount', $this->attributes)) {
-            $paid = (float) $this->attributes['paid_amount'];
-        } else {
-            $paid = (float) $this->payments()->sum('amount');
+            return (float) $this->payments->sum(function (Payment $payment) {
+                return (float) $payment->amount + (float) ($payment->deduct_amount ?? 0);
+            });
         }
 
-        return max(0, (float) $this->total_amount - $paid);
+        if (array_key_exists('paid_amount', $this->attributes)) {
+            return (float) $this->attributes['paid_amount']
+                + (float) ($this->attributes['deducted_amount'] ?? 0);
+        }
+
+        return (float) $this->payments()->sum('amount')
+            + (float) $this->payments()->sum('deduct_amount');
+    }
+
+    public function paidAmount(): float
+    {
+        if ($this->relationLoaded('payments')) {
+            return (float) $this->payments->sum('amount');
+        }
+
+        if (array_key_exists('paid_amount', $this->attributes)) {
+            return (float) $this->attributes['paid_amount'];
+        }
+
+        return (float) $this->payments()->sum('amount');
+    }
+
+    public function deductedAmount(): float
+    {
+        if ($this->relationLoaded('payments')) {
+            return (float) $this->payments->sum(fn (Payment $payment) => (float) ($payment->deduct_amount ?? 0));
+        }
+
+        if (array_key_exists('deducted_amount', $this->attributes)) {
+            return (float) $this->attributes['deducted_amount'];
+        }
+
+        return (float) $this->payments()->sum('deduct_amount');
     }
 
     // Scopes

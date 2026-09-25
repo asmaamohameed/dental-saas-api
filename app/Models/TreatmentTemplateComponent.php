@@ -8,12 +8,19 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
+/**
+ * @property string $component_id
+ * @property string $quantity
+ * @property string $free_quantity
+ * @property string $unit_price
+ * @property-read Component|null $component
+ */
 class TreatmentTemplateComponent extends Model
 {
     use BelongsToTenant, HasFactory, HasUuids;
 
     protected $fillable = [
-        'treatment_template_visit_id',
+        'treatment_template_step_id',
         'component_id',
         'quantity',
         'free_quantity',
@@ -29,11 +36,17 @@ class TreatmentTemplateComponent extends Model
         ];
     }
 
-    public function visit(): BelongsTo
+    /**
+     * @return BelongsTo<TreatmentTemplateStep, $this>
+     */
+    public function step(): BelongsTo
     {
-        return $this->belongsTo(TreatmentTemplateVisit::class, 'treatment_template_visit_id');
+        return $this->belongsTo(TreatmentTemplateStep::class, 'treatment_template_step_id');
     }
 
+    /**
+     * @return BelongsTo<Component, $this>
+     */
     public function component(): BelongsTo
     {
         return $this->belongsTo(Component::class);

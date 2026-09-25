@@ -129,6 +129,7 @@ Table invoice_items {
   id uuid [pk]
   invoice_id uuid [ref: > invoices.id]
   service_id uuid [ref: > services.id, not null, note: 'NOT NULL - يشير لصف Other للحالات النادرة']
+  patient_treatment_id uuid [ref: > patient_treatments.id, note: 'nullable - بند السعر المتفق عليه']
   description varchar [note: 'الوصف الفعلي - إلزامي عمليًا عند استخدام Other']
   price decimal
   quantity int
@@ -180,4 +181,180 @@ Table xray_attachments {
   indexes {
     (tenant_id, patient_id) [name: 'idx_xray_tenant_patient']
   }
+}
+
+Table inventory_items {
+  id uuid [pk]
+  tenant_id uuid [ref: > tenants.id]
+  name varchar
+  unit varchar
+  current_quantity decimal
+  minimum_threshold decimal
+  is_active boolean
+}
+
+Table components {
+  id uuid [pk]
+  tenant_id uuid [ref: > tenants.id]
+  name_ar varchar
+  name_en varchar
+  default_price decimal
+  unit varchar
+  current_quantity decimal
+  minimum_threshold decimal
+  inventory_item_id uuid [ref: > inventory_items.id]
+  is_active boolean
+
+  indexes {
+    (tenant_id, is_active) [name: 'idx_components_tenant_active']
+  }
+}
+
+Table treatment_templates {
+  id uuid [pk]
+  tenant_id uuid [ref: > tenants.id]
+  name_ar varchar
+  name_en varchar
+  category varchar [note: 'medical, preventive, cosmetic, orthodontic, surgical, other']
+  description text
+  default_price decimal
+  estimated_duration_minutes int
+  visit_type varchar [note: 'مشتق من عدد الخطوات: single_visit / multiple_visit']
+  is_active boolean
+  version int [default: 1]
+  is_current boolean [default: true]
+  root_template_id uuid [ref: > treatment_templates.id]
+  previous_version_id uuid [ref: > treatment_templates.id]
+  created_at timestamp
+
+  indexes {
+    (tenant_id, root_template_id, is_current) [name: 'idx_templates_current']
+    (tenant_id, root_template_id, version) [unique]
+  }
+
+  Note: 'التعديل لا يحدث في مكانه - ينشئ version+1 ويترك العلاجات القديمة على النسخة السابقة'
+}
+
+Table treatment_template_steps {
+  id uuid [pk]
+  tenant_id uuid [ref: > tenants.id]
+  treatment_template_id uuid [ref: > treatment_templates.id]
+  name_ar varchar
+  name_en varchar
+  description text
+  step_order int
+  is_optional boolean
+  is_repeatable boolean
+  default_duration_minutes int
+}
+
+Table treatment_template_components {
+  id uuid [pk]
+  tenant_id uuid [ref: > tenants.id]
+  treatment_template_step_id uuid [ref: > treatment_template_steps.id]
+  component_id uuid [ref: > components.id]
+  quantity decimal
+  free_quantity decimal
+  unit_price decimal
+}
+
+Table treatment_plans {
+  id uuid [pk]
+  tenant_id uuid [ref: > tenants.id]
+  patient_id uuid [ref: > patients.id]
+  title varchar
+  status varchar [note: 'draft, active, completed, cancelled']
+  created_at timestamp
+
+  indexes {
+    (tenant_id, patient_id) [name: 'idx_plans_tenant_patient']
+  }
+}
+
+Table patient_treatments {
+  id uuid [pk]
+  tenant_id uuid [ref: > tenants.id]
+  patient_id uuid [ref: > patients.id]
+  treatment_plan_id uuid [ref: > treatment_plans.id]
+  treatment_template_id uuid [ref: > treatment_templates.id]
+  treatment_template_version int
+  agreed_price decimal
+  clinical_status varchar [note: 'planned, in_progress, on_hold, completed, cancelled, failed']
+  cancellation_reason text
+  financial_status varchar [note: 'unpaid, partial, paid']
+  consent_status varchar [note: 'not_required, pending, obtained, declined']
+  consent_document_ref varchar
+  parent_treatment_id uuid [ref: > patient_treatments.id]
+  treatment_type varchar [note: 'original, retreatment']
+  dentist_id uuid [ref: > users.id]
+  diagnosis text
+  priority varchar
+  notes text
+  started_at timestamp
+  completed_at timestamp
+  cancelled_at timestamp
+  created_by uuid [ref: > users.id]
+  created_at timestamp
+
+  indexes {
+    (tenant_id, clinical_status) [name: 'idx_pt_clinical']
+    (tenant_id, financial_status) [name: 'idx_pt_financial']
+  }
+
+  Note: 'الحالات السريرية والمالية والموافقة مستقلة. فاتورة واحدة ببند agreed_price عند الإنشاء'
+}
+
+Table patient_treatment_teeth {
+  id uuid [pk]
+  tenant_id uuid [ref: > tenants.id]
+  patient_treatment_id uuid [ref: > patient_treatments.id]
+  tooth_number varchar [note: 'FDI']
+  created_at timestamp
+
+  indexes {
+    (patient_treatment_id, tooth_number) [unique]
+  }
+}
+
+Table treatment_sessions {
+  id uuid [pk]
+  tenant_id uuid [ref: > tenants.id]
+  patient_treatment_id uuid [ref: > patient_treatments.id]
+  appointment_id uuid [ref: > appointments.id]
+  dentist_id uuid [ref: > users.id]
+  session_date timestamp
+  status varchar [note: 'scheduled, completed, cancelled, no_show']
+  notes text
+  stock_applied boolean
+  created_at timestamp
+
+  indexes {
+    (tenant_id, patient_treatment_id) [name: 'idx_sessions_treatment']
+    (tenant_id, appointment_id) [name: 'idx_sessions_appointment']
+  }
+}
+
+Table treatment_session_steps {
+  id uuid [pk]
+  tenant_id uuid [ref: > tenants.id]
+  treatment_session_id uuid [ref: > treatment_sessions.id]
+  treatment_template_step_id uuid [ref: > treatment_template_steps.id]
+  custom_step_name varchar
+  custom_step_description text
+  occurrence_number int
+  status varchar [note: 'done, skipped']
+  notes text
+}
+
+Table patient_treatment_components {
+  id uuid [pk]
+  tenant_id uuid [ref: > tenants.id]
+  treatment_session_id uuid [ref: > treatment_sessions.id]
+  component_id uuid [ref: > components.id]
+  name varchar
+  unit_price decimal
+  quantity decimal
+  free_quantity decimal
+  unit varchar
+  inventory_item_id uuid [ref: > inventory_items.id]
 }

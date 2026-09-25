@@ -48,7 +48,11 @@ class InvoiceService
             $query->dateRange($filters['date_from'] ?? null, $filters['date_to'] ?? null);
         }
 
-        return $query->latest()->paginate($perPage);
+        if (! empty($filters['search'])) {
+            $query->search($filters['search']);
+        }
+
+        return $query->newestFirst()->paginate($perPage);
     }
 
     public function create(array $data, string $userId): Invoice

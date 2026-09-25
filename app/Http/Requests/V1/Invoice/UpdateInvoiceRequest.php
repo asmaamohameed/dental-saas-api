@@ -69,7 +69,10 @@ class UpdateInvoiceRequest extends FormRequest
 
             $items = $this->input('items', []);
             foreach ($items as $index => $item) {
-                if (! empty($item['service_id'])) {
+                $hasService = ! empty($item['service_id']);
+                $hasTreatment = ! empty($item['patient_treatment_id']);
+
+                if ($hasService) {
                     $service = Service::where('tenant_id', $tenantId)->find($item['service_id']);
                     if ($service && $service->is_other) {
                         if (empty($item['description'])) {
@@ -87,12 +90,22 @@ class UpdateInvoiceRequest extends FormRequest
                     }
                 }
 
-                if (! empty($item['patient_treatment_id'])) {
+                if ($hasTreatment) {
                     $treatment = PatientTreatment::where('tenant_id', $tenantId)->find($item['patient_treatment_id']);
                     if ($treatment && $patientId && (string) $treatment->patient_id !== (string) $patientId) {
                         $validator->errors()->add(
                             "items.{$index}.patient_treatment_id",
                             'The selected treatment does not belong to this patient.'
+                        );
+                    }
+                }
+
+                if (! $hasTreatment && ! $hasService) {
+                    $description = trim((string) ($item['description'] ?? ''));
+                    if (mb_strlen($description) < 5) {
+                        $validator->errors()->add(
+                            "items.{$index}.description",
+                            'A note of at least 5 characters is required when no treatment is selected.'
                         );
                     }
                 }

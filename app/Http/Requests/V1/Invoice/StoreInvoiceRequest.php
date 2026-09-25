@@ -71,8 +71,14 @@ class StoreInvoiceRequest extends FormRequest
                     $validator->errors()->add("items.{$index}.price", 'Price is required when no treatment is selected.');
                 }
 
-                if (! $hasTreatment && ! $hasService && empty(trim((string) ($item['description'] ?? '')))) {
-                    $validator->errors()->add("items.{$index}.description", 'Description is required when no treatment is selected.');
+                if (! $hasTreatment && ! $hasService) {
+                    $description = trim((string) ($item['description'] ?? ''));
+                    if (mb_strlen($description) < 5) {
+                        $validator->errors()->add(
+                            "items.{$index}.description",
+                            'A note of at least 5 characters is required when no treatment is selected.'
+                        );
+                    }
                 }
             }
         });

@@ -93,6 +93,17 @@ class InvoicePriceValidationTest extends TestCase
         ])->assertStatus(422)->assertJsonValidationErrors(['items.0.description']);
     }
 
+    public function test_store_rejects_short_note_when_no_treatment_is_selected(): void
+    {
+        $this->actingAsRole(UserRole::RECEPTIONIST);
+        $patient = Patient::factory()->create();
+
+        $this->postJson('/api/v1/invoices', [
+            'patient_id' => $patient->id,
+            'items' => [['price' => 50, 'description' => 'abc', 'quantity' => 1]],
+        ])->assertStatus(422)->assertJsonValidationErrors(['items.0.description']);
+    }
+
     public function test_store_accepts_amount_only_line_with_description(): void
     {
         $this->actingAsRole(UserRole::RECEPTIONIST);

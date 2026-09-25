@@ -41,6 +41,18 @@ class InvoiceControllerTest extends TestCase
         $this->assertCount(3, $response->json('data.items'));
     }
 
+    public function test_index_orders_invoices_newest_first(): void
+    {
+        $this->actingAsRole(UserRole::RECEPTIONIST);
+        $older = Invoice::factory()->create(['created_at' => now()->subDays(2)]);
+        $newer = Invoice::factory()->create(['created_at' => now()->subDay()]);
+
+        $items = $this->getJson('/api/v1/invoices')->assertOk()->json('data.items');
+
+        $this->assertSame($newer->id, $items[0]['id']);
+        $this->assertSame($older->id, $items[1]['id']);
+    }
+
     public function test_index_filters_by_status(): void
     {
         $this->actingAsRole(UserRole::RECEPTIONIST);
@@ -62,6 +74,22 @@ class InvoiceControllerTest extends TestCase
         $response = $this->getJson("/api/v1/invoices?patient_id={$patient->id}")->assertOk();
 
         $this->assertCount(1, $response->json('data.items'));
+    }
+
+    public function test_index_filters_by_search(): void
+    {
+        $this->actingAsRole(UserRole::RECEPTIONIST);
+        $patient = Patient::factory()->create(['full_name' => 'Unique Patient Alpha']);
+        $invoice = Invoice::factory()->create(['patient_id' => $patient->id]);
+        Invoice::factory()->create();
+
+        $byPatient = $this->getJson('/api/v1/invoices?search=Unique+Patient')->assertOk();
+        $this->assertCount(1, $byPatient->json('data.items'));
+        $this->assertSame($invoice->id, $byPatient->json('data.items.0.id'));
+
+        $byId = $this->getJson("/api/v1/invoices?search={$invoice->id}")->assertOk();
+        $this->assertCount(1, $byId->json('data.items'));
+        $this->assertSame($invoice->id, $byId->json('data.items.0.id'));
     }
 
     public function test_index_does_not_return_another_tenants_invoices(): void

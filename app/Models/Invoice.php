@@ -137,6 +137,15 @@ class Invoice extends Model
     }
 
     // Scopes
+    public function scopeNewestFirst(Builder $query): Builder
+    {
+        $table = $query->getModel()->getTable();
+
+        return $query
+            ->orderByDesc("{$table}.created_at")
+            ->orderByDesc("{$table}.id");
+    }
+
     public function scopeByStatus(Builder $query, string $status): Builder
     {
         return $query->where('status', $status);
@@ -157,5 +166,17 @@ class Invoice extends Model
         }
 
         return $query;
+    }
+
+    public function scopeSearch(Builder $query, string $search): Builder
+    {
+        $escapedSearch = addcslashes($search, '%_\\');
+
+        return $query->where(function (Builder $q) use ($escapedSearch) {
+            $q->where('id', 'LIKE', "%{$escapedSearch}%")
+                ->orWhereHas('patient', function (Builder $patientQuery) use ($escapedSearch) {
+                    $patientQuery->where('full_name', 'LIKE', "%{$escapedSearch}%");
+                });
+        });
     }
 }

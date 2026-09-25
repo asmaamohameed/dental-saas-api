@@ -5,6 +5,7 @@ namespace App\Http\Requests\V1\Appointment;
 use App\Enums\AppointmentType;
 use App\Enums\UserRole;
 use App\Rules\AppointmentDoctorAvailable;
+use App\Rules\AppointmentPatientAvailable;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Support\Carbon;
 use Illuminate\Translation\PotentiallyTranslatedString;
@@ -54,19 +55,35 @@ class StoreAppointmentRequest extends FormRequest
                 $validator->errors()->add('scheduled_at', 'The scheduled time must be in the future.');
             }
 
-            if ($validator->errors()->has('doctor_id') || $validator->errors()->has('scheduled_at') || $validator->errors()->has('duration_minutes')) {
+            if ($validator->errors()->has('doctor_id') || $validator->errors()->has('patient_id') || $validator->errors()->has('scheduled_at') || $validator->errors()->has('duration_minutes')) {
                 return;
             }
 
-            $rule = new AppointmentDoctorAvailable(
+            $scheduledAt = Carbon::parse($this->input('scheduled_at'));
+            $durationMinutes = (int) $this->input('duration_minutes');
+
+            $doctorRule = new AppointmentDoctorAvailable(
                 tenantId: $this->user()->tenant_id,
                 doctorId: $this->input('doctor_id'),
-                scheduledAt: Carbon::parse($this->input('scheduled_at')),
-                durationMinutes: (int) $this->input('duration_minutes'),
+                scheduledAt: $scheduledAt,
+                durationMinutes: $durationMinutes,
             );
 
-            $rule->validate('doctor_id', null, function (string $message, ?string $translate = null) use ($validator): PotentiallyTranslatedString {
-                $validator->errors()->add('doctor_id', $message);
+            if ($doctorConflictMessage = $doctorRule->conflictMessage()) {
+                $validator->errors()->add('doctor_id', $doctorConflictMessage);
+
+                return;
+            }
+
+            $patientRule = new AppointmentPatientAvailable(
+                tenantId: $this->user()->tenant_id,
+                patientId: $this->input('patient_id'),
+                scheduledAt: $scheduledAt,
+                durationMinutes: $durationMinutes,
+            );
+
+            $patientRule->validate('patient_id', null, function (string $message, ?string $translate = null) use ($validator): PotentiallyTranslatedString {
+                $validator->errors()->add('patient_id', $message);
 
                 return new PotentiallyTranslatedString($message, app('translator'));
             });

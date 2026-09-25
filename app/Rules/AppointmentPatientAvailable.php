@@ -8,11 +8,11 @@ use Closure;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Support\Carbon;
 
-class AppointmentDoctorAvailable implements ValidationRule
+class AppointmentPatientAvailable implements ValidationRule
 {
     public function __construct(
         protected string $tenantId,
-        protected string $doctorId,
+        protected string $patientId,
         protected Carbon $scheduledAt,
         protected int $durationMinutes,
         protected ?string $ignoreAppointmentId = null,
@@ -20,19 +20,12 @@ class AppointmentDoctorAvailable implements ValidationRule
 
     public function validate(string $attribute, mixed $value, Closure $fail): void
     {
-        if ($message = $this->conflictMessage()) {
-            $fail($message);
-        }
-    }
-
-    public function conflictMessage(): ?string
-    {
         $newStart = $this->scheduledAt;
         $newEnd = $this->scheduledAt->copy()->addMinutes($this->durationMinutes);
 
         $exists = Appointment::query()
             ->where('tenant_id', $this->tenantId)
-            ->where('doctor_id', $this->doctorId)
+            ->where('patient_id', $this->patientId)
             ->where('status', '!=', AppointmentStatus::CANCELLED)
             ->when($this->ignoreAppointmentId, fn ($q) => $q->where('id', '!=', $this->ignoreAppointmentId))
             ->whereRaw(
@@ -42,9 +35,7 @@ class AppointmentDoctorAvailable implements ValidationRule
             ->exists();
 
         if ($exists) {
-            return 'This doctor already has an appointment during this time slot.';
+            $fail('This patient already has an appointment during this time slot.');
         }
-
-        return null;
     }
 }

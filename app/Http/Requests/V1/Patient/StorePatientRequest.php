@@ -2,8 +2,10 @@
 
 namespace App\Http\Requests\V1\Patient;
 
+use App\Support\Tenancy\CurrentTenant;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
 class StorePatientRequest extends FormRequest
 {
@@ -24,7 +26,11 @@ class StorePatientRequest extends FormRequest
     {
         return [
             'full_name' => ['required', 'string', 'max:255'],
-            'phone' => ['required', 'string'],
+            'phone' => [
+                'required',
+                'string',
+                Rule::unique('patients', 'phone')->where('tenant_id', app(CurrentTenant::class)->id()),
+            ],
             'date_of_birth' => ['nullable', 'date'],
             'gender' => ['nullable', 'in:male,female'],
             'medical_history' => ['nullable', 'array'],

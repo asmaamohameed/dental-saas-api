@@ -7,7 +7,25 @@ use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Carbon;
 
+/**
+ * @property string $id
+ * @property string $tenant_id
+ * @property string $treatment_session_id
+ * @property string|null $component_id
+ * @property string $name
+ * @property string $unit_price
+ * @property string $quantity
+ * @property string $free_quantity
+ * @property string $unit
+ * @property string|null $inventory_item_id
+ * @property Carbon|null $created_at
+ * @property Carbon|null $updated_at
+ * @property-read TreatmentSession $session
+ * @property-read Component|null $component
+ * @property-read InventoryItem|null $inventoryItem
+ */
 class PatientTreatmentComponent extends Model
 {
     use BelongsToTenant, HasFactory, HasUuids;
@@ -32,6 +50,9 @@ class PatientTreatmentComponent extends Model
         ];
     }
 
+    /**
+     * @return BelongsTo<TreatmentSession, $this>
+     */
     public function session(): BelongsTo
     {
         return $this->belongsTo(TreatmentSession::class, 'treatment_session_id');
@@ -45,6 +66,9 @@ class PatientTreatmentComponent extends Model
         return $this->belongsTo(Component::class);
     }
 
+    /**
+     * @return BelongsTo<InventoryItem, $this>
+     */
     public function inventoryItem(): BelongsTo
     {
         return $this->belongsTo(InventoryItem::class);

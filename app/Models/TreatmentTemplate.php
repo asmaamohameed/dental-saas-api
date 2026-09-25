@@ -6,12 +6,19 @@ use App\Enums\TreatmentCategory;
 use App\Enums\TreatmentVisitType;
 use App\Models\Concerns\BelongsToTenant;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
+/**
+ * @property string $id
+ * @property string $default_price
+ * @property TreatmentVisitType $visit_type
+ * @property-read Collection<int, TreatmentTemplateStep> $steps
+ */
 class TreatmentTemplate extends Model
 {
     use BelongsToTenant, HasFactory, HasUuids;
@@ -53,26 +60,41 @@ class TreatmentTemplate extends Model
         });
     }
 
+    /**
+     * @return HasMany<TreatmentTemplateStep, $this>
+     */
     public function steps(): HasMany
     {
         return $this->hasMany(TreatmentTemplateStep::class)->orderBy('step_order');
     }
 
+    /**
+     * @return HasMany<PatientTreatment, $this>
+     */
     public function patientTreatments(): HasMany
     {
         return $this->hasMany(PatientTreatment::class);
     }
 
+    /**
+     * @return BelongsTo<TreatmentTemplate, $this>
+     */
     public function root(): BelongsTo
     {
         return $this->belongsTo(self::class, 'root_template_id');
     }
 
+    /**
+     * @return BelongsTo<TreatmentTemplate, $this>
+     */
     public function previousVersion(): BelongsTo
     {
         return $this->belongsTo(self::class, 'previous_version_id');
     }
 
+    /**
+     * @return HasMany<TreatmentTemplate, $this>
+     */
     public function versions(): HasMany
     {
         return $this->hasMany(self::class, 'root_template_id', 'root_template_id')->orderByDesc('version');

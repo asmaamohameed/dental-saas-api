@@ -8,6 +8,13 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
+/**
+ * @property string $component_id
+ * @property string $quantity
+ * @property string $free_quantity
+ * @property string $unit_price
+ * @property-read Component|null $component
+ */
 class TreatmentTemplateComponent extends Model
 {
     use BelongsToTenant, HasFactory, HasUuids;
@@ -29,11 +36,17 @@ class TreatmentTemplateComponent extends Model
         ];
     }
 
+    /**
+     * @return BelongsTo<TreatmentTemplateStep, $this>
+     */
     public function step(): BelongsTo
     {
         return $this->belongsTo(TreatmentTemplateStep::class, 'treatment_template_step_id');
     }
 
+    /**
+     * @return BelongsTo<Component, $this>
+     */
     public function component(): BelongsTo
     {
         return $this->belongsTo(Component::class);

@@ -19,6 +19,7 @@ use App\Models\TreatmentSessionStep;
 use App\Models\TreatmentTemplate;
 use App\Models\TreatmentTemplateStep;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -157,9 +158,7 @@ class PatientTreatmentService
     public function retreat(PatientTreatment $treatment, array $data, string $userId): PatientTreatment
     {
         return DB::transaction(function () use ($treatment, $data, $userId) {
-            $status = $treatment->clinical_status instanceof PatientTreatmentStatus
-                ? $treatment->clinical_status
-                : PatientTreatmentStatus::from((string) $treatment->clinical_status);
+            $status = $this->clinical($treatment);
 
             if (! in_array($status, [PatientTreatmentStatus::FAILED, PatientTreatmentStatus::COMPLETED], true)) {
                 $treatment->clinical_status = PatientTreatmentStatus::FAILED;
@@ -173,12 +172,14 @@ class PatientTreatmentService
                 'patient_id' => $treatment->patient_id,
                 'treatment_plan_id' => $data['treatment_plan_id'] ?? $treatment->treatment_plan_id,
                 'treatment_template_id' => $data['treatment_template_id'] ?? $treatment->treatment_template_id,
-                'agreed_price' => $data['agreed_price'] ?? $treatment->template?->default_price ?? $treatment->agreed_price,
+                'agreed_price' => $data['agreed_price']
+                    ?? ($treatment->template !== null ? $treatment->template->default_price : null)
+                    ?? $treatment->agreed_price,
                 'dentist_id' => $data['dentist_id'] ?? $treatment->dentist_id,
                 'diagnosis' => $data['diagnosis'] ?? $treatment->diagnosis,
-                'priority' => $data['priority'] ?? $treatment->priority?->value ?? 'routine',
+                'priority' => $data['priority'] ?? $treatment->priority->value,
                 'notes' => $data['notes'] ?? null,
-                'consent_status' => $data['consent_status'] ?? $treatment->consent_status?->value,
+                'consent_status' => $data['consent_status'] ?? $treatment->consent_status->value,
                 'parent_treatment_id' => $treatment->id,
                 'treatment_type' => TreatmentType::RETREATMENT->value,
                 'tooth_numbers' => $data['tooth_numbers'] ?? $treatment->teeth()->pluck('tooth_number')->all(),
@@ -405,9 +406,11 @@ class PatientTreatmentService
         }
 
         return $open->sortBy(function (PatientTreatment $treatment) {
-            return $treatment->started_at?->timestamp
-                ?? $treatment->created_at?->timestamp
-                ?? PHP_INT_MAX;
+            if ($treatment->started_at !== null) {
+                return $treatment->started_at->timestamp;
+            }
+
+            return $treatment->created_at->timestamp;
         })->first();
     }
 
@@ -613,7 +616,12 @@ class PatientTreatmentService
                 continue;
             }
 
-            foreach ($step->templateStep?->components ?? [] as $templateComponent) {
+            $templateStep = $step->templateStep;
+            if ($templateStep === null) {
+                continue;
+            }
+
+            foreach ($templateStep->components as $templateComponent) {
                 $component = $templateComponent->component;
                 $session->components()->create([
                     'component_id' => $component?->id,
@@ -753,7 +761,7 @@ class PatientTreatmentService
     }
 
     /**
-     * @param  list<string|int>  $toothNumbers
+     * @param  array<int, string|int|null>  $toothNumbers
      * @return list<string>
      */
     private function normalizeToothNumbers(array $toothNumbers): array
@@ -838,23 +846,17 @@ class PatientTreatmentService
 
     private function clinical(PatientTreatment $treatment): PatientTreatmentStatus
     {
-        return $treatment->clinical_status instanceof PatientTreatmentStatus
-            ? $treatment->clinical_status
-            : PatientTreatmentStatus::from((string) $treatment->clinical_status);
+        return $treatment->clinical_status;
     }
 
     private function sessionStatus(TreatmentSession $session): TreatmentSessionStatus
     {
-        return $session->status instanceof TreatmentSessionStatus
-            ? $session->status
-            : TreatmentSessionStatus::from((string) $session->status);
+        return $session->status;
     }
 
     private function stepStatus(TreatmentSessionStep $step): SessionStepStatus
     {
-        return $step->status instanceof SessionStepStatus
-            ? $step->status
-            : SessionStepStatus::from((string) $step->status);
+        return $step->status;
     }
 
     private function freshTreatment(PatientTreatment $treatment): PatientTreatment
@@ -902,8 +904,8 @@ class PatientTreatmentService
     }
 
     /**
-     * @param  \Illuminate\Support\Collection<int, InvoiceItem>  $items
-     * @param  \Illuminate\Support\Collection<string, Invoice>  $invoices
+     * @param  Collection<int, InvoiceItem>  $items
+     * @param  Collection<string, Invoice>  $invoices
      */
     private function allocatedPaidAmount($items, $invoices): float
     {

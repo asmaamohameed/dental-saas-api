@@ -38,9 +38,9 @@ class PatientTreatmentResource extends JsonResource
             'tooth_numbers' => $this->whenLoaded('teeth', fn () => $this->teeth->pluck('tooth_number')->values()->all()),
             'invoice_id' => $this->whenLoaded('invoiceItems', fn () => $this->invoiceItems->sortByDesc('created_at')->first()?->invoice_id),
             'patient' => $this->whenLoaded('patient', fn () => [
-                'id' => $this->patient?->id,
-                'full_name' => $this->patient?->full_name,
-                'phone' => $this->patient?->phone,
+                'id' => $this->patient->id,
+                'full_name' => $this->patient->full_name,
+                'phone' => $this->patient->phone,
             ]),
             'plan' => $this->whenLoaded('plan', fn () => $this->plan ? [
                 'id' => $this->plan->id,
@@ -61,8 +61,8 @@ class PatientTreatmentResource extends JsonResource
                 'clinical_status' => $this->parentTreatment->clinical_status,
             ] : null),
             'sessions' => TreatmentSessionResource::collection($this->whenLoaded('sessions')),
-            'created_at' => $this->created_at?->toISOString(),
-            'updated_at' => $this->updated_at?->toISOString(),
+            'created_at' => $this->created_at->toISOString(),
+            'updated_at' => $this->updated_at->toISOString(),
         ];
     }
 }

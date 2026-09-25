@@ -75,7 +75,7 @@ class TreatmentTemplateService
                     'is_current' => true,
                     'root_template_id' => $template->root_template_id ?: $template->id,
                     'previous_version_id' => $template->id,
-                    'visit_type' => $this->visitTypeFromSteps($steps, $data['visit_type'] ?? $template->visit_type?->value),
+                    'visit_type' => $this->visitTypeFromSteps($steps, $data['visit_type'] ?? $template->visit_type),
                 ]
             );
 

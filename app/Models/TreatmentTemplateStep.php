@@ -3,12 +3,20 @@
 namespace App\Models;
 
 use App\Models\Concerns\BelongsToTenant;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
+/**
+ * @property string $id
+ * @property string $treatment_template_id
+ * @property bool $is_required
+ * @property bool $is_repeatable
+ * @property-read Collection<int, TreatmentTemplateComponent> $components
+ */
 class TreatmentTemplateStep extends Model
 {
     use BelongsToTenant, HasFactory, HasUuids;

@@ -15,7 +15,9 @@ use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
 
 /**
+ * @property string|null $tenant_id
  * @property UserRole|null $role
+ * @property-read Tenant|null $tenant
  */
 class User extends Authenticatable
 {
@@ -85,6 +87,9 @@ class User extends Authenticatable
         return $this->hasMany(ToothRecord::class, 'recorded_by');
     }
 
+    /**
+     * @return BelongsTo<Tenant, $this>
+     */
     public function tenant(): BelongsTo
     {
         return $this->belongsTo(Tenant::class);

@@ -60,9 +60,9 @@ class Tenant extends Model
         return $this->hasMany(Appointment::class);
     }
 
-    public function services(): HasMany
+    public function treatmentTemplates(): HasMany
     {
-        return $this->hasMany(Service::class);
+        return $this->hasMany(TreatmentTemplate::class);
     }
 
     public function invoices(): HasMany

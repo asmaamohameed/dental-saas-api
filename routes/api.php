@@ -2,13 +2,13 @@
 
 use App\Enums\UserRole;
 use App\Http\Controllers\Api\V1\AppointmentController;
-use App\Http\Controllers\Api\V1\ClinicBrandingController;
 use App\Http\Controllers\Api\V1\AuditLogController;
 use App\Http\Controllers\Api\V1\Auth\ForgotPasswordController;
 use App\Http\Controllers\Api\V1\Auth\LoginController;
 use App\Http\Controllers\Api\V1\Auth\LogoutController;
 use App\Http\Controllers\Api\V1\Auth\ProfileController;
 use App\Http\Controllers\Api\V1\Auth\ResetPasswordController;
+use App\Http\Controllers\Api\V1\ClinicBrandingController;
 use App\Http\Controllers\Api\V1\ComponentController;
 use App\Http\Controllers\Api\V1\DashboardController;
 use App\Http\Controllers\Api\V1\ExpenseController;
@@ -19,7 +19,6 @@ use App\Http\Controllers\Api\V1\InvoiceItemController;
 use App\Http\Controllers\Api\V1\PatientController;
 use App\Http\Controllers\Api\V1\PatientTreatmentController;
 use App\Http\Controllers\Api\V1\PaymentController;
-use App\Http\Controllers\Api\V1\ServiceController;
 use App\Http\Controllers\Api\V1\ToothRecordController;
 use App\Http\Controllers\Api\V1\TreatmentPlanController;
 use App\Http\Controllers\Api\V1\TreatmentTemplateController;
@@ -69,8 +68,6 @@ Route::prefix('v1')->group(function () {
 
         // Read-only endpoints (owner, receptionist, doctor)
         Route::get('doctors', [UserController::class, 'doctors']);
-        Route::get('services', [ServiceController::class, 'index']);
-        Route::get('services/{service}', [ServiceController::class, 'show']);
         Route::get('components/low-stock', [ComponentController::class, 'lowStock']);
         Route::post('components/{component}/stock', [ComponentController::class, 'adjustStock']);
         Route::get('components/{component}/movements', [ComponentController::class, 'movements']);
@@ -122,9 +119,6 @@ Route::prefix('v1')->group(function () {
 
         // Create & Edit endpoints (owner, receptionist)
         Route::middleware(EnsureUserRole::using(UserRole::OWNER, UserRole::RECEPTIONIST))->group(function () {
-            Route::post('services', [ServiceController::class, 'store']);
-            Route::put('services/{service}', [ServiceController::class, 'update']);
-            Route::patch('services/{service}/toggle-active', [ServiceController::class, 'toggleActive']);
             Route::post('components', [ComponentController::class, 'store']);
             Route::put('components/{component}', [ComponentController::class, 'update']);
             Route::patch('components/{component}/toggle-active', [ComponentController::class, 'toggleActive']);
@@ -151,14 +145,13 @@ Route::prefix('v1')->group(function () {
             Route::post('expenses', [ExpenseController::class, 'store']);
         });
 
-        // Owner-only sensitive actions (delete invoice, delete payment, edit payment, delete service)
+        // Owner-only sensitive actions (delete invoice, delete payment, edit payment, etc.)
         Route::middleware(EnsureUserRole::using(UserRole::OWNER))->group(function () {
             Route::post('clinic/logo', [ClinicBrandingController::class, 'updateLogo']);
             Route::get('staff', [UserController::class, 'index']);
             Route::post('staff', [UserController::class, 'store']);
             Route::put('staff/{user}', [UserController::class, 'update']);
             Route::patch('staff/{user}/toggle-active', [UserController::class, 'toggleActive']);
-            Route::delete('services/{service}', [ServiceController::class, 'destroy']);
             Route::delete('components/{component}', [ComponentController::class, 'destroy']);
             Route::delete('treatment-templates/{treatmentTemplate}', [TreatmentTemplateController::class, 'destroy']);
             Route::delete('treatment-plans/{treatmentPlan}', [TreatmentPlanController::class, 'destroy']);

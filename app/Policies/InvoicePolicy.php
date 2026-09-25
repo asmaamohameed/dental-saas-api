@@ -24,7 +24,7 @@ class InvoicePolicy
             return false;
         }
 
-        if ($user->role?->isReceptionist() && $invoice->status === InvoiceStatus::PARTIAL) {
+        if ($user->role->isReceptionist() && $invoice->status === InvoiceStatus::PARTIAL) {
             return false;
         }
 

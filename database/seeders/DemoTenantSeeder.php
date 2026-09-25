@@ -24,8 +24,6 @@ class DemoTenantSeeder extends Seeder
         $appointmentsPerTenant = 20_000;
         $invoicesPerTenant = 20_000;
 
-        $servicesPerTenant = 20;
-
         // Insert this many records at a time
         $chunkSize = 1_000;
 
@@ -34,8 +32,6 @@ class DemoTenantSeeder extends Seeder
         // $patientsPerTenant = 1_000;
         // $appointmentsPerTenant = 1_000;
         // $invoicesPerTenant = 1_000;
-
-        // $servicesPerTenant = 5;
 
         // // Insert this many records at a time
         // $chunkSize = 1_000;
@@ -171,37 +167,6 @@ class DemoTenantSeeder extends Seeder
                     'phone' => "+2012000000{$tenantIndex}",
                     'password_hash' => $passwordHash,
                     'role' => 'receptionist',
-                    'is_active' => true,
-                ]);
-            }
-
-            /*
-            |--------------------------------------------------------------------------
-            | Services
-            |--------------------------------------------------------------------------
-            */
-
-            $serviceIds = [];
-
-            for ($i = 1; $i <= $servicesPerTenant; $i++) {
-                $nameAr = "خدمة أسنان {$i} - عيادة {$tenantIndex}";
-
-                $existingService = DB::table('services')
-                    ->where('tenant_id', $tenantId)
-                    ->where('name_ar', $nameAr)
-                    ->first();
-
-                if ($existingService) {
-                    $serviceIds[] = $existingService->id;
-
-                    continue;
-                }
-
-                $serviceIds[] = DB::table('services')->insertGetId([
-                    'tenant_id' => $tenantId,
-                    'name_ar' => $nameAr,
-                    'name_en' => "Dental Service {$i}",
-                    'default_price' => 100 + ($i * 25),
                     'is_active' => true,
                 ]);
             }
@@ -447,16 +412,11 @@ class DemoTenantSeeder extends Seeder
                         continue;
                     }
 
-                    $serviceId = $serviceIds[
-                        $index % count($serviceIds)
-                    ];
-
                     $price = 150 + (($index % 10) * 25);
 
                     $rows[] = [
                         'invoice_id' => $invoiceId,
-                        'service_id' => $serviceId,
-                        'description' => 'Performance Test Service',
+                        'description' => 'Performance test line item',
                         'quantity' => 1,
                         'price' => $price,
                     ];

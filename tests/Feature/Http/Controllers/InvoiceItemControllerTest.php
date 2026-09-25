@@ -7,7 +7,6 @@ use App\Enums\UserRole;
 use App\Models\Invoice;
 use App\Models\InvoiceItem;
 use App\Models\Payment;
-use App\Models\Service;
 use App\Models\Tenant;
 use App\Models\User;
 use App\Support\Tenancy\CurrentTenant;
@@ -27,6 +26,15 @@ class InvoiceItemControllerTest extends TestCase
         Sanctum::actingAs($user, ['*']);
 
         return $user;
+    }
+
+    private function manualItemPayload(array $overrides = []): array
+    {
+        return array_merge([
+            'price' => 80,
+            'description' => 'Manual billing line item',
+            'quantity' => 1,
+        ], $overrides);
     }
 
     public function test_index_returns_items_for_own_tenant_invoice(): void
@@ -57,80 +65,42 @@ class InvoiceItemControllerTest extends TestCase
     {
         $this->actingAsRole(UserRole::DOCTOR);
         $invoice = Invoice::factory()->create(['status' => InvoiceStatus::UNPAID]);
-        $service = Service::factory()->create(['is_other' => false]);
 
-        $this->postJson("/api/v1/invoices/{$invoice->id}/items", [
-            'service_id' => $service->id,
-            'quantity' => 1,
-        ])->assertStatus(403);
+        $this->postJson("/api/v1/invoices/{$invoice->id}/items", $this->manualItemPayload())
+            ->assertStatus(403);
     }
 
     public function test_receptionist_can_add_an_item_and_total_is_recalculated(): void
     {
         $this->actingAsRole(UserRole::RECEPTIONIST);
         $invoice = Invoice::factory()->create(['status' => InvoiceStatus::UNPAID, 'total_amount' => 0]);
-        $service = Service::factory()->create(['default_price' => 80, 'is_other' => false]);
 
-        $this->postJson("/api/v1/invoices/{$invoice->id}/items", [
-            'service_id' => $service->id,
-            'price' => 999,
+        $this->postJson("/api/v1/invoices/{$invoice->id}/items", $this->manualItemPayload([
+            'price' => 80,
             'quantity' => 2,
-        ])->assertCreated();
+        ]))->assertCreated();
 
         $this->assertEquals(160, $invoice->fresh()->total_amount);
-    }
-
-    public function test_price_is_forced_from_service_default_price_ignoring_submitted_value(): void
-    {
-        $this->actingAsRole(UserRole::RECEPTIONIST);
-        $invoice = Invoice::factory()->create(['status' => InvoiceStatus::UNPAID, 'total_amount' => 0]);
-        $service = Service::factory()->create(['default_price' => 50, 'is_other' => false]);
-
-        $this->postJson("/api/v1/invoices/{$invoice->id}/items", [
-            'service_id' => $service->id,
-            'price' => 5000,
-            'quantity' => 1,
-        ])->assertCreated();
-
-        $this->assertEquals(50, $invoice->fresh()->total_amount);
-    }
-
-    public function test_submitted_price_is_respected_for_the_other_service(): void
-    {
-        $this->actingAsRole(UserRole::RECEPTIONIST);
-        $invoice = Invoice::factory()->create(['status' => InvoiceStatus::UNPAID, 'total_amount' => 0]);
-        $otherService = Service::factory()->create(['is_other' => true]);
-
-        $this->postJson("/api/v1/invoices/{$invoice->id}/items", [
-            'service_id' => $otherService->id,
-            'description' => 'Custom procedure',
-            'price' => 350,
-            'quantity' => 1,
-        ])->assertCreated();
-
-        $this->assertEquals(350, $invoice->fresh()->total_amount);
     }
 
     public function test_cannot_add_an_item_to_a_fully_paid_invoice(): void
     {
         $this->actingAsRole(UserRole::RECEPTIONIST);
         $invoice = Invoice::factory()->create(['status' => InvoiceStatus::PAID]);
-        $service = Service::factory()->create(['is_other' => false]);
 
-        $this->postJson("/api/v1/invoices/{$invoice->id}/items", [
-            'service_id' => $service->id,
-            'price' => 10,
-            'quantity' => 1,
-        ])->assertStatus(403);
+        $this->postJson("/api/v1/invoices/{$invoice->id}/items", $this->manualItemPayload())
+            ->assertStatus(403);
     }
 
     public function test_update_rejects_a_new_total_lower_than_payments_already_received(): void
     {
         $this->actingAsRole(UserRole::OWNER);
         $invoice = Invoice::factory()->create(['status' => InvoiceStatus::PARTIAL, 'total_amount' => 1000]);
-        $service = Service::factory()->create(['default_price' => 100, 'is_other' => false]);
         $item = InvoiceItem::factory()->create([
-            'invoice_id' => $invoice->id, 'service_id' => $service->id, 'price' => 100, 'quantity' => 10,
+            'invoice_id' => $invoice->id,
+            'description' => 'Existing line',
+            'price' => 100,
+            'quantity' => 10,
         ]);
         Payment::factory()->create(['invoice_id' => $invoice->id, 'amount' => 300]);
 
@@ -166,17 +136,15 @@ class InvoiceItemControllerTest extends TestCase
     {
         $this->actingAsRole(UserRole::RECEPTIONIST);
         $invoice = Invoice::factory()->create(['status' => InvoiceStatus::UNPAID]);
-        $serviceA = Service::factory()->create(['default_price' => 100, 'is_other' => false]);
-        $serviceB = Service::factory()->create(['default_price' => 50, 'is_other' => false]);
         InvoiceItem::factory()->create([
             'invoice_id' => $invoice->id,
-            'service_id' => $serviceA->id,
+            'description' => 'First line',
             'price' => 100,
             'quantity' => 1,
         ]);
         $itemToDelete = InvoiceItem::factory()->create([
             'invoice_id' => $invoice->id,
-            'service_id' => $serviceB->id,
+            'description' => 'Second line',
             'price' => 50,
             'quantity' => 1,
         ]);

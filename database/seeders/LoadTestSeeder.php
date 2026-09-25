@@ -50,7 +50,6 @@ class LoadTestSeeder extends Seeder
                 'xray_attachments',
                 'patients',
                 'users',
-                'services',
                 'subscriptions',
             ];
             foreach ($childTables as $table) {
@@ -69,7 +68,6 @@ class LoadTestSeeder extends Seeder
         $tenantCount = 1; // Set to 1 for testing, 10 for full run
         $patientsPerTenant = 1_00;
         $appointmentsPerTenant = 50;
-        $servicesPerTenant = 10; // 19 regular + 1 "Other"
         $chunkSize = 2_0;
         $passwordHash = Hash::make('password');
 
@@ -211,57 +209,6 @@ class LoadTestSeeder extends Seeder
             }
 
             $this->command->info("[Tenant {$t}] Created {$staffCount} staff ({$doctorCount} doctors).");
-
-            /*
-            |------------------------------------------------------------------
-            | Services (19 regular + "Other" with is_other flag)
-            | firstOrCreate-style: only generate UUID for new services
-            |------------------------------------------------------------------
-            */
-
-            $serviceIds = [];
-            for ($s = 1; $s <= $servicesPerTenant - 1; $s++) {
-                $nameAr = "خدمة أسنان {$s} - عيادة {$t}";
-                $existingService = DB::table('services')
-                    ->where('tenant_id', $tenantId)
-                    ->where('name_ar', $nameAr)
-                    ->first();
-                if (! $existingService) {
-                    $svcId = Str::uuid()->toString();
-                    DB::table('services')->insert([
-                        'id' => $svcId,
-                        'tenant_id' => $tenantId,
-                        'name_ar' => $nameAr,
-                        'name_en' => "Dental Service {$s}",
-                        'default_price' => 100 + ($s * 25),
-                        'is_active' => true,
-                        'is_other' => false,
-                    ]);
-                    $serviceIds[] = $svcId;
-                } else {
-                    $serviceIds[] = $existingService->id;
-                }
-            }
-            // "Other" service
-            $existingOther = DB::table('services')
-                ->where('tenant_id', $tenantId)
-                ->where('name_ar', 'أخرى')
-                ->first();
-            if (! $existingOther) {
-                $otherId = Str::uuid()->toString();
-                DB::table('services')->insert([
-                    'id' => $otherId,
-                    'tenant_id' => $tenantId,
-                    'name_ar' => 'أخرى',
-                    'name_en' => 'Other',
-                    'default_price' => 0,
-                    'is_active' => true,
-                    'is_other' => true,
-                ]);
-                $serviceIds[] = $otherId;
-            } else {
-                $serviceIds[] = $existingOther->id;
-            }
 
             /*
             |------------------------------------------------------------------
@@ -518,14 +465,12 @@ class LoadTestSeeder extends Seeder
             foreach ($invoiceIds as $idx => $invoiceId) {
                 $itemCount = random_int(1, 4);
                 for ($c = 0; $c < $itemCount; $c++) {
-                    $serviceId = $serviceIds[$c % count($serviceIds)];
                     $price = 150 + (($idx % 10) * 25);
                     $itemBatch[] = [
                         'id' => Str::uuid()->toString(),
                         'tenant_id' => $tenantId,
                         'invoice_id' => $invoiceId,
-                        'service_id' => $serviceId,
-                        'description' => 'Load test service',
+                        'description' => 'Load test line item',
                         'quantity' => 1,
                         'price' => $price,
                     ];

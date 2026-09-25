@@ -31,11 +31,14 @@ class XrayAttachmentService
 
         Storage::disk('s3')->put($path, fopen($file->getRealPath(), 'r'));
 
-        return $patient->xrayAttachments()->create([
+        $attachment = new XrayAttachment([
             'appointment_id' => $appointmentId,
             'file_url' => $path,
             'file_type' => $file->getMimeType(),
             'uploaded_by' => $user->id,
         ]);
+        $patient->xrayAttachments()->save($attachment);
+
+        return $attachment;
     }
 }

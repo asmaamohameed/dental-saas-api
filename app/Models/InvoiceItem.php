@@ -12,13 +12,13 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 /**
  * @property string $id
  * @property string $invoice_id
- * @property string $service_id
- * @property string $description
+ * @property string|null $patient_treatment_id
+ * @property string|null $description
  * @property string $price
  * @property int $quantity
  * @property string $subtotal
  * @property-read Invoice $invoice
- * @property-read Service $service
+ * @property-read PatientTreatment|null $patientTreatment
  */
 class InvoiceItem extends Model
 {
@@ -26,7 +26,6 @@ class InvoiceItem extends Model
 
     protected $fillable = [
         'invoice_id',
-        'service_id',
         'patient_treatment_id',
         'description',
         'price',
@@ -46,27 +45,17 @@ class InvoiceItem extends Model
         ];
     }
 
-    // Computed Attributes
     public function getSubtotalAttribute(): string
     {
         return bcmul((string) $this->price, (string) $this->quantity, 2);
     }
 
-    // Relationships
     /**
      * @return BelongsTo<Invoice, $this>
      */
     public function invoice(): BelongsTo
     {
         return $this->belongsTo(Invoice::class);
-    }
-
-    /**
-     * @return BelongsTo<Service, $this>
-     */
-    public function service(): BelongsTo
-    {
-        return $this->belongsTo(Service::class);
     }
 
     /**

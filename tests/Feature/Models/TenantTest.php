@@ -2,14 +2,16 @@
 
 namespace Tests\Feature\Models;
 
+use App\Enums\TreatmentCategory;
+use App\Enums\TreatmentVisitType;
 use App\Models\Appointment;
 use App\Models\AuditLog;
 use App\Models\Invoice;
 use App\Models\Patient;
-use App\Models\Service;
 use App\Models\Subscription;
 use App\Models\Tenant;
 use App\Models\ToothRecord;
+use App\Models\TreatmentTemplate;
 use App\Models\User;
 use App\Models\XrayAttachment;
 use App\Support\Tenancy\CurrentTenant;
@@ -55,13 +57,22 @@ class TenantTest extends TestCase
         $this->assertCount(1, $tenant->appointments);
     }
 
-    public function test_tenant_has_many_services(): void
+    public function test_tenant_has_many_treatment_templates(): void
     {
         $tenant = Tenant::factory()->create();
         app(CurrentTenant::class)->set($tenant->id);
-        Service::factory()->create();
+        TreatmentTemplate::create([
+            'tenant_id' => $tenant->id,
+            'name_ar' => 'علاج',
+            'name_en' => 'Treatment',
+            'category' => TreatmentCategory::MEDICAL,
+            'default_price' => 100,
+            'estimated_duration_minutes' => 30,
+            'visit_type' => TreatmentVisitType::SINGLE_VISIT,
+            'is_active' => true,
+        ]);
 
-        $this->assertCount(1, $tenant->services);
+        $this->assertCount(1, $tenant->fresh()->treatmentTemplates);
     }
 
     public function test_tenant_has_many_invoices(): void

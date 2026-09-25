@@ -296,7 +296,10 @@ class DashboardService
             ->whereBetween('created_at', [$start, $end])
             ->get()
             ->sum(function (ComponentStockMovement $movement) {
-                $price = (float) ($movement->component?->default_price ?? 0);
+                $component = $movement->component;
+                $price = $component instanceof Component
+                    ? (float) ($component->default_price ?? 0)
+                    : 0.0;
 
                 return (int) $movement->quantity * $price;
             });

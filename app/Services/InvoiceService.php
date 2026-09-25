@@ -9,7 +9,6 @@ use App\Models\Invoice;
 use App\Models\InvoiceItem;
 use App\Models\PatientTreatment;
 use App\Models\Payment;
-use App\Models\Service;
 use App\Support\Tenancy\CurrentTenant;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\DB;
@@ -21,7 +20,6 @@ class InvoiceService
         'patient',
         'appointment',
         'creator',
-        'items.service',
         'items.patientTreatment.template',
         'items.patientTreatment.teeth',
         'items.patientTreatment.sessions.steps.templateStep',
@@ -70,7 +68,6 @@ class InvoiceService
                 $totalAmount += $price * $item['quantity'];
 
                 $resolvedItems[] = [
-                    'service_id' => $item['service_id'] ?? null,
                     'patient_treatment_id' => $item['patient_treatment_id'] ?? null,
                     'description' => $description,
                     'price' => $price,
@@ -125,7 +122,6 @@ class InvoiceService
             ]);
 
             $invoice->items()->create([
-                'service_id' => null,
                 'patient_treatment_id' => $treatment->id,
                 'description' => $label,
                 'price' => $price,
@@ -227,7 +223,6 @@ class InvoiceService
                     $totalAmount += $price * $item['quantity'];
 
                     $resolvedItems[] = [
-                        'service_id' => $item['service_id'] ?? null,
                         'patient_treatment_id' => $item['patient_treatment_id'] ?? null,
                         'description' => $description,
                         'price' => $price,
@@ -447,21 +442,6 @@ class InvoiceService
             return [
                 isset($item['price']) ? (float) $item['price'] : (float) $treatment->agreed_price,
                 $item['description'] ?? $label,
-            ];
-        }
-
-        if (! empty($item['service_id'])) {
-            $service = Service::where('tenant_id', $tenantId)->find($item['service_id']);
-
-            if (! $service) {
-                throw ValidationException::withMessages([
-                    'items' => 'One or more selected services are invalid.',
-                ]);
-            }
-
-            return [
-                $service->is_other ? (float) $item['price'] : (float) $service->default_price,
-                $item['description'] ?? null,
             ];
         }
 

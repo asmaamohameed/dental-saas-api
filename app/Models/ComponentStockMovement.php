@@ -16,6 +16,7 @@ use Illuminate\Support\Carbon;
  * @property string|null $performed_by
  * @property Carbon|null $created_at
  * @property-read User|null $performer
+ * @property-read Component|null $component
  */
 class ComponentStockMovement extends Model
 {
@@ -37,6 +38,9 @@ class ComponentStockMovement extends Model
         ];
     }
 
+    /**
+     * @return BelongsTo<Component, $this>
+     */
     public function component(): BelongsTo
     {
         return $this->belongsTo(Component::class);

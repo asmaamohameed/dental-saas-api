@@ -7,7 +7,6 @@ use App\Enums\UserRole;
 use App\Models\Appointment;
 use App\Models\Invoice;
 use App\Models\Patient;
-use App\Models\Service;
 use App\Models\Tenant;
 use App\Models\User;
 use App\Support\Tenancy\CurrentTenant;
@@ -110,11 +109,9 @@ class InvoiceUpdateTest extends TestCase
             'tenant_id' => $this->tenant->id,
             'status' => InvoiceStatus::PARTIAL,
         ]);
-        $service = Service::factory()->create(['tenant_id' => $this->tenant->id]);
-
         $this->putJson("/api/v1/invoices/{$invoice->id}", [
             'items' => [
-                ['service_id' => $service->id, 'price' => 50, 'quantity' => 1],
+                ['price' => 50, 'description' => 'Manual billing line', 'quantity' => 1],
             ],
         ])->assertStatus(422)->assertJsonValidationErrors(['items']);
     }

@@ -8,7 +8,6 @@ use App\Models\Appointment;
 use App\Models\Invoice;
 use App\Models\Patient;
 use App\Models\Payment;
-use App\Models\Service;
 use App\Models\Tenant;
 use App\Models\User;
 use App\Services\InvoiceService;
@@ -44,62 +43,21 @@ class InvoiceServiceTest extends TestCase
 
     // ---------- create() ----------
 
-    public function test_create_computes_total_from_service_default_price(): void
+    public function test_create_computes_total_from_manual_line_items(): void
     {
         $patient = $this->makePatient();
         $user = $this->makeUser();
-        $service = Service::factory()->create(['default_price' => 100, 'is_other' => false]);
 
         $invoice = $this->service->create([
             'patient_id' => $patient->id,
             'items' => [
-                ['service_id' => $service->id, 'quantity' => 2],
+                ['price' => 100, 'description' => 'Manual billing line', 'quantity' => 2],
             ],
         ], $user->id);
 
         $this->assertEquals(200, $invoice->total_amount);
         $this->assertSame(InvoiceStatus::UNPAID, $invoice->status);
         $this->assertSame($user->id, $invoice->created_by);
-    }
-
-    public function test_create_uses_submitted_price_for_other_service(): void
-    {
-        $patient = $this->makePatient();
-        $user = $this->makeUser();
-        $otherService = Service::factory()->create(['is_other' => true, 'default_price' => 0]);
-
-        $invoice = $this->service->create([
-            'patient_id' => $patient->id,
-            'items' => [
-                ['service_id' => $otherService->id, 'price' => 250, 'quantity' => 1, 'description' => 'Custom work'],
-            ],
-        ], $user->id);
-
-        $this->assertEquals(250, $invoice->total_amount);
-    }
-
-    public function test_create_throws_when_service_does_not_belong_to_current_tenant(): void
-    {
-        $patient = $this->makePatient();
-        $user = $this->makeUser();
-
-        $otherTenant = Tenant::factory()->create();
-        app(CurrentTenant::class)->set($otherTenant->id);
-        $foreignService = Service::factory()->create();
-        app(CurrentTenant::class)->set(app(CurrentTenant::class)->id() ?? $otherTenant->id);
-
-        // نرجع للـ tenant الأصلي
-        $originalTenant = Tenant::factory()->create();
-        app(CurrentTenant::class)->set($originalTenant->id);
-
-        $this->expectException(ValidationException::class);
-
-        $this->service->create([
-            'patient_id' => $patient->id,
-            'items' => [
-                ['service_id' => $foreignService->id, 'quantity' => 1],
-            ],
-        ], $user->id);
     }
 
     // ---------- update() ----------
@@ -125,12 +83,10 @@ class InvoiceServiceTest extends TestCase
     public function test_update_rejects_item_changes_on_a_partial_invoice(): void
     {
         $invoice = Invoice::factory()->create(['status' => InvoiceStatus::PARTIAL]);
-        $service = Service::factory()->create();
-
         $this->expectException(ValidationException::class);
 
         $this->service->update($invoice, [
-            'items' => [['service_id' => $service->id, 'quantity' => 1, 'price' => 50]],
+            'items' => [['price' => 50, 'description' => 'Manual billing line', 'quantity' => 1]],
         ]);
     }
 
@@ -165,22 +121,18 @@ class InvoiceServiceTest extends TestCase
     {
         $invoice = Invoice::factory()->create(['status' => InvoiceStatus::UNPAID, 'total_amount' => 500]);
         Payment::factory()->create(['invoice_id' => $invoice->id, 'amount' => 300]);
-        $cheapService = Service::factory()->create(['default_price' => 50, 'is_other' => false]);
-
         $this->expectException(ValidationException::class);
 
         $this->service->update($invoice, [
-            'items' => [['service_id' => $cheapService->id, 'quantity' => 1]],
+            'items' => [['price' => 50, 'description' => 'Reduced billing line', 'quantity' => 1]],
         ]);
     }
 
     public function test_update_replaces_items_and_recalculates_total(): void
     {
         $invoice = Invoice::factory()->create(['status' => InvoiceStatus::UNPAID, 'total_amount' => 100]);
-        $service = Service::factory()->create(['default_price' => 75, 'is_other' => false]);
-
         $updated = $this->service->update($invoice, [
-            'items' => [['service_id' => $service->id, 'quantity' => 2]],
+            'items' => [['price' => 75, 'description' => 'Updated billing line', 'quantity' => 2]],
         ]);
 
         $this->assertEquals(150, $updated->total_amount);

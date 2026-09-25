@@ -13,6 +13,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 /**
  * @property-read bool $is_low_stock
+ * @property float|string|null $default_price
  */
 class Component extends Model
 {

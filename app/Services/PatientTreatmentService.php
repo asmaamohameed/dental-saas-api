@@ -720,12 +720,23 @@ class PatientTreatmentService
             return false;
         }
 
-        $doneStepIds = $treatment->sessions
-            ->flatMap->steps
-            ->filter(fn (TreatmentSessionStep $step) => $this->stepStatus($step) === SessionStepStatus::DONE)
-            ->pluck('treatment_template_step_id')
-            ->filter()
-            ->unique();
+        $doneStepIds = collect();
+
+        foreach ($treatment->sessions as $session) {
+            if ($this->sessionStatus($session) !== TreatmentSessionStatus::COMPLETED) {
+                continue;
+            }
+
+            foreach ($session->steps as $step) {
+                if ($this->stepStatus($step) !== SessionStepStatus::DONE || ! $step->treatment_template_step_id) {
+                    continue;
+                }
+
+                $doneStepIds->push($step->treatment_template_step_id);
+            }
+        }
+
+        $doneStepIds = $doneStepIds->unique();
 
         foreach ($required as $step) {
             if (! $doneStepIds->contains($step->id)) {

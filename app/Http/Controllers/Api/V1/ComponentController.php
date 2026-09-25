@@ -4,11 +4,14 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
 use App\Http\Resources\V1\ComponentResource;
+use App\Http\Resources\V1\ComponentStockMovementResource;
 use App\Models\Component;
 use App\Support\Tenancy\CurrentTenant;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 
 class ComponentController extends Controller
 {
@@ -44,7 +47,20 @@ class ComponentController extends Controller
 
     public function store(Request $request): JsonResponse
     {
-        $component = Component::create($this->validated($request));
+        $component = DB::transaction(function () use ($request) {
+            $component = Component::create($this->validated($request));
+            $quantity = (int) $component->current_quantity;
+
+            if ($quantity > 0) {
+                $component->movements()->create([
+                    'type' => 'in',
+                    'quantity' => $quantity,
+                    'performed_by' => $request->user()->id,
+                ]);
+            }
+
+            return $component;
+        });
 
         return $this->successResponse(new ComponentResource($component->load('inventoryItem')), 'Component created successfully.', 201);
     }
@@ -68,6 +84,51 @@ class ComponentController extends Controller
         return $this->successResponse(null, 'Component deleted successfully.');
     }
 
+    public function adjustStock(Request $request, Component $component): JsonResponse
+    {
+        $data = $request->validate([
+            'type' => ['required', Rule::in(['in', 'out'])],
+            'quantity' => ['required', 'integer', 'min:1'],
+        ]);
+
+        $movement = DB::transaction(function () use ($component, $data, $request) {
+            /** @var Component $locked */
+            $locked = Component::query()->lockForUpdate()->findOrFail($component->id);
+            $next = $data['type'] === 'out'
+                ? (int) $locked->current_quantity - (int) $data['quantity']
+                : (int) $locked->current_quantity + (int) $data['quantity'];
+
+            if ($next < 0) {
+                throw ValidationException::withMessages([
+                    'quantity' => 'Insufficient stock.',
+                ]);
+            }
+
+            $locked->update(['current_quantity' => $next]);
+
+            return $locked->movements()->create([
+                'type' => $data['type'],
+                'quantity' => (int) $data['quantity'],
+                'performed_by' => $request->user()->id,
+            ]);
+        });
+
+        return $this->successResponse([
+            'movement' => new ComponentStockMovementResource($movement->load('performer')),
+            'component' => new ComponentResource($component->fresh()->load('inventoryItem')),
+        ], 'Component stock updated successfully.');
+    }
+
+    public function movements(Component $component): JsonResponse
+    {
+        $movements = $component->movements()->with('performer')->latest('created_at')->limit(50)->get();
+
+        return $this->successResponse(
+            ComponentStockMovementResource::collection($movements),
+            'Component stock history retrieved successfully.'
+        );
+    }
+
     public function toggleActive(Component $component): JsonResponse
     {
         $component->update(['is_active' => ! $component->is_active]);
@@ -82,7 +143,7 @@ class ComponentController extends Controller
         return $request->validate([
             'name_ar' => [$prefix, 'string', 'max:255'],
             'name_en' => ['nullable', 'string', 'max:255'],
-            'default_price' => [$prefix, 'numeric', 'min:0'],
+            'default_price' => [$prefix, 'integer', 'min:0'],
             'unit' => [$prefix, 'string', 'max:50'],
             'inventory_item_id' => [
                 'nullable',
@@ -90,8 +151,8 @@ class ComponentController extends Controller
                 Rule::exists('inventory_items', 'id')->where('tenant_id', app(CurrentTenant::class)->id()),
             ],
             'is_active' => ['sometimes', 'boolean'],
-            'current_quantity' => ['sometimes', 'numeric', 'min:0'],
-            'minimum_threshold' => ['nullable', 'numeric', 'min:0'],
+            'current_quantity' => ['sometimes', 'integer', 'min:0'],
+            'minimum_threshold' => ['nullable', 'integer', 'min:0'],
         ]);
     }
 }

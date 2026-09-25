@@ -70,6 +70,10 @@ class StoreInvoiceRequest extends FormRequest
                 } elseif (! $hasTreatment && ! isset($item['price'])) {
                     $validator->errors()->add("items.{$index}.price", 'Price is required when no treatment is selected.');
                 }
+
+                if (! $hasTreatment && ! $hasService && empty(trim((string) ($item['description'] ?? '')))) {
+                    $validator->errors()->add("items.{$index}.description", 'Description is required when no treatment is selected.');
+                }
             }
         });
     }

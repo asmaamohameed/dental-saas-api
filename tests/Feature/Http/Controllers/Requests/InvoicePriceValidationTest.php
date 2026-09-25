@@ -82,6 +82,28 @@ class InvoicePriceValidationTest extends TestCase
         ])->assertOk()->assertJsonPath('data.total_amount', 90);
     }
 
+    public function test_store_requires_description_when_no_treatment_is_selected(): void
+    {
+        $this->actingAsRole(UserRole::RECEPTIONIST);
+        $patient = Patient::factory()->create();
+
+        $this->postJson('/api/v1/invoices', [
+            'patient_id' => $patient->id,
+            'items' => [['price' => 50, 'quantity' => 1]],
+        ])->assertStatus(422)->assertJsonValidationErrors(['items.0.description']);
+    }
+
+    public function test_store_accepts_amount_only_line_with_description(): void
+    {
+        $this->actingAsRole(UserRole::RECEPTIONIST);
+        $patient = Patient::factory()->create();
+
+        $this->postJson('/api/v1/invoices', [
+            'patient_id' => $patient->id,
+            'items' => [['price' => 50, 'description' => 'Consultation fee', 'quantity' => 1]],
+        ])->assertCreated()->assertJsonPath('data.total_amount', 50);
+    }
+
     public function test_update_requires_price_for_the_other_service(): void
     {
         $this->actingAsRole(UserRole::OWNER);

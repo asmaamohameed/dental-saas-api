@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\V1\Appointment;
 
+use App\Http\Requests\V1\Appointment\Concerns\ValidatesAppointmentTreatmentLinks;
 use App\Enums\AppointmentType;
 use App\Enums\UserRole;
 use App\Rules\AppointmentDoctorAvailable;
@@ -13,9 +14,18 @@ use Illuminate\Validation\Rule;
 
 class StoreAppointmentRequest extends FormRequest
 {
+    use ValidatesAppointmentTreatmentLinks;
+
     public function authorize(): bool
     {
         return true;
+    }
+
+    protected function prepareForValidation(): void
+    {
+        if (! $this->filled('appointment_type')) {
+            $this->merge(['appointment_type' => AppointmentType::CONSULTATION->value]);
+        }
     }
 
     public function rules(): array
@@ -43,7 +53,7 @@ class StoreAppointmentRequest extends FormRequest
             ],
             'scheduled_at' => ['required', 'date'],
             'duration_minutes' => ['required', 'integer', 'min:1'],
-            'appointment_type' => ['sometimes', Rule::enum(AppointmentType::class)],
+            'appointment_type' => ['required', Rule::enum(AppointmentType::class)],
             'notes' => ['nullable', 'string'],
         ];
     }
@@ -87,6 +97,8 @@ class StoreAppointmentRequest extends FormRequest
 
                 return new PotentiallyTranslatedString($message, app('translator'));
             });
+
+            $this->validateTreatmentLinksForType($validator);
         });
     }
 }

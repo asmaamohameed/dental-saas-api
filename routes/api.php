@@ -2,6 +2,7 @@
 
 use App\Enums\UserRole;
 use App\Http\Controllers\Api\V1\AppointmentController;
+use App\Http\Controllers\Api\V1\ClinicBrandingController;
 use App\Http\Controllers\Api\V1\AuditLogController;
 use App\Http\Controllers\Api\V1\Auth\ForgotPasswordController;
 use App\Http\Controllers\Api\V1\Auth\LoginController;
@@ -67,6 +68,8 @@ Route::prefix('v1')->group(function () {
         Route::get('services', [ServiceController::class, 'index']);
         Route::get('services/{service}', [ServiceController::class, 'show']);
         Route::get('components/low-stock', [ComponentController::class, 'lowStock']);
+        Route::post('components/{component}/stock', [ComponentController::class, 'adjustStock']);
+        Route::get('components/{component}/movements', [ComponentController::class, 'movements']);
         Route::apiResource('components', ComponentController::class)->only(['index', 'show']);
         Route::apiResource('treatment-templates', TreatmentTemplateController::class)
             ->parameters(['treatment-templates' => 'treatmentTemplate'])
@@ -107,6 +110,7 @@ Route::prefix('v1')->group(function () {
         Route::get('dashboard/patients', [DashboardController::class, 'patients']);
         Route::get('dashboard/cashflow', [DashboardController::class, 'cashflow']);
         Route::get('dashboard/expense-breakdown', [DashboardController::class, 'expenseBreakdown']);
+        Route::get('dashboard/component-stock', [DashboardController::class, 'componentStock']);
         Route::get('dashboard/invoice-status', [DashboardController::class, 'invoiceStatus']);
 
         // Expenses
@@ -145,6 +149,7 @@ Route::prefix('v1')->group(function () {
 
         // Owner-only sensitive actions (delete invoice, delete payment, edit payment, delete service)
         Route::middleware(EnsureUserRole::using(UserRole::OWNER))->group(function () {
+            Route::post('clinic/logo', [ClinicBrandingController::class, 'updateLogo']);
             Route::get('staff', [UserController::class, 'index']);
             Route::post('staff', [UserController::class, 'store']);
             Route::put('staff/{user}', [UserController::class, 'update']);

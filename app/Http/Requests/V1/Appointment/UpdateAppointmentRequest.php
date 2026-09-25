@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\V1\Appointment;
 
+use App\Http\Requests\V1\Appointment\Concerns\ValidatesAppointmentTreatmentLinks;
 use App\Enums\AppointmentType;
 use App\Enums\UserRole;
 use App\Rules\AppointmentDoctorAvailable;
@@ -13,6 +14,8 @@ use Illuminate\Validation\Rule;
 
 class UpdateAppointmentRequest extends FormRequest
 {
+    use ValidatesAppointmentTreatmentLinks;
+
     public function authorize(): bool
     {
         return true;
@@ -98,6 +101,8 @@ class UpdateAppointmentRequest extends FormRequest
 
                 return new PotentiallyTranslatedString($message, app('translator'));
             });
+
+            $this->validateTreatmentLinksForType($validator);
         });
     }
 }

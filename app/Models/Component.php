@@ -62,6 +62,11 @@ class Component extends Model
         return $this->hasMany(TreatmentTemplateComponent::class);
     }
 
+    public function movements(): HasMany
+    {
+        return $this->hasMany(ComponentStockMovement::class);
+    }
+
     public function scopeActive(Builder $query): Builder
     {
         return $query->where('is_active', true);

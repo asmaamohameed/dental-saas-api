@@ -6,13 +6,29 @@ use App\Enums\AppointmentStatus;
 use App\Enums\ExpenseCategory;
 use App\Enums\InvoiceStatus;
 use App\Models\Appointment;
+use App\Models\Component;
+use App\Models\ComponentStockMovement;
 use App\Models\Expense;
 use App\Models\Invoice;
+use App\Models\PatientTreatmentComponent;
 use App\Models\Payment;
 use Illuminate\Support\Carbon;
 
 class DashboardService
 {
+    /**
+     * Percent change versus the previous period.
+     * A zero baseline with a positive current total is growth, not 0%.
+     */
+    private function percentChange(float $current, float $previous): float
+    {
+        if ($previous == 0.0) {
+            return $current > 0 ? 100.0 : 0.0;
+        }
+
+        return round((($current - $previous) / $previous) * 100, 1);
+    }
+
     private function parseDateRange(?string $range): array
     {
         $now = Carbon::now();
@@ -89,11 +105,16 @@ class DashboardService
         $expensesMtd = Expense::whereBetween('expense_date', [$startMtd->format('Y-m-d'), $endMtd->format('Y-m-d')])->get();
         $getCategorySum = fn (ExpenseCategory $cat) => (float) $expensesMtd->filter(fn ($e) => ($e->category instanceof ExpenseCategory ? $e->category->value : $e->category) === $cat->value)->sum('amount');
 
+        $componentUsageMtd = $this->componentReductionValue($startMtd, $endMtd);
+
         $expensesBreakdownMtd = [
             'electricity' => $getCategorySum(ExpenseCategory::ELECTRICITY),
             'internet' => $getCategorySum(ExpenseCategory::INTERNET),
             'rent' => $getCategorySum(ExpenseCategory::RENT),
             'water' => $getCategorySum(ExpenseCategory::WATER),
+            'salary' => $getCategorySum(ExpenseCategory::SALARY),
+            'lab' => $getCategorySum(ExpenseCategory::LAB),
+            'components' => $componentUsageMtd,
             'other' => $getCategorySum(ExpenseCategory::OTHER),
         ];
 
@@ -144,11 +165,11 @@ class DashboardService
 
         $totalIncome = (float) Payment::whereBetween('created_at', [$start, $end])->sum('amount');
         $prevIncome = (float) Payment::whereBetween('created_at', [$prevStart, $prevEnd])->sum('amount');
-        $incomeChangePct = $prevIncome > 0 ? round((($totalIncome - $prevIncome) / $prevIncome) * 100, 1) : 0.0;
+        $incomeChangePct = $this->percentChange($totalIncome, $prevIncome);
 
         $totalExpenses = (float) Expense::whereBetween('expense_date', [$start->format('Y-m-d'), $end->format('Y-m-d')])->sum('amount');
         $prevExpenses = (float) Expense::whereBetween('expense_date', [$prevStart->format('Y-m-d'), $prevEnd->format('Y-m-d')])->sum('amount');
-        $expenseChangePct = $prevExpenses > 0 ? round((($totalExpenses - $prevExpenses) / $prevExpenses) * 100, 1) : 0.0;
+        $expenseChangePct = $this->percentChange($totalExpenses, $prevExpenses);
 
         $series = [];
         $curr = $start->copy()->startOfMonth();
@@ -198,7 +219,7 @@ class DashboardService
 
         $total = (float) Payment::whereBetween('created_at', [$start, $end])->sum('amount');
         $prevTotal = (float) Payment::whereBetween('created_at', [$prevStart, $prevEnd])->sum('amount');
-        $changePct = $prevTotal > 0 ? round((($total - $prevTotal) / $prevTotal) * 100, 1) : 0.0;
+        $changePct = $this->percentChange($total, $prevTotal);
 
         $points = [];
         $diffDays = $start->diffInDays($end);
@@ -248,17 +269,71 @@ class DashboardService
         $net = $getSum(ExpenseCategory::INTERNET);
         $rent = $getSum(ExpenseCategory::RENT);
         $water = $getSum(ExpenseCategory::WATER);
+        $salary = $getSum(ExpenseCategory::SALARY);
+        $lab = $getSum(ExpenseCategory::LAB);
+        $components = $this->componentReductionValue($start, $end);
         $other = $getSum(ExpenseCategory::OTHER);
-        $total = $elec + $net + $rent + $water + $other;
+        $total = $elec + $net + $rent + $water + $salary + $lab + $components + $other;
 
         return [
             'electricity' => $elec,
             'internet' => $net,
             'rent' => $rent,
             'water' => $water,
+            'salary' => $salary,
+            'lab' => $lab,
+            'components' => $components,
             'other' => $other,
             'total' => $total,
         ];
+    }
+
+    private function componentReductionValue(Carbon $start, Carbon $end): float
+    {
+        $manualOut = ComponentStockMovement::query()
+            ->with('component')
+            ->where('type', 'out')
+            ->whereBetween('created_at', [$start, $end])
+            ->get()
+            ->sum(function (ComponentStockMovement $movement) {
+                $price = (float) ($movement->component?->default_price ?? 0);
+
+                return (int) $movement->quantity * $price;
+            });
+
+        $sessionUse = PatientTreatmentComponent::query()
+            ->whereHas('session', function ($query) use ($start, $end) {
+                $query->where('stock_applied', true)
+                    ->whereBetween('session_date', [$start, $end]);
+            })
+            ->get()
+            ->sum(function (PatientTreatmentComponent $row) {
+                $quantity = max(0, (float) $row->quantity - (float) $row->free_quantity);
+
+                return $quantity * (float) $row->unit_price;
+            });
+
+        return round($manualOut + $sessionUse, 2);
+    }
+
+    public function getComponentStock(): array
+    {
+        return Component::query()
+            ->where('is_active', true)
+            ->orderByDesc('current_quantity')
+            ->get()
+            ->map(fn (Component $component) => [
+                'name_ar' => $component->name_ar,
+                'name_en' => $component->name_en,
+                'quantity' => (int) $component->current_quantity,
+                'unit_price' => (int) $component->default_price,
+                'stock_value' => (int) $component->current_quantity * (int) $component->default_price,
+                'is_low_stock' => (bool) $component->is_low_stock,
+            ])
+            ->sortByDesc('stock_value')
+            ->take(12)
+            ->values()
+            ->all();
     }
 
     public function getInvoiceStatus(?string $range): array

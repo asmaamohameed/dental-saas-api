@@ -183,6 +183,30 @@ class TreatmentTrackingTest extends TestCase
         $this->assertSame(FinancialStatus::UNPAID, $treatment->financial_status);
     }
 
+    public function test_scheduling_the_last_required_step_does_not_complete_the_treatment(): void
+    {
+        $template = $this->createTemplate();
+        $treatment = $this->createTreatment([
+            'treatment_template_id' => $template->id,
+        ]);
+
+        $this->patchJson("/api/v1/patient-treatments/{$treatment->id}/status", [
+            'clinical_status' => 'in_progress',
+        ])->assertOk();
+
+        $this->postJson("/api/v1/patient-treatments/{$treatment->id}/sessions", [
+            'status' => 'scheduled',
+            'steps' => [[
+                'treatment_template_step_id' => $template->steps()->first()->id,
+                'status' => 'done',
+            ]],
+        ])->assertCreated();
+
+        $treatment->refresh();
+        $this->assertSame(PatientTreatmentStatus::IN_PROGRESS, $treatment->clinical_status);
+        $this->assertNull($treatment->completed_at);
+    }
+
     public function test_non_repeatable_step_cannot_be_done_twice(): void
     {
         $template = $this->createTemplate();

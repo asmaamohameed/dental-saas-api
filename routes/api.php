@@ -24,6 +24,7 @@ use App\Http\Controllers\Api\V1\ToothRecordController;
 use App\Http\Controllers\Api\V1\TreatmentPlanController;
 use App\Http\Controllers\Api\V1\TreatmentTemplateController;
 use App\Http\Controllers\Api\V1\UserController;
+use App\Http\Controllers\Api\V1\XrayAttachmentController;
 use App\Http\Middleware\EnsureUserRole;
 use Illuminate\Support\Facades\Route;
 
@@ -58,6 +59,9 @@ Route::prefix('v1')->group(function () {
         Route::get('patients/{patient}/treatments', [PatientTreatmentController::class, 'forPatient']);
         Route::get('patients/{patient}/next-treatment', [PatientTreatmentController::class, 'next']);
         Route::get('patients/{patient}/treatment-plans', [TreatmentPlanController::class, 'index']);
+        Route::get('patients/{patient}/xray-attachments', [XrayAttachmentController::class, 'index']);
+        Route::post('patients/{patient}/xray-attachments', [XrayAttachmentController::class, 'store']);
+        Route::delete('patients/{patient}/xray-attachments/{xray}', [XrayAttachmentController::class, 'destroy']);
 
         // Appointments API Resource + Custom Endpoint
         Route::apiResource('appointments', AppointmentController::class);

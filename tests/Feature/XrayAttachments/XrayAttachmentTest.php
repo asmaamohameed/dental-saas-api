@@ -3,6 +3,7 @@
 namespace Tests\Feature\XrayAttachments;
 
 use App\Enums\UserRole;
+use App\Models\Appointment;
 use App\Models\Patient;
 use App\Models\Tenant;
 use App\Models\User;
@@ -43,6 +44,36 @@ class XrayAttachmentTest extends TestCase
         $this->assertSame($user->id, $attachment->uploaded_by);
         Storage::disk('s3')->assertExists($attachment->file_url);
         $this->assertStringStartsWith("xrays/{$patient->tenant_id}/{$patient->id}/", $attachment->file_url);
+    }
+
+    public function test_upload_can_be_linked_to_an_appointment(): void
+    {
+        $this->actingAsTenantUser(role: UserRole::DOCTOR);
+        $patient = Patient::factory()->create();
+        $appointment = Appointment::factory()->create(['patient_id' => $patient->id]);
+
+        $upload = $this->postJson("/api/v1/patients/{$patient->id}/xray-attachments", [
+            'file' => UploadedFile::fake()->image('xray.png', 800, 600),
+            'appointment_id' => $appointment->id,
+        ])->assertCreated();
+
+        $attachmentId = $upload->json('data.id');
+        $this->assertIsString($attachmentId);
+        $this->assertSame($appointment->id, $upload->json('data.appointment_id'));
+        $this->assertStringStartsWith('http', (string) $upload->json('data.temporary_url'));
+
+        $objectKey = XrayAttachment::query()->findOrFail($attachmentId)->file_url;
+        Storage::disk('s3')->assertExists($objectKey);
+
+        $this->getJson("/api/v1/patients/{$patient->id}/xray-attachments")
+            ->assertOk()
+            ->assertJsonPath('data.items.0.id', $attachmentId);
+
+        $this->deleteJson("/api/v1/patients/{$patient->id}/xray-attachments/{$attachmentId}")
+            ->assertOk();
+
+        Storage::disk('s3')->assertMissing($objectKey);
+        $this->assertDatabaseMissing('xray_attachments', ['id' => $attachmentId]);
     }
 
     public function test_upload_rejects_invalid_file_type(): void
@@ -118,16 +149,30 @@ class XrayAttachmentTest extends TestCase
         $this->assertDatabaseMissing('xray_attachments', ['id' => $attachment->id]);
     }
 
+    public function test_receptionist_cannot_list_upload_or_delete_xray_attachments(): void
+    {
+        $this->actingAsTenantUser(role: UserRole::RECEPTIONIST);
+        $patient = Patient::factory()->create();
+        $attachment = XrayAttachment::factory()->create([
+            'patient_id' => $patient->id,
+            'file_url' => 'tenants/test/patients/test/xrays/sample.png',
+        ]);
+
+        $this->getJson("/api/v1/patients/{$patient->id}/xray-attachments")->assertForbidden();
+
+        $this->postJson("/api/v1/patients/{$patient->id}/xray-attachments", [
+            'file' => UploadedFile::fake()->image('xray.png'),
+        ])->assertForbidden();
+
+        $this->deleteJson("/api/v1/patients/{$patient->id}/xray-attachments/{$attachment->id}")
+            ->assertForbidden();
+    }
+
     public function test_user_from_another_tenant_cannot_access_or_delete_an_attachment(): void
     {
-        $tenant = Tenant::factory()->create();
-        app(CurrentTenant::class)->set($tenant->id);
-
-        $doctor = User::factory()->doctor()->create();
-        Sanctum::actingAs($doctor, ['*']);
-
+        $this->actingAsTenantUser(role: UserRole::DOCTOR);
         $patient = Patient::factory()->create();
-        $path = "xrays/{$tenant->id}/{$patient->id}/protected.jpg";
+        $path = "xrays/{$patient->tenant_id}/{$patient->id}/protected.jpg";
         Storage::disk('s3')->put($path, 'image-bytes');
 
         $attachment = XrayAttachment::factory()->create([
@@ -139,15 +184,31 @@ class XrayAttachmentTest extends TestCase
 
         $otherTenant = Tenant::factory()->create();
         app(CurrentTenant::class)->set($otherTenant->id);
-        $outsider = User::factory()->owner()->create(['tenant_id' => $otherTenant->id]);
-        Sanctum::actingAs($outsider, ['*']);
+        $outsider = User::factory()->doctor()->create(['tenant_id' => $otherTenant->id]);
+        Sanctum::actingAs($outsider);
 
         $this->getJson("/api/v1/patients/{$patient->id}/xray-attachments")->assertNotFound();
-
+        $this->postJson("/api/v1/patients/{$patient->id}/xray-attachments", [
+            'file' => UploadedFile::fake()->image('xray.png'),
+        ])->assertNotFound();
         $this->deleteJson("/api/v1/patients/{$patient->id}/xray-attachments/{$attachment->id}")
             ->assertNotFound();
 
         Storage::disk('s3')->assertExists($path);
         $this->assertDatabaseHas('xray_attachments', ['id' => $attachment->id]);
+    }
+
+    public function test_cannot_delete_xray_attachment_under_wrong_patient_route(): void
+    {
+        $this->actingAsTenantUser(role: UserRole::DOCTOR);
+        $patient = Patient::factory()->create();
+        $otherPatient = Patient::factory()->create();
+        $attachment = XrayAttachment::factory()->create([
+            'patient_id' => $patient->id,
+            'file_url' => 'tenants/test/patients/test/xrays/sample.png',
+        ]);
+
+        $this->deleteJson("/api/v1/patients/{$otherPatient->id}/xray-attachments/{$attachment->id}")
+            ->assertNotFound();
     }
 }

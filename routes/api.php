@@ -6,6 +6,7 @@ use App\Http\Controllers\Api\V1\AuditLogController;
 use App\Http\Controllers\Api\V1\Auth\ForgotPasswordController;
 use App\Http\Controllers\Api\V1\Auth\LoginController;
 use App\Http\Controllers\Api\V1\Auth\LogoutController;
+use App\Http\Controllers\Api\V1\Auth\ProfileAvatarController;
 use App\Http\Controllers\Api\V1\Auth\ProfileController;
 use App\Http\Controllers\Api\V1\Auth\ResetPasswordController;
 use App\Http\Controllers\Api\V1\ClinicBrandingController;
@@ -45,6 +46,8 @@ Route::prefix('v1')->group(function () {
             Route::post('logout', LogoutController::class);
             Route::get('me', [ProfileController::class, 'show']);
             Route::match(['put', 'patch'], 'me', [ProfileController::class, 'update']);
+            Route::post('me/avatar', [ProfileAvatarController::class, 'store']);
+            Route::delete('me/avatar', [ProfileAvatarController::class, 'destroy']);
         });
 
         // Patients API Resource

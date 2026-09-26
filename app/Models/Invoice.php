@@ -170,12 +170,13 @@ class Invoice extends Model
 
     public function scopeSearch(Builder $query, string $search): Builder
     {
-        $escapedSearch = addcslashes($search, '%_\\');
+        $escapedSearch = addcslashes(trim($search), '%_\\');
+        $pattern = "%{$escapedSearch}%";
 
-        return $query->where(function (Builder $q) use ($escapedSearch) {
-            $q->where('id', 'LIKE', "%{$escapedSearch}%")
-                ->orWhereHas('patient', function (Builder $patientQuery) use ($escapedSearch) {
-                    $patientQuery->where('full_name', 'LIKE', "%{$escapedSearch}%");
+        return $query->where(function (Builder $q) use ($pattern) {
+            $q->where('id', 'ilike', $pattern)
+                ->orWhereHas('patient', function (Builder $patientQuery) use ($pattern) {
+                    $patientQuery->where('full_name', 'ilike', $pattern);
                 });
         });
     }

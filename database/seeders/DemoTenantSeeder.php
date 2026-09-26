@@ -2,6 +2,7 @@
 
 namespace Database\Seeders;
 
+use App\Support\Roles\ClinicMembershipSync;
 use App\Support\Tenancy\CurrentTenant;
 use Carbon\Carbon;
 use Illuminate\Database\Seeder;
@@ -444,7 +445,7 @@ class DemoTenantSeeder extends Seeder
         |--------------------------------------------------------------------------
         */
 
-        \App\Support\Roles\ClinicMembershipSync::backfillMissing();
+        ClinicMembershipSync::backfillMissing();
 
         app(CurrentTenant::class)->clear();
 

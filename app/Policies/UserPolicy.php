@@ -36,4 +36,14 @@ class UserPolicy
     {
         return $this->update($user, $target);
     }
+
+    public function updateAvatar(User $user, User $target): bool
+    {
+        return $user->id === $target->id;
+    }
+
+    public function deleteAvatar(User $user, User $target): bool
+    {
+        return $user->id === $target->id;
+    }
 }

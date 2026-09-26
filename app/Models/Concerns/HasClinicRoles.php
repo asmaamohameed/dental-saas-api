@@ -9,6 +9,9 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 trait HasClinicRoles
 {
+    /**
+     * @return HasMany<ClinicMember, $this>
+     */
     public function clinicMembers(): HasMany
     {
         return $this->hasMany(ClinicMember::class);

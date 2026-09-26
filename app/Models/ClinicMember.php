@@ -30,6 +30,9 @@ class ClinicMember extends Model
         return $this->belongsTo(User::class);
     }
 
+    /**
+     * @return BelongsToMany<Role, $this>
+     */
     public function roles(): BelongsToMany
     {
         return $this->belongsToMany(Role::class, 'clinic_member_role');

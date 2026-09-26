@@ -111,4 +111,16 @@ class PatientCrudTest extends TestCase
         $response->assertStatus(422)
             ->assertJsonValidationErrors(['phone']);
     }
+
+    public function test_index_search_is_case_insensitive_on_full_name(): void
+    {
+        $this->actingAsTenantUser();
+        $patient = Patient::factory()->create(['full_name' => 'Ahmed Mostafa']);
+        Patient::factory()->create(['full_name' => 'Other Person']);
+
+        $response = $this->getJson('/api/v1/patients?search=ahmed+mostafa')->assertOk();
+
+        $this->assertCount(1, $response->json('data.items'));
+        $this->assertSame($patient->id, $response->json('data.items.0.id'));
+    }
 }

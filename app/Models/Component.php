@@ -12,6 +12,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 /**
+ * @property float $default_price
  * @property-read bool $is_low_stock
  * @property float|string|null $default_price
  */

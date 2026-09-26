@@ -21,6 +21,7 @@ use Laravel\Sanctum\HasApiTokens;
  * @property string|null $tenant_id
  * @property UserRole|null $role
  * @property list<string>|null $working_days
+ * @property string|null $avatar_url
  * @property-read Tenant|null $tenant
  */
 class User extends Authenticatable
@@ -41,6 +42,7 @@ class User extends Authenticatable
         'name',
         'email',
         'phone',
+        'avatar_url',
         'password_hash',
         'role',
         'locale',

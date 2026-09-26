@@ -53,8 +53,7 @@ class ClinicMembershipSync
             return;
         }
 
-        $role = $user->role;
-        $name = $role instanceof UserRole ? $role->value : (is_string($role) ? $role : null);
+        $name = $user->role?->value;
 
         if ($name === null) {
             return;
@@ -128,12 +127,9 @@ class ClinicMembershipSync
     private static function roleNamesFromUser(User $user): array
     {
         $names = [];
-        $role = $user->role;
 
-        if ($role instanceof UserRole) {
-            $names[] = $role->value;
-        } elseif (is_string($role) && $role !== '') {
-            $names[] = $role;
+        if ($user->role instanceof UserRole) {
+            $names[] = $user->role->value;
         }
 
         if (Schema::hasColumn('users', 'additional_roles')) {

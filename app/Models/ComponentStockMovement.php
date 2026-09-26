@@ -15,6 +15,7 @@ use Illuminate\Support\Carbon;
  * @property int $quantity
  * @property string|null $performed_by
  * @property Carbon|null $created_at
+ * @property-read Component|null $component
  * @property-read User|null $performer
  * @property-read Component|null $component
  */

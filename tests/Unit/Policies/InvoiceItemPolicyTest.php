@@ -103,7 +103,7 @@ class InvoiceItemPolicyTest extends TestCase
     {
         $doctor = $this->user(UserRole::DOCTOR, 'tenant-a');
 
-        $this->assertFalse($this->policy->create($doctor, $this->invoice('tenant-a', InvoiceStatus::UNPAID)));
+        $this->assertTrue($this->policy->create($doctor, $this->invoice('tenant-a', InvoiceStatus::UNPAID)));
     }
 
     public function test_update_is_denied_when_invoice_is_paid_even_for_owner(): void

@@ -10,7 +10,7 @@ class PatientPolicy
 {
     public function before(User $user, string $ability): ?bool
     {
-        if ($user->role?->isOwner()) {
+        if ($user->isOwner()) {
             return true;
         }
 
@@ -19,38 +19,52 @@ class PatientPolicy
 
     public function viewAny(User $user): bool
     {
-        return $user->role?->isReceptionist() || $user->canAccessClinicalData();
+        return $user->hasAnyClinicRole([
+            UserRole::DOCTOR,
+            UserRole::ASSISTANT,
+            UserRole::RECEPTIONIST,
+        ]);
     }
 
     public function view(User $user, Patient $patient): bool
     {
         return $user->tenant_id === $patient->tenant_id
-            && ($user->role?->isReceptionist() || $user->canAccessClinicalData());
+            && $user->hasAnyClinicRole([
+                UserRole::DOCTOR,
+                UserRole::ASSISTANT,
+                UserRole::RECEPTIONIST,
+            ]);
     }
 
     public function viewMedicalHistory(User $user): bool
     {
-        return $user->canAccessClinicalData();
+        return $user->isDoctor() || $user->isAssistant();
     }
 
     public function create(User $user): bool
     {
-        return $user->role?->isOwner()
-            || $user->role?->isReceptionist()
-            || $user->canAccessClinicalData();
+        return $user->hasAnyClinicRole([
+            UserRole::OWNER,
+            UserRole::DOCTOR,
+            UserRole::ASSISTANT,
+            UserRole::RECEPTIONIST,
+        ]);
     }
 
     public function update(User $user, Patient $patient): bool
     {
         return $user->tenant_id === $patient->tenant_id
-            && ($user->role?->isOwner()
-                || $user->role?->isReceptionist()
-                || $user->canAccessClinicalData());
+            && $user->hasAnyClinicRole([
+                UserRole::OWNER,
+                UserRole::DOCTOR,
+                UserRole::ASSISTANT,
+                UserRole::RECEPTIONIST,
+            ]);
     }
 
     public function delete(User $user, Patient $patient): bool
     {
         return $user->tenant_id === $patient->tenant_id
-            && $user->role === UserRole::OWNER;
+            && $user->isOwner();
     }
 }

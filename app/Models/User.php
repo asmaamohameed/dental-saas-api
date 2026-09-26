@@ -4,7 +4,9 @@ namespace App\Models;
 
 use App\Enums\UserRole;
 use App\Models\Concerns\BelongsToTenant;
+use App\Models\Concerns\HasClinicRoles;
 use App\Notifications\ResetPasswordNotification;
+use App\Support\Roles\ClinicMembershipSync;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
@@ -24,7 +26,11 @@ use Laravel\Sanctum\HasApiTokens;
 class User extends Authenticatable
 {
     /** @use HasFactory<UserFactory> */
-    use BelongsToTenant, HasApiTokens, HasFactory, HasUuids, Notifiable;
+    use BelongsToTenant, HasApiTokens, HasClinicRoles, HasFactory, HasUuids, Notifiable;
+
+    protected $with = [
+        'clinicMembers.roles',
+    ];
 
     /**
      * The attributes that are mass assignable.
@@ -84,6 +90,13 @@ class User extends Authenticatable
         return $query->whereJsonContains('working_days', $day);
     }
 
+    protected static function booted(): void
+    {
+        static::created(function (User $user): void {
+            ClinicMembershipSync::attachLegacyRole($user);
+        });
+    }
+
     // Relationships
     public function appointments(): HasMany
     {
@@ -115,11 +128,11 @@ class User extends Authenticatable
 
     public function canAccessClinicalData(): bool
     {
-        return in_array($this->role, [UserRole::DOCTOR, UserRole::ASSISTANT], true);
+        return $this->hasAnyClinicRole([UserRole::DOCTOR, UserRole::ASSISTANT]);
     }
 
     public function canManageFinance(): bool
     {
-        return in_array($this->role, [UserRole::DOCTOR, UserRole::RECEPTIONIST], true);
+        return $this->hasAnyClinicRole([UserRole::DOCTOR, UserRole::RECEPTIONIST]);
     }
 }

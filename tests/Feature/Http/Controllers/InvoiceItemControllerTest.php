@@ -67,7 +67,7 @@ class InvoiceItemControllerTest extends TestCase
         $invoice = Invoice::factory()->create(['status' => InvoiceStatus::UNPAID]);
 
         $this->postJson("/api/v1/invoices/{$invoice->id}/items", $this->manualItemPayload())
-            ->assertStatus(403);
+            ->assertCreated();
     }
 
     public function test_receptionist_can_add_an_item_and_total_is_recalculated(): void

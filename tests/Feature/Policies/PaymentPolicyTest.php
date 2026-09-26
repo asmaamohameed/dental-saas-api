@@ -78,7 +78,7 @@ class PaymentPolicyTest extends TestCase
         $this->postJson("/api/v1/invoices/{$invoice->id}/payments", [
             'amount' => 50,
             'method' => 'cash',
-        ])->assertForbidden();
+        ])->assertCreated();
     }
 
     // --- viewAny / view + tenant isolation ---

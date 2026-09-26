@@ -4,6 +4,7 @@ namespace App\Http\Requests\V1\Appointment;
 
 use App\Enums\AppointmentStatus;
 use App\Enums\UserRole;
+use App\Models\User;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -21,8 +22,7 @@ class UpdateAppointmentStatusRequest extends FormRequest
             'doctor_id' => [
                 'nullable',
                 Rule::exists('users', 'id')->where(function ($query) {
-                    $query->where('role', UserRole::DOCTOR)
-                        ->where('tenant_id', $this->user()->tenant_id);
+                    User::constrainUsersWithClinicRole($query, (string) $this->user()->tenant_id, UserRole::DOCTOR->value);
                 }),
             ],
         ];

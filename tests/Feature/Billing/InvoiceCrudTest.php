@@ -40,7 +40,7 @@ class InvoiceCrudTest extends TestCase
             'items' => [
                 ['price' => 100, 'description' => 'Manual charge line', 'quantity' => 1],
             ],
-        ])->assertForbidden();
+        ])->assertCreated();
     }
 
     public function test_receptionist_cannot_delete_an_invoice(): void

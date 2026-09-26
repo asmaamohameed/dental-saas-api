@@ -13,14 +13,14 @@ use Tests\TestCase;
 
 class AppointmentAuthorizationTest extends TestCase
 {
-    public function test_doctor_cannot_update_an_appointment(): void
+    public function test_doctor_can_update_an_appointment(): void
     {
         $doctor = $this->actingAsTenantUser(role: UserRole::DOCTOR);
         $appointment = Appointment::factory()->create(['doctor_id' => $doctor->id]);
 
         $this->putJson("/api/v1/appointments/{$appointment->id}", [
             'duration_minutes' => 45,
-        ])->assertForbidden();
+        ])->assertOk();
     }
 
     public function test_doctor_can_update_status_of_their_own_appointment(): void
@@ -36,15 +36,18 @@ class AppointmentAuthorizationTest extends TestCase
         ])->assertOk();
     }
 
-    public function test_doctor_cannot_update_status_of_another_doctors_appointment(): void
+    public function test_doctor_can_update_status_of_another_doctors_appointment(): void
     {
         $this->actingAsTenantUser(role: UserRole::DOCTOR);
         $otherDoctor = User::factory()->doctor()->create();
-        $appointment = Appointment::factory()->create(['doctor_id' => $otherDoctor->id]);
+        $appointment = Appointment::factory()->create([
+            'doctor_id' => $otherDoctor->id,
+            'status' => AppointmentStatus::CHECKED_IN,
+        ]);
 
         $this->patchJson("/api/v1/appointments/{$appointment->id}/status", [
             'status' => 'completed',
-        ])->assertForbidden();
+        ])->assertOk();
     }
 
     public function test_receptionist_cannot_delete_an_appointment(): void
@@ -73,7 +76,7 @@ class AppointmentAuthorizationTest extends TestCase
             ->assertForbidden();
     }
 
-    public function test_doctor_cannot_create_an_appointment(): void
+    public function test_doctor_can_create_an_appointment(): void
     {
         $tenant = Tenant::factory()->create();
         app(CurrentTenant::class)->set($tenant->id);
@@ -87,6 +90,6 @@ class AppointmentAuthorizationTest extends TestCase
             'doctor_id' => $otherDoctor->id,
             'scheduled_at' => now()->addDay()->toDateTimeString(),
             'duration_minutes' => 30,
-        ])->assertForbidden();
+        ])->assertCreated();
     }
 }

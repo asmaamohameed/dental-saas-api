@@ -50,6 +50,16 @@ class Tenant extends Model
         return $this->hasMany(User::class);
     }
 
+    public function members(): HasMany
+    {
+        return $this->hasMany(ClinicMember::class, 'clinic_id');
+    }
+
+    public function owners(): HasMany
+    {
+        return $this->members()->whereHas('roles', fn ($query) => $query->where('name', 'owner'));
+    }
+
     public function patients(): HasMany
     {
         return $this->hasMany(Patient::class);

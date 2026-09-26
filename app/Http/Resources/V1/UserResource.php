@@ -19,6 +19,7 @@ class UserResource extends JsonResource
             'email' => $this->email,
             'phone' => $this->phone,
             'role' => $this->role,
+            'roles' => $this->currentClinicRoleNames(),
             'locale' => $this->locale,
             'is_active' => $this->is_active,
             'tenant' => new TenantResource($this->whenLoaded('tenant')),

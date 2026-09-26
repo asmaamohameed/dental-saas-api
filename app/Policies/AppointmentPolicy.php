@@ -15,9 +15,12 @@ class AppointmentPolicy
      */
     public function viewAny(User $user): bool
     {
-        return $user->role?->isOwner()
-            || $user->role?->isReceptionist()
-            || $user->canAccessClinicalData();
+        return $user->hasAnyClinicRole([
+            UserRole::OWNER,
+            UserRole::DOCTOR,
+            UserRole::ASSISTANT,
+            UserRole::RECEPTIONIST,
+        ]);
     }
 
     /**
@@ -26,9 +29,12 @@ class AppointmentPolicy
     public function view(User $user, Appointment $appointment): bool
     {
         return $user->tenant_id === $appointment->tenant_id
-            && ($user->role?->isOwner()
-                || $user->role?->isReceptionist()
-                || $user->canAccessClinicalData());
+            && $user->hasAnyClinicRole([
+                UserRole::OWNER,
+                UserRole::DOCTOR,
+                UserRole::ASSISTANT,
+                UserRole::RECEPTIONIST,
+            ]);
     }
 
     /**
@@ -36,8 +42,10 @@ class AppointmentPolicy
      */
     public function create(User $user): bool
     {
-        return in_array($user->role, [
+        return $user->hasAnyClinicRole([
             UserRole::OWNER,
+            UserRole::DOCTOR,
+            UserRole::ASSISTANT,
             UserRole::RECEPTIONIST,
         ]);
     }
@@ -52,10 +60,12 @@ class AppointmentPolicy
         }
 
         return $user->tenant_id === $appointment->tenant_id
-            && in_array($user->role, [
+            && $user->hasAnyClinicRole([
                 UserRole::OWNER,
+                UserRole::DOCTOR,
+                UserRole::ASSISTANT,
                 UserRole::RECEPTIONIST,
-            ], true);
+            ]);
     }
 
     /**
@@ -72,14 +82,15 @@ class AppointmentPolicy
         }
 
         if ($appointment->status === AppointmentStatus::COMPLETED) {
-            return $user->role === UserRole::OWNER;
+            return $user->isOwner();
         }
 
-        if ($user->role === UserRole::OWNER || $user->role === UserRole::RECEPTIONIST) {
-            return true;
-        }
-
-        return $user->role === UserRole::DOCTOR && $appointment->doctor_id === $user->id;
+        return $user->hasAnyClinicRole([
+            UserRole::OWNER,
+            UserRole::DOCTOR,
+            UserRole::ASSISTANT,
+            UserRole::RECEPTIONIST,
+        ]);
     }
 
     /**
@@ -92,7 +103,7 @@ class AppointmentPolicy
         }
 
         return $user->tenant_id === $appointment->tenant_id
-            && $user->role === UserRole::OWNER;
+            && $user->isOwner();
     }
 
     /**

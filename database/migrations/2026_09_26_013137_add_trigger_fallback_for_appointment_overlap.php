@@ -12,7 +12,7 @@ return new class extends Migration
     ");
 
         if ($constraintExists) {
-            return; // عندك الـ exclusion constraint الحقيقي خلاص، مش محتاج trigger زيادة
+            return; 
         }
 
         DB::unprepared("
@@ -41,7 +41,7 @@ return new class extends Migration
         DB::unprepared('
         CREATE TRIGGER check_appointment_overlap
         BEFORE INSERT OR UPDATE ON appointments
-        FOR EACH ROW EXECUTE FUNCTION prevent_overlapping_doctor_appointments();
+        FOR EACH ROW EXECUTE PROCEDURE prevent_overlapping_doctor_appointments();
     ');
     }
 

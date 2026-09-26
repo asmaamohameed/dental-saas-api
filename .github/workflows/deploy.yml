@@ -20,7 +20,7 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: ${{ secrets.SERVER_PORT }}
           script: |
-            cd /home/smiluimo/clinic-app
+            cd /home/smiluimo/clinic-app/public
             git pull origin main
             composer install --no-dev --optimize-autoloader --no-interaction
             php artisan migrate --force

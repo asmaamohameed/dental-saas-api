@@ -15,7 +15,7 @@ class InventoryTransactionPolicy
             return null;
         }
 
-        if ($user->role?->isOwner()) {
+        if ($user->isOwner()) {
             return true;
         }
 
@@ -25,27 +25,29 @@ class InventoryTransactionPolicy
     public function viewAny(User $user, InventoryItem $item): bool
     {
         return $user->tenant_id === $item->tenant_id
-            && in_array($user->role, [
+            && $user->hasAnyClinicRole([
                 UserRole::DOCTOR,
+                UserRole::ASSISTANT,
                 UserRole::RECEPTIONIST,
-            ], true);
+            ]);
     }
 
     public function view(User $user, InventoryTransaction $transaction): bool
     {
         return $user->tenant_id === $transaction->tenant_id
-            && in_array($user->role, [
+            && $user->hasAnyClinicRole([
                 UserRole::DOCTOR,
+                UserRole::ASSISTANT,
                 UserRole::RECEPTIONIST,
-            ], true);
+            ]);
     }
 
     public function create(User $user, InventoryItem $item): bool
     {
         return $user->tenant_id === $item->tenant_id
-            && in_array($user->role, [
+            && $user->hasAnyClinicRole([
                 UserRole::DOCTOR,
                 UserRole::RECEPTIONIST,
-            ], true);
+            ]);
     }
 }

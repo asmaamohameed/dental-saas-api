@@ -139,7 +139,7 @@ class InvoiceItemPolicyTest extends TestCase
             'service_id' => $service->id,
             'price' => 100,
             'quantity' => 1,
-        ])->assertForbidden();
+        ])->assertCreated();
     }
 
     // --- delete ---
@@ -184,6 +184,6 @@ class InvoiceItemPolicyTest extends TestCase
 
         Sanctum::actingAs($user, ['*']);
 
-        $this->deleteJson("/api/v1/invoices/{$invoice->id}/items/{$item->id}")->assertForbidden();
+        $this->deleteJson("/api/v1/invoices/{$invoice->id}/items/{$item->id}")->assertOk();
     }
 }

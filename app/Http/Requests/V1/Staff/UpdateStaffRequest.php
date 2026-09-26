@@ -20,7 +20,11 @@ class UpdateStaffRequest extends FormRequest
             'email' => ['sometimes', 'required', 'email', 'max:255', Rule::unique('users', 'email')->ignore($this->route('user'))],
             'phone' => ['nullable', 'string', 'max:50'],
             'password' => ['sometimes', 'nullable', 'string', 'min:8'],
-            'role' => ['sometimes', 'required', Rule::in([UserRole::DOCTOR->value, UserRole::RECEPTIONIST->value])],
+            'role' => ['sometimes', 'required', Rule::in([
+                UserRole::DOCTOR->value,
+                UserRole::ASSISTANT->value,
+                UserRole::RECEPTIONIST->value,
+            ])],
             'locale' => ['nullable', 'string', 'max:10'],
         ];
     }

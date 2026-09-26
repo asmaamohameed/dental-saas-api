@@ -484,6 +484,8 @@ class DemoTenantSeeder extends Seeder
         |--------------------------------------------------------------------------
         */
 
+        \App\Support\Roles\ClinicMembershipSync::backfillMissing();
+
         app(CurrentTenant::class)->clear();
 
         $this->command->info('');

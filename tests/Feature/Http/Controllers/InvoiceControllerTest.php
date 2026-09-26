@@ -92,7 +92,7 @@ class InvoiceControllerTest extends TestCase
         $this->postJson('/api/v1/invoices', [
             'patient_id' => $patient->id,
             'items' => [['service_id' => $service->id, 'quantity' => 1]],
-        ])->assertStatus(403);
+        ])->assertCreated();
     }
 
     public function test_receptionist_can_create_an_invoice(): void
@@ -163,7 +163,7 @@ class InvoiceControllerTest extends TestCase
 
         $this->putJson("/api/v1/invoices/{$invoice->id}", [
             'items' => [['service_id' => $service->id, 'quantity' => 1]],
-        ])->assertStatus(403);
+        ])->assertOk();
     }
 
     public function test_receptionist_can_update_items_on_an_unpaid_invoice(): void

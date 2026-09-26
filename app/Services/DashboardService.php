@@ -318,22 +318,29 @@ class DashboardService
 
     public function getComponentStock(): array
     {
-        return Component::query()
-            ->where('is_active', true)
+        $items = Component::query()
             ->orderByDesc('current_quantity')
             ->get()
-            ->map(fn (Component $component) => [
-                'name_ar' => $component->name_ar,
-                'name_en' => $component->name_en,
-                'quantity' => (int) $component->current_quantity,
-                'unit_price' => (int) $component->default_price,
-                'stock_value' => (int) $component->current_quantity * (int) $component->default_price,
-                'is_low_stock' => (bool) $component->is_low_stock,
-            ])
+            ->map(function (Component $component) {
+                $quantity = (float) $component->current_quantity;
+                $unitPrice = (float) $component->default_price;
+
+                return [
+                    'name_ar' => $component->name_ar,
+                    'name_en' => $component->name_en,
+                    'quantity' => $quantity,
+                    'unit_price' => $unitPrice,
+                    'stock_value' => (int) round($quantity * $unitPrice),
+                    'is_low_stock' => (bool) $component->is_low_stock,
+                ];
+            })
             ->sortByDesc('stock_value')
-            ->take(12)
-            ->values()
-            ->all();
+            ->values();
+
+        return [
+            'total_stock_value' => (int) $items->sum('stock_value'),
+            'items' => $items->all(),
+        ];
     }
 
     public function getInvoiceStatus(?string $range): array

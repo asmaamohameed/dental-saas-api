@@ -80,7 +80,7 @@ Route::prefix('v1')->group(function () {
             ->only(['index', 'show']);
         Route::get('patient-treatments/{patientTreatment}/invoice-summary', [PatientTreatmentController::class, 'invoiceSummary']);
 
-        Route::middleware(EnsureUserRole::using(UserRole::OWNER, UserRole::RECEPTIONIST, UserRole::DOCTOR))->group(function () {
+        Route::middleware(EnsureUserRole::using(UserRole::OWNER, UserRole::DOCTOR, UserRole::ASSISTANT, UserRole::RECEPTIONIST))->group(function () {
             Route::post('patient-treatments/{patientTreatment}/sessions', [PatientTreatmentController::class, 'storeSession']);
             Route::patch('treatment-sessions/{treatmentSession}', [PatientTreatmentController::class, 'updateSession']);
             Route::post('treatment-sessions/{treatmentSession}/steps', [PatientTreatmentController::class, 'storeSessionStep']);
@@ -116,7 +116,7 @@ Route::prefix('v1')->group(function () {
         // Expenses
         Route::get('expenses', [ExpenseController::class, 'index']);
 
-        // Create & Edit endpoints (owner, receptionist)
+        // Catalog edits stay with the owner and receptionist.
         Route::middleware(EnsureUserRole::using(UserRole::OWNER, UserRole::RECEPTIONIST))->group(function () {
             Route::post('services', [ServiceController::class, 'store']);
             Route::put('services/{service}', [ServiceController::class, 'update']);
@@ -124,6 +124,10 @@ Route::prefix('v1')->group(function () {
             Route::post('components', [ComponentController::class, 'store']);
             Route::put('components/{component}', [ComponentController::class, 'update']);
             Route::patch('components/{component}/toggle-active', [ComponentController::class, 'toggleActive']);
+        });
+
+        // Treatments, invoices, and expense bills: owner, doctor, assistant, receptionist.
+        Route::middleware(EnsureUserRole::using(UserRole::OWNER, UserRole::DOCTOR, UserRole::ASSISTANT, UserRole::RECEPTIONIST))->group(function () {
             Route::post('treatment-templates', [TreatmentTemplateController::class, 'store']);
             Route::put('treatment-templates/{treatmentTemplate}', [TreatmentTemplateController::class, 'update']);
             Route::patch('treatment-templates/{treatmentTemplate}/toggle-active', [TreatmentTemplateController::class, 'toggleActive']);

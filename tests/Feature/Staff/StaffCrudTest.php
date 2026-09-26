@@ -97,6 +97,28 @@ class StaffCrudTest extends TestCase
         ]);
     }
 
+    public function test_owner_can_create_an_assistant(): void
+    {
+        Sanctum::actingAs($this->owner, ['*']);
+
+        $response = $this->postJson('/api/v1/staff', [
+            'name' => 'Clinic Assistant',
+            'email' => 'assistant@example.com',
+            'password' => 'password123',
+            'role' => UserRole::ASSISTANT->value,
+        ]);
+
+        $response->assertCreated()
+            ->assertJsonPath('data.role', UserRole::ASSISTANT->value)
+            ->assertJsonPath('data.roles', [UserRole::ASSISTANT->value]);
+
+        $assistant = User::query()->where('email', 'assistant@example.com')->first();
+
+        $this->assertNotNull($assistant);
+        $this->assertTrue($assistant->isAssistant());
+        $this->assertFalse($assistant->isDoctor());
+    }
+
     public function test_cannot_create_an_owner_via_staff_endpoint(): void
     {
         Sanctum::actingAs($this->owner, ['*']);

@@ -17,7 +17,7 @@ class InvoiceItemPolicy
             return null;
         }
 
-        if ($user->role?->isOwner()) {
+        if ($user->isOwner()) {
             return true;
         }
 
@@ -27,7 +27,7 @@ class InvoiceItemPolicy
     public function viewAny(User $user, Invoice $invoice): bool
     {
         return $user->tenant_id === $invoice->tenant_id
-            && in_array($user->role, [UserRole::DOCTOR, UserRole::RECEPTIONIST], true);
+            && $user->hasAnyClinicRole([UserRole::DOCTOR, UserRole::ASSISTANT, UserRole::RECEPTIONIST]);
     }
 
     public function create(User $user, Invoice $invoice): bool
@@ -36,12 +36,12 @@ class InvoiceItemPolicy
             return false;
         }
 
-        if ($user->role?->isOwner()) {
+        if ($user->isOwner()) {
             return true;
         }
 
         return $user->tenant_id === $invoice->tenant_id
-            && $user->role === UserRole::RECEPTIONIST
+            && $user->hasAnyClinicRole([UserRole::DOCTOR, UserRole::ASSISTANT, UserRole::RECEPTIONIST])
             && Gate::forUser($user)->allows('updateItems', $invoice);
     }
 
@@ -51,12 +51,12 @@ class InvoiceItemPolicy
             return false;
         }
 
-        if ($user->role?->isOwner()) {
+        if ($user->isOwner()) {
             return true;
         }
 
         return $user->tenant_id === $invoiceItem->invoice->tenant_id
-            && $user->role === UserRole::RECEPTIONIST
+            && $user->hasAnyClinicRole([UserRole::DOCTOR, UserRole::ASSISTANT, UserRole::RECEPTIONIST])
             && Gate::forUser($user)->allows('updateItems', $invoiceItem->invoice);
     }
 
@@ -66,12 +66,12 @@ class InvoiceItemPolicy
             return false;
         }
 
-        if ($user->role?->isOwner()) {
+        if ($user->isOwner()) {
             return true;
         }
 
         return $user->tenant_id === $invoiceItem->invoice->tenant_id
-            && $user->role === UserRole::RECEPTIONIST
+            && $user->hasAnyClinicRole([UserRole::DOCTOR, UserRole::ASSISTANT, UserRole::RECEPTIONIST])
             && Gate::forUser($user)->allows('updateItems', $invoiceItem->invoice);
     }
 }

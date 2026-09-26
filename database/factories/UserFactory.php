@@ -4,6 +4,7 @@ namespace Database\Factories;
 
 use App\Enums\UserRole;
 use App\Models\User;
+use App\Support\Roles\ClinicMembershipSync;
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Support\Facades\Hash;
 
@@ -45,8 +46,20 @@ class UserFactory extends Factory
         return $this->state(fn () => ['role' => UserRole::DOCTOR]);
     }
 
+    public function assistant(): static
+    {
+        return $this->state(fn () => ['role' => UserRole::ASSISTANT]);
+    }
+
     public function receptionist(): static
     {
         return $this->state(fn () => ['role' => UserRole::RECEPTIONIST]);
+    }
+
+    public function configure(): static
+    {
+        return $this->afterCreating(function (User $user): void {
+            ClinicMembershipSync::attachLegacyRole($user);
+        });
     }
 }

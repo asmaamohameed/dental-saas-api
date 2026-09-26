@@ -5,6 +5,7 @@ namespace App\Http\Requests\V1\Appointment;
 use App\Http\Requests\V1\Appointment\Concerns\ValidatesAppointmentTreatmentLinks;
 use App\Enums\AppointmentType;
 use App\Enums\UserRole;
+use App\Models\User;
 use App\Rules\AppointmentDoctorAvailable;
 use App\Rules\AppointmentPatientAvailable;
 use Illuminate\Foundation\Http\FormRequest;
@@ -40,8 +41,7 @@ class StoreAppointmentRequest extends FormRequest
             'doctor_id' => [
                 'required',
                 Rule::exists('users', 'id')->where(function ($query) {
-                    $query->where('role', UserRole::DOCTOR)
-                        ->where('tenant_id', $this->user()->tenant_id);
+                    User::constrainUsersWithClinicRole($query, (string) $this->user()->tenant_id, UserRole::DOCTOR->value);
                 }),
             ],
             'patient_treatment_ids' => ['sometimes', 'array'],

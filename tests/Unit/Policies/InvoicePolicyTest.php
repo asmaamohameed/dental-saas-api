@@ -34,11 +34,11 @@ class InvoicePolicyTest extends TestCase
         $this->assertTrue($this->policy->before($this->user(UserRole::OWNER), 'updateItems'));
     }
 
-    public function test_update_items_denies_doctor(): void
+    public function test_update_items_allows_doctor_on_unpaid_invoice(): void
     {
         $doctor = $this->user(UserRole::DOCTOR);
 
-        $this->assertFalse($this->policy->updateItems($doctor, $this->invoice(InvoiceStatus::UNPAID)));
+        $this->assertTrue($this->policy->updateItems($doctor, $this->invoice(InvoiceStatus::UNPAID)));
     }
 
     public function test_update_items_allows_receptionist_on_unpaid_invoice(): void

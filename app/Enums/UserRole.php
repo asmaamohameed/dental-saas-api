@@ -6,6 +6,7 @@ enum UserRole: string
 {
     case OWNER = 'owner';
     case DOCTOR = 'doctor';
+    case ASSISTANT = 'assistant';
     case RECEPTIONIST = 'receptionist';
 
     public function isOwner(): bool
@@ -16,6 +17,11 @@ enum UserRole: string
     public function isDoctor(): bool
     {
         return $this === self::DOCTOR;
+    }
+
+    public function isAssistant(): bool
+    {
+        return $this === self::ASSISTANT;
     }
 
     public function isReceptionist(): bool

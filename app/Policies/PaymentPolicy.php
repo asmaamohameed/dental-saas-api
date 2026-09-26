@@ -11,7 +11,7 @@ class PaymentPolicy
 {
     public function before(User $user, string $ability): ?bool
     {
-        if ($user->role?->isOwner()) {
+        if ($user->isOwner()) {
             return true;
         }
 
@@ -21,25 +21,31 @@ class PaymentPolicy
     public function viewAny(User $user, Invoice $invoice): bool
     {
         return $user->tenant_id === $invoice->tenant_id
-            && in_array($user->role, [
+            && $user->hasAnyClinicRole([
                 UserRole::DOCTOR,
+                UserRole::ASSISTANT,
                 UserRole::RECEPTIONIST,
-            ], true);
+            ]);
     }
 
     public function view(User $user, Payment $payment): bool
     {
         return $user->tenant_id === $payment->invoice->tenant_id
-            && in_array($user->role, [
+            && $user->hasAnyClinicRole([
                 UserRole::DOCTOR,
+                UserRole::ASSISTANT,
                 UserRole::RECEPTIONIST,
-            ], true);
+            ]);
     }
 
     public function create(User $user, Invoice $invoice): bool
     {
         return $user->tenant_id === $invoice->tenant_id
-            && $user->role === UserRole::RECEPTIONIST;
+            && $user->hasAnyClinicRole([
+                UserRole::DOCTOR,
+                UserRole::ASSISTANT,
+                UserRole::RECEPTIONIST,
+            ]);
     }
 
     public function update(User $user, Payment $payment): bool

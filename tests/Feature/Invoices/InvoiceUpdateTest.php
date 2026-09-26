@@ -154,6 +154,6 @@ class InvoiceUpdateTest extends TestCase
 
         $this->putJson("/api/v1/invoices/{$invoice->id}", [
             'patient_id' => $invoice->patient_id,
-        ])->assertForbidden();
+        ])->assertOk();
     }
 }

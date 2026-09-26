@@ -11,7 +11,7 @@ class InvoicePolicy
 {
     public function before(User $user, string $ability): ?bool
     {
-        if ($user->role?->isOwner()) {
+        if ($user->isOwner()) {
             return true;
         }
 
@@ -21,11 +21,16 @@ class InvoicePolicy
     public function updateItems(User $user, Invoice $invoice): bool
     {
 
-        if (! in_array($user->role, [UserRole::OWNER, UserRole::RECEPTIONIST], true)) {
+        if (! $user->hasAnyClinicRole([
+            UserRole::OWNER,
+            UserRole::DOCTOR,
+            UserRole::ASSISTANT,
+            UserRole::RECEPTIONIST,
+        ])) {
             return false;
         }
 
-        if ($user->role === UserRole::RECEPTIONIST && $invoice->status === InvoiceStatus::PARTIAL) {
+        if (! $user->isOwner() && $invoice->status === InvoiceStatus::PARTIAL) {
             return false;
         }
 

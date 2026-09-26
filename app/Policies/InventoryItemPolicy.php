@@ -10,7 +10,7 @@ class InventoryItemPolicy
 {
     public function before(User $user, string $ability): ?bool
     {
-        if ($user->role?->isOwner()) {
+        if ($user->isOwner()) {
             return true;
         }
 
@@ -19,19 +19,21 @@ class InventoryItemPolicy
 
     public function viewAny(User $user): bool
     {
-        return in_array($user->role, [
+        return $user->hasAnyClinicRole([
             UserRole::DOCTOR,
+            UserRole::ASSISTANT,
             UserRole::RECEPTIONIST,
-        ], true);
+        ]);
     }
 
     public function view(User $user, InventoryItem $item): bool
     {
         return $user->tenant_id === $item->tenant_id
-            && in_array($user->role, [
+            && $user->hasAnyClinicRole([
                 UserRole::DOCTOR,
+                UserRole::ASSISTANT,
                 UserRole::RECEPTIONIST,
-            ], true);
+            ]);
     }
 
     public function create(User $user): bool

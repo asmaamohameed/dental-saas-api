@@ -96,7 +96,7 @@ class InvoicePolicyTest extends TestCase
         $invoice = $this->invoiceWithStatus(InvoiceStatus::UNPAID);
 
         $this->putJson("/api/v1/invoices/{$invoice->id}", $this->validItemsPayload())
-            ->assertForbidden();
+            ->assertOk();
     }
 
     public function test_update_items_ability_now_explicitly_denies_doctor_independent_of_middleware(): void

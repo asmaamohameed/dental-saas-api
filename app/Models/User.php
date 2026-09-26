@@ -4,7 +4,9 @@ namespace App\Models;
 
 use App\Enums\UserRole;
 use App\Models\Concerns\BelongsToTenant;
+use App\Models\Concerns\HasClinicRoles;
 use App\Notifications\ResetPasswordNotification;
+use App\Support\Roles\ClinicMembershipSync;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -22,7 +24,11 @@ use Laravel\Sanctum\HasApiTokens;
 class User extends Authenticatable
 {
     /** @use HasFactory<UserFactory> */
-    use BelongsToTenant, HasApiTokens, HasFactory, HasUuids, Notifiable;
+    use BelongsToTenant, HasApiTokens, HasClinicRoles, HasFactory, HasUuids, Notifiable;
+
+    protected $with = [
+        'clinicMembers.roles',
+    ];
 
     /**
      * The attributes that are mass assignable.
@@ -69,6 +75,13 @@ class User extends Authenticatable
             'is_active' => 'boolean',
             'role' => UserRole::class,
         ];
+    }
+
+    protected static function booted(): void
+    {
+        static::created(function (User $user): void {
+            ClinicMembershipSync::attachLegacyRole($user);
+        });
     }
 
     // Relationships

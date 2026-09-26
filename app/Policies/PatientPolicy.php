@@ -10,7 +10,7 @@ class PatientPolicy
 {
     public function before(User $user, string $ability): ?bool
     {
-        if ($user->role?->isOwner()) {
+        if ($user->isOwner()) {
             return true;
         }
 
@@ -19,8 +19,9 @@ class PatientPolicy
 
     public function viewAny(User $user): bool
     {
-        return in_array($user->role, [
+        return $user->hasAnyClinicRole([
             UserRole::DOCTOR,
+            UserRole::ASSISTANT,
             UserRole::RECEPTIONIST,
         ]);
     }
@@ -28,22 +29,24 @@ class PatientPolicy
     public function view(User $user, Patient $patient): bool
     {
         return $user->tenant_id === $patient->tenant_id
-            && in_array($user->role, [
+            && $user->hasAnyClinicRole([
                 UserRole::DOCTOR,
+                UserRole::ASSISTANT,
                 UserRole::RECEPTIONIST,
             ]);
     }
 
     public function viewMedicalHistory(User $user): bool
     {
-        return $user->role === UserRole::DOCTOR;
+        return $user->isDoctor() || $user->isAssistant();
     }
 
     public function create(User $user): bool
     {
-        return in_array($user->role, [
+        return $user->hasAnyClinicRole([
             UserRole::OWNER,
             UserRole::DOCTOR,
+            UserRole::ASSISTANT,
             UserRole::RECEPTIONIST,
         ]);
     }
@@ -51,9 +54,10 @@ class PatientPolicy
     public function update(User $user, Patient $patient): bool
     {
         return $user->tenant_id === $patient->tenant_id
-            && in_array($user->role, [
+            && $user->hasAnyClinicRole([
                 UserRole::OWNER,
                 UserRole::DOCTOR,
+                UserRole::ASSISTANT,
                 UserRole::RECEPTIONIST,
             ]);
     }
@@ -61,6 +65,6 @@ class PatientPolicy
     public function delete(User $user, Patient $patient): bool
     {
         return $user->tenant_id === $patient->tenant_id
-            && $user->role === UserRole::OWNER;
+            && $user->isOwner();
     }
 }

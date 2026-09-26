@@ -57,12 +57,13 @@ class InvoiceItemControllerTest extends TestCase
     {
         $this->actingAsRole(UserRole::DOCTOR);
         $invoice = Invoice::factory()->create(['status' => InvoiceStatus::UNPAID]);
-        $service = Service::factory()->create(['is_other' => false]);
+        $service = Service::factory()->create(['default_price' => 80, 'is_other' => false]);
 
         $this->postJson("/api/v1/invoices/{$invoice->id}/items", [
             'service_id' => $service->id,
+            'price' => 80,
             'quantity' => 1,
-        ])->assertStatus(403);
+        ])->assertCreated();
     }
 
     public function test_receptionist_can_add_an_item_and_total_is_recalculated(): void

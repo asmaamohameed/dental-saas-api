@@ -54,7 +54,7 @@ class PaymentTest extends TestCase
         $this->postJson("/api/v1/invoices/{$invoice->id}/payments", [
             'amount' => 50,
             'method' => 'cash',
-        ])->assertForbidden();
+        ])->assertCreated();
     }
 
     public function test_receptionist_cannot_delete_a_payment(): void

@@ -2,7 +2,6 @@
 
 namespace App\Http\Requests\V1\Service;
 
-use App\Enums\UserRole;
 use App\Support\Tenancy\CurrentTenant;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -36,7 +35,7 @@ class UpdateServiceRequest extends FormRequest
     public function withValidator($validator): void
     {
         $validator->after(function ($validator) {
-            if ($this->has('default_price') && $this->user()?->role !== UserRole::OWNER) {
+            if ($this->has('default_price') && ! $this->user()?->isOwner()) {
                 $validator->errors()->add('default_price', 'Only the clinic owner can edit the default price.');
             }
         });

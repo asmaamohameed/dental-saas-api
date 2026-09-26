@@ -12,7 +12,7 @@ return new class extends Migration
     ");
 
         if ($constraintExists) {
-            return; 
+            return;
         }
 
         DB::unprepared("

@@ -28,6 +28,16 @@ class AuthService
             ]);
         }
 
+        if ($user->tenant_id) {
+            $membership = $user->membershipForClinicId((string) $user->tenant_id);
+
+            if ($membership && $membership->is_active === false) {
+                throw ValidationException::withMessages([
+                    'email' => ['This account has been deactivated.'],
+                ]);
+            }
+        }
+
         return [
             'user' => $user,
             'token' => $user->createToken($device)->plainTextToken,

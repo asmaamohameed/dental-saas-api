@@ -18,11 +18,18 @@ use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
 
 /**
+ * @property string $id
+ * @property string $name
+ * @property string $email
+ * @property string|null $phone
+ * @property bool $is_active
  * @property string|null $tenant_id
+ * @property string|null $locale
  * @property UserRole|null $role
  * @property list<string>|null $working_days
  * @property string|null $avatar_url
  * @property-read Tenant|null $tenant
+ * @property-read \Illuminate\Database\Eloquent\Collection<int, ClinicMember> $clinicMembers
  */
 class User extends Authenticatable
 {

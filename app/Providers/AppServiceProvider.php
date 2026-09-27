@@ -42,5 +42,11 @@ class AppServiceProvider extends ServiceProvider
 
             return Limit::perMinute(5)->by($key);
         });
+
+        RateLimiter::for('admin-mutations', function (Request $request) {
+            $actor = (string) ($request->user()?->getAuthIdentifier() ?: $request->ip());
+
+            return Limit::perMinute(20)->by('admin-mutations|'.$actor);
+        });
     }
 }

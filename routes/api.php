@@ -155,6 +155,7 @@ Route::prefix('v1')->group(function () {
         // Owner-only sensitive actions (delete invoice, delete payment, edit payment, etc.)
         Route::middleware(EnsureUserRole::using(UserRole::OWNER))->group(function () {
             Route::post('clinic/logo', [ClinicBrandingController::class, 'updateLogo']);
+            Route::patch('clinic/theme', [ClinicBrandingController::class, 'updateTheme']);
             Route::get('staff', [UserController::class, 'index']);
             Route::post('staff', [UserController::class, 'store']);
             Route::put('staff/{user}', [UserController::class, 'update']);

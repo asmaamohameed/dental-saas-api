@@ -2,6 +2,7 @@
 
 use App\Exceptions\InvoiceHasPaymentsException;
 use App\Exceptions\ServiceProtectedException;
+use App\Http\Middleware\ClearPlatformTenantContext;
 use App\Http\Middleware\EnsureTenantAccess;
 use App\Http\Middleware\EnsureUserIsAdmin;
 use App\Http\Middleware\EnsureUserRole;
@@ -48,6 +49,7 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->alias([
             'is_admin' => EnsureUserIsAdmin::class,
+            'platform.context' => ClearPlatformTenantContext::class,
             'tenant' => EnsureTenantAccess::class,
             'role' => EnsureUserRole::class,
             'locale' => SetLocale::class,

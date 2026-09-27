@@ -6,7 +6,19 @@ use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Support\Carbon;
 
+/**
+ * @property string $id
+ * @property string $clinic_id
+ * @property string $user_id
+ * @property bool $is_active
+ * @property Carbon|null $created_at
+ * @property Carbon|null $updated_at
+ * @property-read Clinic|null $clinic
+ * @property-read User|null $user
+ * @property-read \Illuminate\Database\Eloquent\Collection<int, Role> $roles
+ */
 class ClinicMember extends Model
 {
     use HasUuids;
@@ -14,11 +26,23 @@ class ClinicMember extends Model
     protected $fillable = [
         'clinic_id',
         'user_id',
+        'is_active',
+    ];
+
+    protected $attributes = [
+        'is_active' => true,
     ];
 
     protected $with = [
         'roles',
     ];
+
+    protected function casts(): array
+    {
+        return [
+            'is_active' => 'boolean',
+        ];
+    }
 
     public function clinic(): BelongsTo
     {
@@ -41,7 +65,7 @@ class ClinicMember extends Model
     public function hasRole(string $roleName): bool
     {
         if ($this->relationLoaded('roles')) {
-            return $this->roles->contains(fn (Role $role) => $role->name === $roleName);
+            return $this->roles->first(fn (Role $role): bool => $role->name === $roleName) !== null;
         }
 
         return $this->roles()->where('name', $roleName)->exists();

@@ -53,11 +53,13 @@ class ClinicMembershipSync
             return;
         }
 
-        $name = $user->role?->value;
+        $role = $user->role;
 
-        if ($name === null) {
+        if (! $role instanceof UserRole) {
             return;
         }
+
+        $name = $role->value;
 
         $roleIds = Role::query()->pluck('id', 'name')->all();
 

@@ -24,7 +24,13 @@ trait HasClinicRoles
 
     public function hasRoleIn(Clinic $clinic, string $role): bool
     {
-        return (bool) $this->membershipIn($clinic)?->hasRole($role);
+        $membership = $this->membershipIn($clinic);
+
+        if (! $membership || $membership->is_active === false) {
+            return false;
+        }
+
+        return $membership->hasRole($role);
     }
 
     public function currentClinicMembership(): ?ClinicMember
@@ -41,8 +47,14 @@ trait HasClinicRoles
         $name = $role instanceof UserRole ? $role->value : $role;
         $membership = $this->currentClinicMembership();
 
-        if ($membership && $membership->roles->isNotEmpty()) {
-            return $membership->hasRole($name);
+        if ($membership) {
+            if ($membership->is_active === false) {
+                return false;
+            }
+
+            if ($membership->roles->isNotEmpty()) {
+                return $membership->hasRole($name);
+            }
         }
 
         return $this->legacyRoleName() === $name;
@@ -89,8 +101,14 @@ trait HasClinicRoles
     {
         $membership = $this->currentClinicMembership();
 
-        if ($membership && $membership->roles->isNotEmpty()) {
-            return $membership->roles->pluck('name')->values()->all();
+        if ($membership) {
+            if ($membership->is_active === false) {
+                return [];
+            }
+
+            if ($membership->roles->isNotEmpty()) {
+                return $membership->roles->pluck('name')->values()->all();
+            }
         }
 
         $legacy = $this->legacyRoleName();
@@ -121,6 +139,7 @@ trait HasClinicRoles
                 ->join('clinic_member_role', 'clinic_member_role.clinic_member_id', '=', 'clinic_members.id')
                 ->join('roles', 'roles.id', '=', 'clinic_member_role.role_id')
                 ->where('clinic_members.clinic_id', $clinicId)
+                ->where('clinic_members.is_active', true)
                 ->where('roles.name', $role);
         });
     }

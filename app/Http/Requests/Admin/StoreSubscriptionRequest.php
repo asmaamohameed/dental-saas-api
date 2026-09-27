@@ -3,6 +3,7 @@
 namespace App\Http\Requests\Admin;
 
 use App\Enums\SubscriptionStatus;
+use App\Models\AdminUser;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -14,7 +15,7 @@ class StoreSubscriptionRequest extends FormRequest
      */
     public function authorize(): bool
     {
-        return true;
+        return $this->user() instanceof AdminUser;
     }
 
     /**

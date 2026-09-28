@@ -27,7 +27,7 @@ class InvoiceItemPolicy
     public function viewAny(User $user, Invoice $invoice): bool
     {
         return $user->tenant_id === $invoice->tenant_id
-            && $user->hasAnyClinicRole([UserRole::DOCTOR, UserRole::ASSISTANT, UserRole::RECEPTIONIST]);
+            && $user->hasAnyClinicRole([UserRole::DOCTOR, UserRole::RECEPTIONIST]);
     }
 
     public function create(User $user, Invoice $invoice): bool

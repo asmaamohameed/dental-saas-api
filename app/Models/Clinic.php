@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Collection;
+
 /**
  * A clinic is a tenant. tenants.id is the clinic id used by clinic_members.clinic_id.
  *
@@ -13,7 +15,7 @@ namespace App\Models;
  * @property int|null $deactivated_owner_count
  * @property int|null $duplicate_name_count
  * @property string|null $last_activity_at
- * @property-read \Illuminate\Database\Eloquent\Collection<int, ClinicMember>|null $listedOwners
+ * @property-read Collection<int, ClinicMember>|null $listedOwners
  */
 class Clinic extends Tenant
 {

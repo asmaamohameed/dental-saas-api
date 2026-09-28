@@ -3,13 +3,14 @@
 namespace App\Http\Resources\Admin;
 
 use App\Enums\TenantStatus;
+use App\Models\Clinic;
 use App\Models\ClinicMember;
 use App\Support\Admin\ClinicIntegrity;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
 /**
- * @mixin \App\Models\Clinic
+ * @mixin Clinic
  */
 class ClinicResource extends JsonResource
 {

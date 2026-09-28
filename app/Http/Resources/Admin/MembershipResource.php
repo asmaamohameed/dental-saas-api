@@ -4,11 +4,12 @@ namespace App\Http\Resources\Admin;
 
 use App\Enums\TenantStatus;
 use App\Enums\UserRole;
+use App\Models\ClinicMember;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
 /**
- * @mixin \App\Models\ClinicMember
+ * @mixin ClinicMember
  */
 class MembershipResource extends JsonResource
 {

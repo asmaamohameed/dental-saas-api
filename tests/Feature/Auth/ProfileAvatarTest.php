@@ -12,7 +12,9 @@ class ProfileAvatarTest extends TestCase
     {
         parent::setUp();
 
-        Storage::fake('avatars');
+        Storage::fake('avatars', [
+            'url' => 'http://localhost',
+        ]);
     }
 
     public function test_authenticated_user_can_upload_profile_avatar(): void

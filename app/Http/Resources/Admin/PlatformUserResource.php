@@ -3,11 +3,12 @@
 namespace App\Http\Resources\Admin;
 
 use App\Enums\UserRole;
+use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
 /**
- * @mixin \App\Models\User
+ * @mixin User
  */
 class PlatformUserResource extends JsonResource
 {

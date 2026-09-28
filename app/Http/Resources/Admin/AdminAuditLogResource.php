@@ -2,12 +2,13 @@
 
 namespace App\Http\Resources\Admin;
 
+use App\Models\AdminAuditLog;
 use App\Services\Admin\AdminAuditLogger;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
 /**
- * @mixin \App\Models\AdminAuditLog
+ * @mixin AdminAuditLog
  */
 class AdminAuditLogResource extends JsonResource
 {

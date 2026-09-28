@@ -16,7 +16,10 @@ class AppointmentAuthorizationTest extends TestCase
     public function test_doctor_can_update_an_appointment(): void
     {
         $doctor = $this->actingAsTenantUser(role: UserRole::DOCTOR);
-        $appointment = Appointment::factory()->create(['doctor_id' => $doctor->id]);
+        $appointment = Appointment::factory()->create([
+            'doctor_id' => $doctor->id,
+            'status' => AppointmentStatus::SCHEDULED,
+        ]);
 
         $this->putJson("/api/v1/appointments/{$appointment->id}", [
             'duration_minutes' => 45,

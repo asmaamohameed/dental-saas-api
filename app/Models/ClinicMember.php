@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -17,7 +18,7 @@ use Illuminate\Support\Carbon;
  * @property Carbon|null $updated_at
  * @property-read Clinic|null $clinic
  * @property-read User|null $user
- * @property-read \Illuminate\Database\Eloquent\Collection<int, Role> $roles
+ * @property-read Collection<int, Role> $roles
  */
 class ClinicMember extends Model
 {

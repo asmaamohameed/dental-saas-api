@@ -6,6 +6,7 @@ use App\Models\AdminAuditLog;
 use App\Models\Clinic;
 use App\Support\Admin\ClinicHealthQuery;
 use App\Support\Tenancy\CurrentTenant;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 
 class AdminDashboardService
@@ -90,7 +91,7 @@ class AdminDashboardService
      *     target_id: string|null,
      *     tenant_id: string|null,
      *     admin: array{id: string, name: string, email: string}|null,
-     *     created_at: \Illuminate\Support\Carbon|null
+     *     created_at: Carbon|null
      * }>
      */
     private function recentAudits(?array $actions = null): array

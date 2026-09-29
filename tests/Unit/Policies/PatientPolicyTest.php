@@ -64,6 +64,7 @@ class PatientPolicyTest extends TestCase
     {
         $this->assertTrue($this->policy->create($this->user(UserRole::OWNER)));
         $this->assertTrue($this->policy->create($this->user(UserRole::DOCTOR)));
+        $this->assertTrue($this->policy->create($this->user(UserRole::ASSISTANT)));
         $this->assertTrue($this->policy->create($this->user(UserRole::RECEPTIONIST)));
     }
 

@@ -64,6 +64,9 @@ class Patient extends Model
         return $this->hasMany(Invoice::class);
     }
 
+    /**
+     * @return HasMany<XrayAttachment, $this>
+     */
     public function xrayAttachments(): HasMany
     {
         return $this->hasMany(XrayAttachment::class);

@@ -11,6 +11,7 @@ class UserRoleTest extends TestCase
     {
         $this->assertTrue(UserRole::OWNER->isOwner());
         $this->assertFalse(UserRole::OWNER->isDoctor());
+        $this->assertFalse(UserRole::OWNER->isAssistant());
         $this->assertFalse(UserRole::OWNER->isReceptionist());
     }
 
@@ -18,14 +19,8 @@ class UserRoleTest extends TestCase
     {
         $this->assertFalse(UserRole::DOCTOR->isOwner());
         $this->assertTrue(UserRole::DOCTOR->isDoctor());
+        $this->assertFalse(UserRole::DOCTOR->isAssistant());
         $this->assertFalse(UserRole::DOCTOR->isReceptionist());
-    }
-
-    public function test_receptionist_role_helpers(): void
-    {
-        $this->assertFalse(UserRole::RECEPTIONIST->isOwner());
-        $this->assertFalse(UserRole::RECEPTIONIST->isDoctor());
-        $this->assertTrue(UserRole::RECEPTIONIST->isReceptionist());
     }
 
     public function test_assistant_role_helpers(): void
@@ -34,6 +29,14 @@ class UserRoleTest extends TestCase
         $this->assertFalse(UserRole::ASSISTANT->isDoctor());
         $this->assertTrue(UserRole::ASSISTANT->isAssistant());
         $this->assertFalse(UserRole::ASSISTANT->isReceptionist());
+    }
+
+    public function test_receptionist_role_helpers(): void
+    {
+        $this->assertFalse(UserRole::RECEPTIONIST->isOwner());
+        $this->assertFalse(UserRole::RECEPTIONIST->isDoctor());
+        $this->assertFalse(UserRole::RECEPTIONIST->isAssistant());
+        $this->assertTrue(UserRole::RECEPTIONIST->isReceptionist());
     }
 
     public function test_role_string_values(): void

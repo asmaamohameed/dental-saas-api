@@ -6,6 +6,7 @@ use App\Http\Controllers\Api\V1\AuditLogController;
 use App\Http\Controllers\Api\V1\Auth\ForgotPasswordController;
 use App\Http\Controllers\Api\V1\Auth\LoginController;
 use App\Http\Controllers\Api\V1\Auth\LogoutController;
+use App\Http\Controllers\Api\V1\Auth\ProfileAvatarController;
 use App\Http\Controllers\Api\V1\Auth\ProfileController;
 use App\Http\Controllers\Api\V1\Auth\ResetPasswordController;
 use App\Http\Controllers\Api\V1\ClinicBrandingController;
@@ -45,6 +46,8 @@ Route::prefix('v1')->group(function () {
             Route::post('logout', LogoutController::class);
             Route::get('me', [ProfileController::class, 'show']);
             Route::match(['put', 'patch'], 'me', [ProfileController::class, 'update']);
+            Route::post('me/avatar', [ProfileAvatarController::class, 'store']);
+            Route::delete('me/avatar', [ProfileAvatarController::class, 'destroy']);
         });
 
         // Patients API Resource
@@ -81,7 +84,7 @@ Route::prefix('v1')->group(function () {
             ->only(['index', 'show']);
         Route::get('patient-treatments/{patientTreatment}/invoice-summary', [PatientTreatmentController::class, 'invoiceSummary']);
 
-        Route::middleware(EnsureUserRole::using(UserRole::OWNER, UserRole::RECEPTIONIST, UserRole::DOCTOR))->group(function () {
+        Route::middleware(EnsureUserRole::using(UserRole::OWNER, UserRole::DOCTOR, UserRole::ASSISTANT, UserRole::RECEPTIONIST))->group(function () {
             Route::post('patient-treatments/{patientTreatment}/sessions', [PatientTreatmentController::class, 'storeSession']);
             Route::patch('treatment-sessions/{treatmentSession}', [PatientTreatmentController::class, 'updateSession']);
             Route::post('treatment-sessions/{treatmentSession}/steps', [PatientTreatmentController::class, 'storeSessionStep']);
@@ -117,11 +120,15 @@ Route::prefix('v1')->group(function () {
         // Expenses
         Route::get('expenses', [ExpenseController::class, 'index']);
 
-        // Create & Edit endpoints (owner, receptionist)
+        // Catalog edits stay with the owner and receptionist.
         Route::middleware(EnsureUserRole::using(UserRole::OWNER, UserRole::RECEPTIONIST))->group(function () {
             Route::post('components', [ComponentController::class, 'store']);
             Route::put('components/{component}', [ComponentController::class, 'update']);
             Route::patch('components/{component}/toggle-active', [ComponentController::class, 'toggleActive']);
+        });
+
+        // Treatments, invoices, and expense bills: owner, doctor, assistant, receptionist.
+        Route::middleware(EnsureUserRole::using(UserRole::OWNER, UserRole::DOCTOR, UserRole::ASSISTANT, UserRole::RECEPTIONIST))->group(function () {
             Route::post('treatment-templates', [TreatmentTemplateController::class, 'store']);
             Route::put('treatment-templates/{treatmentTemplate}', [TreatmentTemplateController::class, 'update']);
             Route::patch('treatment-templates/{treatmentTemplate}/toggle-active', [TreatmentTemplateController::class, 'toggleActive']);
@@ -148,6 +155,7 @@ Route::prefix('v1')->group(function () {
         // Owner-only sensitive actions (delete invoice, delete payment, edit payment, etc.)
         Route::middleware(EnsureUserRole::using(UserRole::OWNER))->group(function () {
             Route::post('clinic/logo', [ClinicBrandingController::class, 'updateLogo']);
+            Route::patch('clinic/theme', [ClinicBrandingController::class, 'updateTheme']);
             Route::get('staff', [UserController::class, 'index']);
             Route::post('staff', [UserController::class, 'store']);
             Route::put('staff/{user}', [UserController::class, 'update']);

@@ -75,18 +75,18 @@ class InvoiceControllerTest extends TestCase
         $this->assertCount(1, $response->json('data.items'));
     }
 
-    public function test_index_filters_by_search(): void
+    public function test_index_filters_by_search_case_insensitively(): void
     {
         $this->actingAsRole(UserRole::RECEPTIONIST);
         $patient = Patient::factory()->create(['full_name' => 'Unique Patient Alpha']);
         $invoice = Invoice::factory()->create(['patient_id' => $patient->id]);
         Invoice::factory()->create();
 
-        $byPatient = $this->getJson('/api/v1/invoices?search=Unique+Patient')->assertOk();
+        $byPatient = $this->getJson('/api/v1/invoices?search=unique+patient')->assertOk();
         $this->assertCount(1, $byPatient->json('data.items'));
         $this->assertSame($invoice->id, $byPatient->json('data.items.0.id'));
 
-        $byId = $this->getJson("/api/v1/invoices?search={$invoice->id}")->assertOk();
+        $byId = $this->getJson('/api/v1/invoices?search='.strtoupper($invoice->id))->assertOk();
         $this->assertCount(1, $byId->json('data.items'));
         $this->assertSame($invoice->id, $byId->json('data.items.0.id'));
     }
@@ -117,7 +117,7 @@ class InvoiceControllerTest extends TestCase
         $this->postJson('/api/v1/invoices', [
             'patient_id' => $patient->id,
             'items' => [['price' => 100, 'description' => 'Manual charge line', 'quantity' => 1]],
-        ])->assertStatus(403);
+        ])->assertCreated();
     }
 
     public function test_receptionist_can_create_an_invoice(): void
@@ -182,7 +182,7 @@ class InvoiceControllerTest extends TestCase
         $invoice = Invoice::factory()->create(['status' => InvoiceStatus::UNPAID]);
         $this->putJson("/api/v1/invoices/{$invoice->id}", [
             'items' => [['price' => 100, 'description' => 'Manual charge line', 'quantity' => 1]],
-        ])->assertStatus(403);
+        ])->assertOk();
     }
 
     public function test_receptionist_can_update_items_on_an_unpaid_invoice(): void

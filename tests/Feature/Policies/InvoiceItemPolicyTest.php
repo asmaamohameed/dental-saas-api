@@ -112,7 +112,7 @@ class InvoiceItemPolicyTest extends TestCase
         Sanctum::actingAs($user, ['*']);
         $invoice = $this->invoiceWithStatus(InvoiceStatus::UNPAID);
 
-        $this->postJson("/api/v1/invoices/{$invoice->id}/items", $this->manualItemPayload())->assertForbidden();
+        $this->postJson("/api/v1/invoices/{$invoice->id}/items", $this->manualItemPayload())->assertCreated();
     }
 
     public function test_owner_can_delete_an_item_from_a_partial_invoice(): void
@@ -147,6 +147,6 @@ class InvoiceItemPolicyTest extends TestCase
 
         Sanctum::actingAs($user, ['*']);
 
-        $this->deleteJson("/api/v1/invoices/{$invoice->id}/items/{$item->id}")->assertForbidden();
+        $this->deleteJson("/api/v1/invoices/{$invoice->id}/items/{$item->id}")->assertOk();
     }
 }

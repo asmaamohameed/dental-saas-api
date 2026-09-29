@@ -38,9 +38,11 @@ class PatientController extends Controller implements HasMiddleware
         if ($search) {
             $escapedSearch = addcslashes($search, '%_\\');
 
-            $query->where(function ($q) use ($escapedSearch) {
-                $q->where('full_name', 'LIKE', "%{$escapedSearch}%")
-                    ->orWhere('phone', 'LIKE', "%{$escapedSearch}%");
+            $pattern = "%{$escapedSearch}%";
+
+            $query->where(function ($q) use ($pattern) {
+                $q->where('full_name', 'ilike', $pattern)
+                    ->orWhere('phone', 'ilike', $pattern);
             });
         }
 

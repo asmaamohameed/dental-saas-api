@@ -5,6 +5,7 @@ namespace App\Http\Requests\V1\Appointment;
 use App\Enums\AppointmentType;
 use App\Enums\UserRole;
 use App\Http\Requests\V1\Appointment\Concerns\ValidatesAppointmentTreatmentLinks;
+use App\Models\User;
 use App\Rules\AppointmentDoctorAvailable;
 use App\Rules\AppointmentPatientAvailable;
 use Illuminate\Foundation\Http\FormRequest;
@@ -33,8 +34,7 @@ class UpdateAppointmentRequest extends FormRequest
             'doctor_id' => [
                 'sometimes',
                 Rule::exists('users', 'id')->where(function ($query) {
-                    $query->where('role', UserRole::DOCTOR)
-                        ->where('tenant_id', $this->user()->tenant_id);
+                    User::constrainUsersWithClinicRole($query, (string) $this->user()->tenant_id, UserRole::DOCTOR->value);
                 }),
             ],
             'patient_treatment_ids' => ['sometimes', 'array'],
@@ -54,53 +54,61 @@ class UpdateAppointmentRequest extends FormRequest
     public function withValidator($validator)
     {
         $validator->after(function ($validator) {
-            if (! $this->filled('scheduled_at')) {
-                return;
-            }
-
             $appointment = $this->route('appointment');
-            $newScheduledAt = Carbon::parse($this->input('scheduled_at'));
-            $isActuallyChanging = ! $appointment->scheduled_at->equalTo($newScheduledAt);
 
-            if ($isActuallyChanging && $newScheduledAt->isPast()) {
-                $validator->errors()->add('scheduled_at', 'The scheduled time must be in the future.');
+            $shouldCheckAvailability = $this->has('scheduled_at')
+                || $this->has('duration_minutes')
+                || $this->has('doctor_id');
+
+            if ($shouldCheckAvailability) {
+                $newScheduledAt = $this->filled('scheduled_at')
+                    ? Carbon::parse($this->input('scheduled_at'))
+                    : $appointment->scheduled_at->copy();
+
+                if ($this->filled('scheduled_at')) {
+                    $isActuallyChanging = ! $appointment->scheduled_at->equalTo($newScheduledAt);
+
+                    if ($isActuallyChanging && $newScheduledAt->isPast()) {
+                        $validator->errors()->add('scheduled_at', 'The scheduled time must be in the future.');
+                    }
+                }
+
+                if ($validator->errors()->has('scheduled_at') || $validator->errors()->has('doctor_id') || $validator->errors()->has('patient_id') || $validator->errors()->has('duration_minutes')) {
+                    return;
+                }
+
+                $doctorId = $this->input('doctor_id', $appointment->doctor_id);
+                $patientId = $this->input('patient_id', $appointment->patient_id);
+                $duration = (int) $this->input('duration_minutes', $appointment->duration_minutes);
+
+                $doctorRule = new AppointmentDoctorAvailable(
+                    tenantId: $this->user()->tenant_id,
+                    doctorId: $doctorId,
+                    scheduledAt: $newScheduledAt,
+                    durationMinutes: $duration,
+                    ignoreAppointmentId: $appointment->id,
+                );
+
+                if ($doctorConflictMessage = $doctorRule->conflictMessage()) {
+                    $validator->errors()->add('doctor_id', $doctorConflictMessage);
+
+                    return;
+                }
+
+                $patientRule = new AppointmentPatientAvailable(
+                    tenantId: $this->user()->tenant_id,
+                    patientId: $patientId,
+                    scheduledAt: $newScheduledAt,
+                    durationMinutes: $duration,
+                    ignoreAppointmentId: $appointment->id,
+                );
+
+                $patientRule->validate('patient_id', null, function (string $message, ?string $translate = null) use ($validator): PotentiallyTranslatedString {
+                    $validator->errors()->add('patient_id', $message);
+
+                    return new PotentiallyTranslatedString($message, app('translator'));
+                });
             }
-
-            if ($validator->errors()->has('scheduled_at') || $validator->errors()->has('doctor_id') || $validator->errors()->has('patient_id') || $validator->errors()->has('duration_minutes')) {
-                return;
-            }
-
-            $doctorId = $this->input('doctor_id', $appointment->doctor_id);
-            $patientId = $this->input('patient_id', $appointment->patient_id);
-            $duration = (int) $this->input('duration_minutes', $appointment->duration_minutes);
-
-            $doctorRule = new AppointmentDoctorAvailable(
-                tenantId: $this->user()->tenant_id,
-                doctorId: $doctorId,
-                scheduledAt: $newScheduledAt,
-                durationMinutes: $duration,
-                ignoreAppointmentId: $appointment->id,
-            );
-
-            if ($doctorConflictMessage = $doctorRule->conflictMessage()) {
-                $validator->errors()->add('doctor_id', $doctorConflictMessage);
-
-                return;
-            }
-
-            $patientRule = new AppointmentPatientAvailable(
-                tenantId: $this->user()->tenant_id,
-                patientId: $patientId,
-                scheduledAt: $newScheduledAt,
-                durationMinutes: $duration,
-                ignoreAppointmentId: $appointment->id,
-            );
-
-            $patientRule->validate('patient_id', null, function (string $message, ?string $translate = null) use ($validator): PotentiallyTranslatedString {
-                $validator->errors()->add('patient_id', $message);
-
-                return new PotentiallyTranslatedString($message, app('translator'));
-            });
 
             $this->validateTreatmentLinksForType($validator);
         });

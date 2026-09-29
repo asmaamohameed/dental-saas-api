@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\V1\Clinic\UpdateClinicLogoRequest;
+use App\Http\Requests\V1\Clinic\UpdateClinicThemeRequest;
 use App\Http\Resources\V1\TenantResource;
 use App\Models\Tenant;
 use App\Support\Tenancy\CurrentTenant;
@@ -33,6 +34,18 @@ class ClinicBrandingController extends Controller
         return $this->successResponse([
             'tenant' => new TenantResource($tenant->fresh()),
         ], 'Clinic logo updated successfully.');
+    }
+
+    public function updateTheme(UpdateClinicThemeRequest $request): JsonResponse
+    {
+        $tenant = Tenant::query()->findOrFail(app(CurrentTenant::class)->id());
+        $tenant->update([
+            'theme' => $request->validated('theme'),
+        ]);
+
+        return $this->successResponse([
+            'tenant' => new TenantResource($tenant->fresh()),
+        ], 'Clinic theme updated successfully.');
     }
 
     private function deleteExistingLogo(Tenant $tenant): void

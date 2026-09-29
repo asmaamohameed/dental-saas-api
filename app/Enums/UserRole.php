@@ -19,13 +19,13 @@ enum UserRole: string
         return $this === self::DOCTOR;
     }
 
-    public function isReceptionist(): bool
-    {
-        return $this === self::RECEPTIONIST;
-    }
-
     public function isAssistant(): bool
     {
         return $this === self::ASSISTANT;
+    }
+
+    public function isReceptionist(): bool
+    {
+        return $this === self::RECEPTIONIST;
     }
 }

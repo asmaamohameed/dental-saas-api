@@ -19,6 +19,7 @@ class TenantResource extends JsonResource
             'subdomain' => $this->subdomain,
             'locale' => $this->locale,
             'logo_url' => $this->logoPublicUrl(),
+            'theme' => $this->theme?->value,
             'status' => $this->status,
             'created_at' => $this->created_at,
             'updated_at' => $this->updated_at,

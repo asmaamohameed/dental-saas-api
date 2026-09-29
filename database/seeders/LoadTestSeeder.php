@@ -2,6 +2,7 @@
 
 namespace Database\Seeders;
 
+use App\Support\Roles\ClinicMembershipSync;
 use App\Support\Tenancy\CurrentTenant;
 use Carbon\Carbon;
 use Illuminate\Database\Seeder;
@@ -531,6 +532,8 @@ class LoadTestSeeder extends Seeder
         | Clear tenant context
         |--------------------------------------------------------------------------
         */
+
+        ClinicMembershipSync::backfillMissing();
 
         app(CurrentTenant::class)->clear();
 

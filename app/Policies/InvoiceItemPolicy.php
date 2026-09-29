@@ -3,6 +3,7 @@
 namespace App\Policies;
 
 use App\Enums\InvoiceStatus;
+use App\Enums\UserRole;
 use App\Models\Invoice;
 use App\Models\InvoiceItem;
 use App\Models\User;
@@ -16,7 +17,7 @@ class InvoiceItemPolicy
             return null;
         }
 
-        if ($user->role?->isOwner()) {
+        if ($user->isOwner()) {
             return true;
         }
 
@@ -26,7 +27,7 @@ class InvoiceItemPolicy
     public function viewAny(User $user, Invoice $invoice): bool
     {
         return $user->tenant_id === $invoice->tenant_id
-            && $user->canManageFinance();
+            && $user->hasAnyClinicRole([UserRole::DOCTOR, UserRole::RECEPTIONIST]);
     }
 
     public function create(User $user, Invoice $invoice): bool
@@ -35,12 +36,12 @@ class InvoiceItemPolicy
             return false;
         }
 
-        if ($user->role?->isOwner()) {
+        if ($user->isOwner()) {
             return true;
         }
 
         return $user->tenant_id === $invoice->tenant_id
-            && $user->role?->isReceptionist()
+            && $user->hasAnyClinicRole([UserRole::DOCTOR, UserRole::ASSISTANT, UserRole::RECEPTIONIST])
             && Gate::forUser($user)->allows('updateItems', $invoice);
     }
 
@@ -50,12 +51,12 @@ class InvoiceItemPolicy
             return false;
         }
 
-        if ($user->role?->isOwner()) {
+        if ($user->isOwner()) {
             return true;
         }
 
         return $user->tenant_id === $invoiceItem->invoice->tenant_id
-            && $user->role?->isReceptionist()
+            && $user->hasAnyClinicRole([UserRole::DOCTOR, UserRole::ASSISTANT, UserRole::RECEPTIONIST])
             && Gate::forUser($user)->allows('updateItems', $invoiceItem->invoice);
     }
 
@@ -65,12 +66,12 @@ class InvoiceItemPolicy
             return false;
         }
 
-        if ($user->role?->isOwner()) {
+        if ($user->isOwner()) {
             return true;
         }
 
         return $user->tenant_id === $invoiceItem->invoice->tenant_id
-            && $user->role?->isReceptionist()
+            && $user->hasAnyClinicRole([UserRole::DOCTOR, UserRole::ASSISTANT, UserRole::RECEPTIONIST])
             && Gate::forUser($user)->allows('updateItems', $invoiceItem->invoice);
     }
 }

@@ -41,11 +41,15 @@ jobs:
         run: vendor/bin/phpstan analyse --memory-limit=1G
 
   tests:
-    name: "Tests (PHPUnit)"
+    name: "Tests (PHPUnit, PG ${{ matrix.postgres }})"
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        postgres: [10, 16]
     services:
       postgres:
-        image: postgres:16
+        image: postgres:${{ matrix.postgres }}
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres

@@ -9,7 +9,7 @@ use App\Models\Patient;
 use App\Models\XrayAttachment;
 use App\Services\XrayAttachmentService;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
-use Illuminate\Support\Facades\Storage;
+use Illuminate\Http\JsonResponse;
 
 class XrayAttachmentController extends Controller
 {
@@ -17,7 +17,7 @@ class XrayAttachmentController extends Controller
 
     public function __construct(private readonly XrayAttachmentService $xrayAttachmentService) {}
 
-    public function index(Patient $patient)
+    public function index(Patient $patient): JsonResponse
     {
         $this->authorize('viewAny', [XrayAttachment::class, $patient]);
 
@@ -25,10 +25,10 @@ class XrayAttachmentController extends Controller
 
         return $this->successResponse([
             'items' => XrayAttachmentResource::collection($attachments),
-        ]);
+        ], 'X-ray attachments retrieved successfully.');
     }
 
-    public function store(StoreXrayAttachmentRequest $request, Patient $patient)
+    public function store(StoreXrayAttachmentRequest $request, Patient $patient): JsonResponse
     {
         $this->authorize('create', [XrayAttachment::class, $patient]);
 
@@ -46,7 +46,7 @@ class XrayAttachmentController extends Controller
         );
     }
 
-    public function destroy(Patient $patient, XrayAttachment $xray)
+    public function destroy(Patient $patient, XrayAttachment $xray): JsonResponse
     {
         if ($xray->patient_id !== $patient->id) {
             abort(404);
@@ -54,8 +54,7 @@ class XrayAttachmentController extends Controller
 
         $this->authorize('delete', $xray);
 
-        Storage::disk('s3')->delete($xray->file_url);
-        $xray->delete();
+        $this->xrayAttachmentService->delete($xray);
 
         return $this->successResponse(null, 'X-ray attachment deleted successfully.');
     }

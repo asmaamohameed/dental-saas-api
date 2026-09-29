@@ -44,7 +44,8 @@ class PaymentPolicyTest extends TestCase
 
         $this->assertTrue($this->policy->create($receptionist, $this->invoice('tenant-a')));
         $this->assertFalse($this->policy->create($receptionist, $this->invoice('tenant-b')));
-        $this->assertFalse($this->policy->create($doctor, $this->invoice('tenant-a')));
+        $this->assertTrue($this->policy->create($doctor, $this->invoice('tenant-a')));
+        $this->assertTrue($this->policy->create($this->user(UserRole::ASSISTANT, 'tenant-a'), $this->invoice('tenant-a')));
     }
 
     public function test_update_is_always_false_for_non_owner_relying_on_before(): void

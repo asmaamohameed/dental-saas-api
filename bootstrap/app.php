@@ -105,7 +105,17 @@ return Application::configure(basePath: dirname(__DIR__))
                     $status = 422;
                     $message = $e->getMessage();
                 } elseif ($e instanceof QueryException) {
-                    $message = config('app.debug') ? $e->getMessage() : $message;
+                    $sqlState = $e->errorInfo[0] ?? null;
+
+                    if ($sqlState === '23P01') {
+                        $status = 422;
+                        $message = 'The given data was invalid.';
+                        $errors = [
+                            'doctor_id' => ['This doctor already has an appointment during this time slot.'],
+                        ];
+                    } else {
+                        $message = config('app.debug') ? $e->getMessage() : $message;
+                    }
                 }
 
                 $response = [

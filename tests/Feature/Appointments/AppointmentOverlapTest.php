@@ -293,4 +293,79 @@ class AppointmentOverlapTest extends TestCase
 
         $response->assertStatus(201);
     }
+
+    public function test_updating_duration_minutes_only_into_a_conflict_is_rejected(): void
+    {
+        $this->makeAppointment([
+            'scheduled_at' => Carbon::parse('2026-10-05 09:00:00'),
+            'duration_minutes' => 30,
+        ]);
+
+        $second = $this->makeAppointment([
+            'scheduled_at' => Carbon::parse('2026-10-05 08:00:00'),
+            'duration_minutes' => 30,
+        ]);
+
+        $response = $this->putJson("/api/v1/appointments/{$second->id}", [
+            'duration_minutes' => 120,
+        ]);
+
+        $response->assertStatus(422)
+            ->assertJsonValidationErrors(['doctor_id']);
+    }
+
+    public function test_updating_doctor_id_only_into_a_conflict_is_rejected(): void
+    {
+        $otherPatient = Patient::factory()->create([
+            'tenant_id' => $this->tenant->id,
+        ]);
+
+        $this->makeAppointment([
+            'doctor_id' => $this->doctor->id,
+            'scheduled_at' => Carbon::parse('2026-10-05 09:00:00'),
+            'duration_minutes' => 30,
+        ]);
+
+        $second = $this->makeAppointment([
+            'patient_id' => $otherPatient->id,
+            'doctor_id' => $this->otherDoctor->id,
+            'scheduled_at' => Carbon::parse('2026-10-05 09:00:00'),
+            'duration_minutes' => 30,
+        ]);
+
+        $response = $this->putJson("/api/v1/appointments/{$second->id}", [
+            'doctor_id' => $this->doctor->id,
+        ]);
+
+        $response->assertStatus(422)
+            ->assertJsonValidationErrors(['doctor_id']);
+    }
+
+    public function test_status_update_with_doctor_id_into_a_conflict_is_rejected(): void
+    {
+        $otherPatient = Patient::factory()->create([
+            'tenant_id' => $this->tenant->id,
+        ]);
+
+        $this->makeAppointment([
+            'doctor_id' => $this->doctor->id,
+            'scheduled_at' => Carbon::parse('2026-10-05 09:00:00'),
+            'duration_minutes' => 30,
+        ]);
+
+        $second = $this->makeAppointment([
+            'patient_id' => $otherPatient->id,
+            'doctor_id' => $this->otherDoctor->id,
+            'scheduled_at' => Carbon::parse('2026-10-05 09:00:00'),
+            'duration_minutes' => 30,
+        ]);
+
+        $response = $this->patchJson("/api/v1/appointments/{$second->id}/status", [
+            'status' => AppointmentStatus::CHECKED_IN->value,
+            'doctor_id' => $this->doctor->id,
+        ]);
+
+        $response->assertStatus(422)
+            ->assertJsonValidationErrors(['doctor_id']);
+    }
 }

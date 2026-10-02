@@ -143,6 +143,26 @@ class AppointmentController extends Controller
         $data = $request->validated();
         $newStatus = AppointmentStatus::from($data['status']);
 
+        if ($appointment->status === $newStatus) {
+            $appointment->load(['patient', 'doctor', 'treatmentSessions.treatment.template']);
+
+            return $this->successResponse(
+                new AppointmentResource($appointment),
+                'Appointment status updated successfully.'
+            );
+        }
+
+        if (! $appointment->status->canTransitionTo($newStatus)) {
+            $from = $appointment->status->value;
+            $to = $newStatus->value;
+
+            return $this->errorResponse(
+                "Cannot change appointment status from {$from} to {$to}.",
+                422,
+                ['status' => ["Cannot change appointment status from {$from} to {$to}."]]
+            );
+        }
+
         $this->authorize('updateStatus', [$appointment, $newStatus]);
 
         $previousStatus = $appointment->status;

@@ -85,6 +85,17 @@ class AppointmentPolicy
             return $user->isOwner();
         }
 
+        if ($newStatus === AppointmentStatus::CHECKED_IN) {
+            return $user->isOwner()
+                || $user->hasClinicRole(UserRole::RECEPTIONIST)
+                || ($user->hasClinicRole(UserRole::DOCTOR) && $user->id === $appointment->doctor_id);
+        }
+
+        if (in_array($newStatus, [AppointmentStatus::IN_PROGRESS, AppointmentStatus::COMPLETED], true)) {
+            return $user->isOwner()
+                || ($user->hasClinicRole(UserRole::DOCTOR) && $user->id === $appointment->doctor_id);
+        }
+
         return $user->hasAnyClinicRole([
             UserRole::OWNER,
             UserRole::DOCTOR,

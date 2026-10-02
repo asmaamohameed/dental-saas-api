@@ -31,7 +31,7 @@ class AppointmentAuthorizationTest extends TestCase
         $doctor = $this->actingAsTenantUser(role: UserRole::DOCTOR);
         $appointment = Appointment::factory()->create([
             'doctor_id' => $doctor->id,
-            'status' => AppointmentStatus::CHECKED_IN,
+            'status' => AppointmentStatus::IN_PROGRESS,
         ]);
 
         $this->patchJson("/api/v1/appointments/{$appointment->id}/status", [
@@ -39,18 +39,18 @@ class AppointmentAuthorizationTest extends TestCase
         ])->assertOk();
     }
 
-    public function test_doctor_can_update_status_of_another_doctors_appointment(): void
+    public function test_doctor_cannot_complete_another_doctors_appointment(): void
     {
         $this->actingAsTenantUser(role: UserRole::DOCTOR);
         $otherDoctor = User::factory()->doctor()->create();
         $appointment = Appointment::factory()->create([
             'doctor_id' => $otherDoctor->id,
-            'status' => AppointmentStatus::CHECKED_IN,
+            'status' => AppointmentStatus::IN_PROGRESS,
         ]);
 
         $this->patchJson("/api/v1/appointments/{$appointment->id}/status", [
             'status' => 'completed',
-        ])->assertOk();
+        ])->assertForbidden();
     }
 
     public function test_receptionist_cannot_delete_an_appointment(): void

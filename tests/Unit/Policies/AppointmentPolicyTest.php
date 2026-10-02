@@ -82,14 +82,25 @@ class AppointmentPolicyTest extends TestCase
         $this->assertFalse($this->policy->update($doctor, $this->appointment('tenant-b')));
     }
 
-    public function test_update_status_allows_owner_and_receptionist_same_tenant(): void
+    public function test_update_status_allows_owner_to_complete_checked_in_appointment(): void
     {
         $owner = $this->user(UserRole::OWNER, 'tenant-a');
 
         $this->assertTrue($this->policy->updateStatus(
             $owner,
-            $this->appointment('tenant-a', status: AppointmentStatus::CHECKED_IN),
+            $this->appointment('tenant-a', 'doctor-1', AppointmentStatus::CHECKED_IN),
             AppointmentStatus::COMPLETED
+        ));
+    }
+
+    public function test_update_status_allows_receptionist_to_check_in(): void
+    {
+        $receptionist = $this->user(UserRole::RECEPTIONIST, 'tenant-a');
+
+        $this->assertTrue($this->policy->updateStatus(
+            $receptionist,
+            $this->appointment('tenant-a', 'doctor-1'),
+            AppointmentStatus::CHECKED_IN
         ));
     }
 
@@ -100,19 +111,29 @@ class AppointmentPolicyTest extends TestCase
         $this->assertFalse($this->policy->updateStatus($owner, $this->appointment('tenant-b'), AppointmentStatus::COMPLETED));
     }
 
-    public function test_update_status_allows_the_treating_doctor_only(): void
+    public function test_update_status_allows_only_treating_doctor_for_in_progress_and_completed(): void
     {
         $doctor = $this->user(UserRole::DOCTOR, 'tenant-a', 'doctor-1');
         $otherDoctor = $this->user(UserRole::DOCTOR, 'tenant-a', 'doctor-2');
 
-        $appointment = $this->appointment('tenant-a', 'doctor-1', AppointmentStatus::CHECKED_IN);
+        $checkedIn = $this->appointment('tenant-a', 'doctor-1', AppointmentStatus::CHECKED_IN);
+        $inProgress = $this->appointment('tenant-a', 'doctor-1', AppointmentStatus::IN_PROGRESS);
 
-        $this->assertTrue($this->policy->updateStatus($doctor, $appointment, AppointmentStatus::COMPLETED));
-        $this->assertTrue($this->policy->updateStatus($otherDoctor, $appointment, AppointmentStatus::COMPLETED));
-        $this->assertTrue($this->policy->updateStatus(
+        $this->assertTrue($this->policy->updateStatus($doctor, $checkedIn, AppointmentStatus::IN_PROGRESS));
+        $this->assertTrue($this->policy->updateStatus($doctor, $checkedIn, AppointmentStatus::COMPLETED));
+        $this->assertTrue($this->policy->updateStatus($doctor, $inProgress, AppointmentStatus::COMPLETED));
+
+        $this->assertFalse($this->policy->updateStatus($otherDoctor, $checkedIn, AppointmentStatus::IN_PROGRESS));
+        $this->assertFalse($this->policy->updateStatus($otherDoctor, $checkedIn, AppointmentStatus::COMPLETED));
+        $this->assertFalse($this->policy->updateStatus(
             $this->user(UserRole::ASSISTANT, 'tenant-a'),
-            $appointment,
+            $checkedIn,
             AppointmentStatus::COMPLETED
+        ));
+        $this->assertFalse($this->policy->updateStatus(
+            $this->user(UserRole::RECEPTIONIST, 'tenant-a'),
+            $checkedIn,
+            AppointmentStatus::IN_PROGRESS
         ));
     }
 

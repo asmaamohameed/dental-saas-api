@@ -104,6 +104,17 @@ class AppointmentPolicyTest extends TestCase
         ));
     }
 
+    public function test_update_status_allows_assistant_to_check_in(): void
+    {
+        $assistant = $this->user(UserRole::ASSISTANT, 'tenant-a');
+
+        $this->assertTrue($this->policy->updateStatus(
+            $assistant,
+            $this->appointment('tenant-a', 'doctor-1'),
+            AppointmentStatus::CHECKED_IN
+        ));
+    }
+
     public function test_update_status_denies_owner_cross_tenant(): void
     {
         $owner = $this->user(UserRole::OWNER, 'tenant-a');

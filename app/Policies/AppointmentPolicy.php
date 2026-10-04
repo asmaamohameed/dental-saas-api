@@ -69,15 +69,11 @@ class AppointmentPolicy
     }
 
     /**
-     * Determine whether the user can update the model status.
+     * Role and tenant permission to attempt a status change (ignores transition validity).
      */
-    public function updateStatus(User $user, Appointment $appointment, AppointmentStatus $newStatus): bool
+    public function updateStatusRole(User $user, Appointment $appointment, AppointmentStatus $newStatus): bool
     {
         if ($user->tenant_id !== $appointment->tenant_id) {
-            return false;
-        }
-
-        if (! $appointment->status->canTransitionTo($newStatus)) {
             return false;
         }
 
@@ -88,6 +84,7 @@ class AppointmentPolicy
         if ($newStatus === AppointmentStatus::CHECKED_IN) {
             return $user->isOwner()
                 || $user->hasClinicRole(UserRole::RECEPTIONIST)
+                || $user->hasClinicRole(UserRole::ASSISTANT)
                 || ($user->hasClinicRole(UserRole::DOCTOR) && $user->id === $appointment->doctor_id);
         }
 
@@ -102,6 +99,18 @@ class AppointmentPolicy
             UserRole::ASSISTANT,
             UserRole::RECEPTIONIST,
         ]);
+    }
+
+    /**
+     * Determine whether the user can update the model status.
+     */
+    public function updateStatus(User $user, Appointment $appointment, AppointmentStatus $newStatus): bool
+    {
+        if (! $appointment->status->canTransitionTo($newStatus)) {
+            return false;
+        }
+
+        return $this->updateStatusRole($user, $appointment, $newStatus);
     }
 
     /**

@@ -32,7 +32,8 @@ class PatientCheckedIn implements ShouldBroadcast
         $this->patientName = $appointment->patient->full_name;
         $this->tenantId = (string) $appointment->tenant_id;
         $this->doctorId = (string) $appointment->doctor_id;
-        $this->checkedInAt = now()->toIso8601String();
+        $this->checkedInAt = $appointment->checked_in_at?->toIso8601String()
+            ?? now()->toIso8601String();
     }
 
     public function broadcastOn(): array

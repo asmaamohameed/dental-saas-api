@@ -66,10 +66,13 @@ class AppointmentStatusTransitionTest extends TestCase
         $scheduled->refresh();
         $this->assertSame(AppointmentStatus::SCHEDULED, $scheduled->status);
 
+        $owner = User::factory()->owner()->create(['tenant_id' => $doctor->tenant_id]);
         $completed = Appointment::factory()->create([
             'doctor_id' => $doctor->id,
             'status' => AppointmentStatus::COMPLETED,
         ]);
+
+        \Laravel\Sanctum\Sanctum::actingAs($owner, ['*']);
 
         $this->patchJson("/api/v1/appointments/{$completed->id}/status", [
             'status' => 'in_progress',
@@ -83,6 +86,8 @@ class AppointmentStatusTransitionTest extends TestCase
             'doctor_id' => $doctor->id,
             'status' => AppointmentStatus::CANCELLED,
         ]);
+
+        \Laravel\Sanctum\Sanctum::actingAs($doctor, ['*']);
 
         $this->patchJson("/api/v1/appointments/{$cancelled->id}/status", [
             'status' => 'checked_in',

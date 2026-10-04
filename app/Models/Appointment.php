@@ -31,18 +31,25 @@ class Appointment extends Model
     protected $fillable = [
         'patient_id',
         'doctor_id',
+        'booked_doctor_id',
         'created_by',
         'scheduled_at',
         'duration_minutes',
         'status',
         'appointment_type',
         'notes',
+        'checked_in_at',
+        'started_at',
+        'completed_at',
     ];
 
     protected function casts(): array
     {
         return [
             'scheduled_at' => 'datetime',
+            'checked_in_at' => 'datetime',
+            'started_at' => 'datetime',
+            'completed_at' => 'datetime',
             'duration_minutes' => 'integer',
             'status' => AppointmentStatus::class,
             'appointment_type' => AppointmentType::class,

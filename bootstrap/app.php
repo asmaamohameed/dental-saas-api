@@ -6,6 +6,7 @@ use App\Http\Middleware\ClearPlatformTenantContext;
 use App\Http\Middleware\EnsureTenantAccess;
 use App\Http\Middleware\EnsureUserIsAdmin;
 use App\Http\Middleware\EnsureUserRole;
+use App\Http\Middleware\MeasureRequestTime;
 use App\Http\Middleware\SetLocale;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Auth\Middleware\Authenticate;
@@ -53,6 +54,10 @@ return Application::configure(basePath: dirname(__DIR__))
             'tenant' => EnsureTenantAccess::class,
             'role' => EnsureUserRole::class,
             'locale' => SetLocale::class,
+        ]);
+
+        $middleware->api(append: [
+            MeasureRequestTime::class,
         ]);
 
         $middleware->priority([
@@ -129,5 +134,13 @@ return Application::configure(basePath: dirname(__DIR__))
 
                 return response()->json($response, $status, $headers);
             }
+        });
+
+        $exceptions->respond(function ($response, Throwable $e, Request $request) {
+            if ($request->is('api/*') || $request->is('admin/*')) {
+                return app(MeasureRequestTime::class)->applyTiming($request, $response);
+            }
+
+            return $response;
         });
     })->create();

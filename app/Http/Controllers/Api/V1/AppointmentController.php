@@ -16,6 +16,7 @@ use App\Services\PatientTreatmentService;
 use App\Traits\ApiResponse;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 
 class AppointmentController extends Controller
 {
@@ -48,8 +49,33 @@ class AppointmentController extends Controller
         if ($request->filled('date_to')) {
             $query->where('scheduled_at', '<=', $request->input('date_to'));
         }
+
+        if ($request->filled('sort')) {
+            $request->validate([
+                'sort' => ['required', 'string', Rule::in([
+                    'scheduled_at',
+                    '-scheduled_at',
+                    'checked_in_at',
+                    '-checked_in_at',
+                ])],
+            ]);
+
+            $sort = $request->input('sort');
+            if ($sort === 'scheduled_at') {
+                $query->orderBy('scheduled_at');
+            } elseif ($sort === '-scheduled_at') {
+                $query->orderByDesc('scheduled_at');
+            } elseif ($sort === 'checked_in_at') {
+                $query->orderByRaw('checked_in_at ASC NULLS LAST');
+            } else {
+                $query->orderByRaw('checked_in_at DESC NULLS LAST');
+            }
+        } else {
+            $query->latest('scheduled_at');
+        }
+
         $perPage = min(max((int) $request->input('per_page', 15), 1), 100);
-        $appointments = $query->latest('scheduled_at')->paginate($perPage);
+        $appointments = $query->paginate($perPage);
 
         return $this->paginatedResponse(AppointmentResource::collection($appointments));
     }
@@ -152,6 +178,8 @@ class AppointmentController extends Controller
             );
         }
 
+        $this->authorize('updateStatusRole', [$appointment, $newStatus]);
+
         if (! $appointment->status->canTransitionTo($newStatus)) {
             $from = $appointment->status->value;
             $to = $newStatus->value;
@@ -163,13 +191,23 @@ class AppointmentController extends Controller
             );
         }
 
-        $this->authorize('updateStatus', [$appointment, $newStatus]);
-
         $previousStatus = $appointment->status;
+        $transitionAt = now();
 
         $appointment->status = $newStatus;
 
+        if ($newStatus === AppointmentStatus::CHECKED_IN) {
+            $appointment->checked_in_at = $transitionAt;
+        } elseif ($newStatus === AppointmentStatus::IN_PROGRESS) {
+            $appointment->started_at = $transitionAt;
+        } elseif ($newStatus === AppointmentStatus::COMPLETED) {
+            $appointment->completed_at = $transitionAt;
+        }
+
         if (isset($data['doctor_id']) && $data['doctor_id'] !== $appointment->doctor_id) {
+            if ($appointment->booked_doctor_id === null && $appointment->doctor_id !== null) {
+                $appointment->booked_doctor_id = $appointment->doctor_id;
+            }
             $appointment->doctor_id = $data['doctor_id'];
         }
 
@@ -196,7 +234,11 @@ class AppointmentController extends Controller
             $appointment->status === AppointmentStatus::CHECKED_IN
             && $previousStatus !== AppointmentStatus::CHECKED_IN
         ) {
-            event(new PatientCheckedIn($appointment));
+            try {
+                event(new PatientCheckedIn($appointment));
+            } catch (\Throwable $e) {
+                report($e);
+            }
         }
 
         return $this->successResponse(

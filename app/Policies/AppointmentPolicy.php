@@ -82,10 +82,7 @@ class AppointmentPolicy
         }
 
         if ($newStatus === AppointmentStatus::CHECKED_IN) {
-            return $user->isOwner()
-                || $user->hasClinicRole(UserRole::RECEPTIONIST)
-                || $user->hasClinicRole(UserRole::ASSISTANT)
-                || ($user->hasClinicRole(UserRole::DOCTOR) && $user->id === $appointment->doctor_id);
+            return $this->userCanCheckIn($user, $appointment);
         }
 
         if (in_array($newStatus, [AppointmentStatus::IN_PROGRESS, AppointmentStatus::COMPLETED], true)) {
@@ -141,4 +138,13 @@ class AppointmentPolicy
     {
         return false;
     }
+
+    private function userCanCheckIn(User $user, Appointment $appointment): bool
+    {
+        return $user->isOwner()
+            || $user->hasClinicRole(UserRole::RECEPTIONIST)
+            || $user->hasClinicRole(UserRole::ASSISTANT)
+            || ($user->hasClinicRole(UserRole::DOCTOR) && $user->id === $appointment->doctor_id);
+    }
+
 }

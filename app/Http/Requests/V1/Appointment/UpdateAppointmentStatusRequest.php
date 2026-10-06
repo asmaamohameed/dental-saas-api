@@ -26,6 +26,7 @@ class UpdateAppointmentStatusRequest extends FormRequest
             'doctor_id' => [
                 'nullable',
                 Rule::exists('users', 'id')->where(function ($query) {
+                    $query->where('is_active', true);
                     User::constrainUsersWithClinicRole($query, (string) $this->user()->tenant_id, UserRole::DOCTOR->value);
                 }),
             ],
@@ -60,18 +61,23 @@ class UpdateAppointmentStatusRequest extends FormRequest
                 ? $appointment->scheduled_at->copy()
                 : Carbon::parse($appointment->scheduled_at);
 
-            $doctorRule = new AppointmentDoctorAvailable(
-                tenantId: $this->user()->tenant_id,
-                doctorId: $newDoctorId,
-                scheduledAt: $scheduledAt,
-                durationMinutes: (int) $appointment->duration_minutes,
-                ignoreAppointmentId: $appointment->id,
-            );
+            $isCheckInWithDoctorChange = $appointment->status === AppointmentStatus::SCHEDULED
+                && $newStatus === AppointmentStatus::CHECKED_IN;
 
-            if ($doctorConflictMessage = $doctorRule->conflictMessage()) {
-                $validator->errors()->add('doctor_id', $doctorConflictMessage);
+            if (! $isCheckInWithDoctorChange) {
+                $doctorRule = new AppointmentDoctorAvailable(
+                    tenantId: $this->user()->tenant_id,
+                    doctorId: $newDoctorId,
+                    scheduledAt: $scheduledAt,
+                    durationMinutes: (int) $appointment->duration_minutes,
+                    ignoreAppointmentId: $appointment->id,
+                );
 
-                return;
+                if ($doctorConflictMessage = $doctorRule->conflictMessage()) {
+                    $validator->errors()->add('doctor_id', $doctorConflictMessage);
+
+                    return;
+                }
             }
 
             $patientRule = new AppointmentPatientAvailable(

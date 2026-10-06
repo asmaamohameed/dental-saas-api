@@ -32,6 +32,8 @@ class AppointmentOverlapTest extends TestCase
     {
         parent::setUp();
 
+        Carbon::setTestNow('2026-10-04 08:00:00 UTC');
+
         $this->tenant = Tenant::factory()->create();
 
         app(CurrentTenant::class)->set($this->tenant->id);
@@ -56,6 +58,13 @@ class AppointmentOverlapTest extends TestCase
         ]);
 
         Sanctum::actingAs($this->owner, ['*']);
+    }
+
+    protected function tearDown(): void
+    {
+        Carbon::setTestNow();
+
+        parent::tearDown();
     }
 
     protected function makeAppointment(array $overrides = []): Appointment
@@ -358,10 +367,13 @@ class AppointmentOverlapTest extends TestCase
             'doctor_id' => $this->otherDoctor->id,
             'scheduled_at' => Carbon::parse('2026-10-05 09:00:00'),
             'duration_minutes' => 30,
+            'status' => AppointmentStatus::CHECKED_IN,
         ]);
 
+        Sanctum::actingAs($this->otherDoctor, ['*']);
+
         $response = $this->patchJson("/api/v1/appointments/{$second->id}/status", [
-            'status' => AppointmentStatus::CHECKED_IN->value,
+            'status' => AppointmentStatus::IN_PROGRESS->value,
             'doctor_id' => $this->doctor->id,
         ]);
 

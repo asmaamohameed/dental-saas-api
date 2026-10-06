@@ -70,6 +70,7 @@ Route::prefix('v1')->group(function () {
         Route::patch('appointments/{appointment}/status', [AppointmentController::class, 'updateStatus']);
 
         // Read-only endpoints (owner, receptionist, doctor)
+        Route::get('doctors/availability', [UserController::class, 'doctorAvailability']);
         Route::get('doctors', [UserController::class, 'doctors']);
         Route::get('components/low-stock', [ComponentController::class, 'lowStock']);
         Route::post('components/{component}/stock', [ComponentController::class, 'adjustStock']);

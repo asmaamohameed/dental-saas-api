@@ -2,12 +2,16 @@
 
 namespace App\Http\Controllers\Api\V1;
 
+use App\Enums\UserRole;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\V1\Doctor\DoctorAvailabilityRequest;
 use App\Http\Requests\V1\Staff\StoreStaffRequest;
 use App\Http\Requests\V1\Staff\UpdateStaffRequest;
+use App\Http\Resources\V1\DoctorAvailabilityResource;
 use App\Http\Resources\V1\DoctorResource;
 use App\Http\Resources\V1\StaffResource;
 use App\Models\User;
+use App\Services\DoctorAvailabilityService;
 use App\Services\UserService;
 use App\Support\WorkingDay;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
@@ -19,7 +23,10 @@ class UserController extends Controller
 {
     use AuthorizesRequests;
 
-    public function __construct(private readonly UserService $userService) {}
+    public function __construct(
+        private readonly UserService $userService,
+        private readonly DoctorAvailabilityService $doctorAvailabilityService,
+    ) {}
 
     public function index(Request $request): JsonResponse
     {
@@ -72,6 +79,31 @@ class UserController extends Controller
         return $this->successResponse(
             new StaffResource($updatedUser),
             'Staff active status updated successfully.'
+        );
+    }
+
+    public function doctorAvailability(DoctorAvailabilityRequest $request): JsonResponse
+    {
+        $user = $request->user();
+
+        if (! $user->hasAnyClinicRole([
+            UserRole::OWNER,
+            UserRole::DOCTOR,
+            UserRole::ASSISTANT,
+            UserRole::RECEPTIONIST,
+        ])) {
+            abort(403);
+        }
+
+        $validated = $request->validated();
+        $availability = $this->doctorAvailabilityService->listForCurrentTenant(
+            $validated['date_from'] ?? null,
+            $validated['date_to'] ?? null,
+        );
+
+        return $this->successResponse(
+            DoctorAvailabilityResource::collection($availability),
+            'Doctor availability retrieved successfully.'
         );
     }
 

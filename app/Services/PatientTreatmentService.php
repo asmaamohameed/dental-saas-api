@@ -281,6 +281,14 @@ class PatientTreatmentService
         });
     }
 
+    public function syncSessionDentistsFromAppointmentDoctor(string $appointmentId, string $dentistId): void
+    {
+        TreatmentSession::query()
+            ->where('appointment_id', $appointmentId)
+            ->where('status', TreatmentSessionStatus::SCHEDULED)
+            ->update(['dentist_id' => $dentistId]);
+    }
+
     public function syncSessionsFromAppointment(string $appointmentId, TreatmentSessionStatus $status, string $userId): void
     {
         $sessions = TreatmentSession::query()

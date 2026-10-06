@@ -16,6 +16,7 @@ use App\Services\PatientTreatmentService;
 use App\Traits\ApiResponse;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 
 class AppointmentController extends Controller
@@ -204,14 +205,25 @@ class AppointmentController extends Controller
             $appointment->completed_at = $transitionAt;
         }
 
+        $doctorChanged = false;
         if (isset($data['doctor_id']) && $data['doctor_id'] !== $appointment->doctor_id) {
             if ($appointment->booked_doctor_id === null && $appointment->doctor_id !== null) {
                 $appointment->booked_doctor_id = $appointment->doctor_id;
             }
             $appointment->doctor_id = $data['doctor_id'];
+            $doctorChanged = true;
         }
 
-        $appointment->save();
+        DB::transaction(function () use ($appointment, $doctorChanged): void {
+            $appointment->save();
+
+            if ($doctorChanged) {
+                $this->patientTreatmentService->syncSessionDentistsFromAppointmentDoctor(
+                    $appointment->id,
+                    (string) $appointment->doctor_id
+                );
+            }
+        });
 
         $sessionStatus = match ($appointment->status) {
             AppointmentStatus::CANCELLED => TreatmentSessionStatus::CANCELLED,

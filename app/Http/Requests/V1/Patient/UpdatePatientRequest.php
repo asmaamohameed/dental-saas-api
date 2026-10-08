@@ -36,6 +36,7 @@ class UpdatePatientRequest extends FormRequest
             ],
             'date_of_birth' => ['nullable', 'date'],
             'gender' => ['nullable', 'in:male,female'],
+            'address' => ['nullable', 'string', 'max:255'],
             'medical_history' => ['nullable', 'array'],
             'notes' => ['nullable', 'string'],
         ];

@@ -66,6 +66,7 @@ Route::prefix('v1')->group(function () {
         Route::delete('patients/{patient}/xray-attachments/{xray}', [XrayAttachmentController::class, 'destroy']);
 
         // Appointments API Resource + Custom Endpoint
+        Route::get('appointments/unresolved', [AppointmentController::class, 'unresolved']);
         Route::apiResource('appointments', AppointmentController::class);
         Route::patch('appointments/{appointment}/status', [AppointmentController::class, 'updateStatus']);
 

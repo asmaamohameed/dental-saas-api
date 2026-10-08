@@ -10,10 +10,25 @@ use App\Models\Tenant;
 use App\Models\User;
 use App\Support\Tenancy\CurrentTenant;
 use Illuminate\Support\Facades\Event;
+use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
 
 class AppointmentStatusTransitionTest extends TestCase
 {
+    public function test_checked_in_can_be_marked_no_show(): void
+    {
+        $this->actingAsTenantUser(role: UserRole::RECEPTIONIST);
+        $appointment = Appointment::factory()->checkedIn()->create();
+
+        $this->patchJson("/api/v1/appointments/{$appointment->id}/status", [
+            'status' => 'no_show',
+        ])->assertOk()
+            ->assertJsonPath('data.status', 'no_show');
+
+        $appointment->refresh();
+        $this->assertSame(AppointmentStatus::NO_SHOW, $appointment->status);
+    }
+
     public function test_valid_lifecycle_scheduled_to_completed_via_in_progress(): void
     {
         $doctor = $this->actingAsTenantUser(role: UserRole::DOCTOR);
@@ -72,7 +87,7 @@ class AppointmentStatusTransitionTest extends TestCase
             'status' => AppointmentStatus::COMPLETED,
         ]);
 
-        \Laravel\Sanctum\Sanctum::actingAs($owner, ['*']);
+        Sanctum::actingAs($owner, ['*']);
 
         $this->patchJson("/api/v1/appointments/{$completed->id}/status", [
             'status' => 'in_progress',
@@ -87,7 +102,7 @@ class AppointmentStatusTransitionTest extends TestCase
             'status' => AppointmentStatus::CANCELLED,
         ]);
 
-        \Laravel\Sanctum\Sanctum::actingAs($doctor, ['*']);
+        Sanctum::actingAs($doctor, ['*']);
 
         $this->patchJson("/api/v1/appointments/{$cancelled->id}/status", [
             'status' => 'checked_in',

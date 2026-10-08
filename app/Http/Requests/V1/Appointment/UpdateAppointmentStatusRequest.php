@@ -61,8 +61,8 @@ class UpdateAppointmentStatusRequest extends FormRequest
                 ? $appointment->scheduled_at->copy()
                 : Carbon::parse($appointment->scheduled_at);
 
-            $isCheckInWithDoctorChange = $appointment->status === AppointmentStatus::SCHEDULED
-                && $newStatus === AppointmentStatus::CHECKED_IN;
+            $isCheckInWithDoctorChange = $newStatus === AppointmentStatus::CHECKED_IN
+                && in_array($appointment->status, [AppointmentStatus::SCHEDULED, AppointmentStatus::CHECKED_IN], true);
 
             if (! $isCheckInWithDoctorChange) {
                 $doctorRule = new AppointmentDoctorAvailable(

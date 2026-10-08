@@ -24,6 +24,14 @@ class AppointmentPolicy
     }
 
     /**
+     * Stale visits (checked_in / in_progress before today) list.
+     */
+    public function viewUnresolved(User $user): bool
+    {
+        return $this->viewAny($user);
+    }
+
+    /**
      * Determine whether the user can view the model.
      */
     public function view(User $user, Appointment $appointment): bool
@@ -146,5 +154,4 @@ class AppointmentPolicy
             || $user->hasClinicRole(UserRole::ASSISTANT)
             || ($user->hasClinicRole(UserRole::DOCTOR) && $user->id === $appointment->doctor_id);
     }
-
 }

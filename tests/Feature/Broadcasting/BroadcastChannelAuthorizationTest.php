@@ -9,6 +9,7 @@ use App\Models\User;
 use App\Support\Tenancy\CurrentTenant;
 use Illuminate\Broadcasting\PrivateChannel;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Testing\TestResponse;
 use Tests\TestCase;
 
 class BroadcastChannelAuthorizationTest extends TestCase
@@ -38,7 +39,7 @@ class BroadcastChannelAuthorizationTest extends TestCase
     /**
      * @param  array<string, mixed>  $data
      */
-    private function postBroadcastAuth(array $data, ?string $token = null): \Illuminate\Testing\TestResponse
+    private function postBroadcastAuth(array $data, ?string $token = null): TestResponse
     {
         $headers = ['Accept' => 'application/json'];
 

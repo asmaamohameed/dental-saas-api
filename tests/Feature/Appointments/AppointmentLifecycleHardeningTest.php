@@ -10,6 +10,7 @@ use App\Models\User;
 use App\Services\DashboardService;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Event;
+use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
 
 class AppointmentLifecycleHardeningTest extends TestCase
@@ -50,7 +51,7 @@ class AppointmentLifecycleHardeningTest extends TestCase
             ->assertJsonValidationErrors(['status']);
 
         $assistant = User::factory()->assistant()->create();
-        \Laravel\Sanctum\Sanctum::actingAs($assistant, ['*']);
+        Sanctum::actingAs($assistant, ['*']);
 
         $this->patchJson("/api/v1/appointments/{$appointment->id}/status", [
             'status' => 'completed',
@@ -129,7 +130,7 @@ class AppointmentLifecycleHardeningTest extends TestCase
 
         $another = User::factory()->doctor()->create();
 
-        \Laravel\Sanctum\Sanctum::actingAs($replacement, ['*']);
+        Sanctum::actingAs($replacement, ['*']);
 
         $this->patchJson("/api/v1/appointments/{$appointment->id}/status", [
             'status' => 'in_progress',

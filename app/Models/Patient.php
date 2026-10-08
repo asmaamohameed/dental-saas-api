@@ -18,6 +18,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property string|null $phone
  * @property Carbon|null $date_of_birth
  * @property string|null $gender
+ * @property string|null $address
  * @property array<string, mixed>|null $medical_history
  * @property string|null $notes
  * @property Carbon|null $created_at
@@ -36,6 +37,7 @@ class Patient extends Model
         'phone',
         'date_of_birth',
         'gender',
+        'address',
         'medical_history',
         'notes',
     ];

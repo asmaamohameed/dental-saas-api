@@ -15,34 +15,75 @@ use Illuminate\Support\Carbon;
 
 /**
  * @property string $id
+ * @property string $tenant_id
  * @property string $patient_id
- * @property string $doctor_id
+ * @property string|null $doctor_id
+ * @property string|null $booked_doctor_id
+ * @property string|null $created_by
  * @property Carbon $scheduled_at
+ * @property Carbon|null $checked_in_at
+ * @property Carbon|null $started_at
+ * @property Carbon|null $completed_at
  * @property int $duration_minutes
  * @property AppointmentStatus $status
  * @property AppointmentType $appointment_type
+ * @property string|null $notes
+ * @property Carbon|null $created_at
+ * @property Carbon|null $updated_at
  * @property-read Patient|null $patient
  * @property-read User|null $doctor
+ * @property-read User|null $creator
  */
 class Appointment extends Model
 {
     use Auditable, BelongsToTenant, HasFactory,HasUuids;
 
+    protected static function booted(): void
+    {
+        static::saving(function (Appointment $appointment): void {
+            if (! $appointment->isDirty('status')) {
+                return;
+            }
+
+            $now = now();
+
+            if ($appointment->status === AppointmentStatus::CHECKED_IN && $appointment->checked_in_at === null) {
+                $appointment->checked_in_at = $now;
+            }
+
+            if ($appointment->status === AppointmentStatus::IN_PROGRESS) {
+                if ($appointment->started_at === null) {
+                    $appointment->started_at = $now;
+                }
+                if ($appointment->checked_in_at === null) {
+                    $appointment->checked_in_at = $now;
+                }
+            }
+        });
+    }
+
     protected $fillable = [
         'patient_id',
         'doctor_id',
+        'booked_doctor_id',
         'created_by',
         'scheduled_at',
         'duration_minutes',
         'status',
         'appointment_type',
         'notes',
+        'checked_in_at',
+        'started_at',
+        'completed_at',
     ];
 
     protected function casts(): array
     {
         return [
             'scheduled_at' => 'datetime',
+            'checked_in_at' => 'datetime',
+            'started_at' => 'datetime',
+            'completed_at' => 'datetime',
             'duration_minutes' => 'integer',
             'status' => AppointmentStatus::class,
             'appointment_type' => AppointmentType::class,

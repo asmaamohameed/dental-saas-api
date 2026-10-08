@@ -66,10 +66,12 @@ Route::prefix('v1')->group(function () {
         Route::delete('patients/{patient}/xray-attachments/{xray}', [XrayAttachmentController::class, 'destroy']);
 
         // Appointments API Resource + Custom Endpoint
+        Route::get('appointments/unresolved', [AppointmentController::class, 'unresolved']);
         Route::apiResource('appointments', AppointmentController::class);
         Route::patch('appointments/{appointment}/status', [AppointmentController::class, 'updateStatus']);
 
         // Read-only endpoints (owner, receptionist, doctor)
+        Route::get('doctors/availability', [UserController::class, 'doctorAvailability']);
         Route::get('doctors', [UserController::class, 'doctors']);
         Route::get('components/low-stock', [ComponentController::class, 'lowStock']);
         Route::post('components/{component}/stock', [ComponentController::class, 'adjustStock']);

@@ -9,7 +9,7 @@ use Illuminate\Contracts\Broadcasting\ShouldBroadcast;
 use Illuminate\Foundation\Events\Dispatchable;
 use Illuminate\Queue\SerializesModels;
 
-class PatientCheckedIn implements ShouldBroadcast
+class PatientReassigned implements ShouldBroadcast
 {
     use Dispatchable, InteractsWithSockets, SerializesModels;
 
@@ -17,35 +17,31 @@ class PatientCheckedIn implements ShouldBroadcast
 
     public string $patientId;
 
-    public string $patientName;
-
     public string $tenantId;
 
-    public string $doctorId;
+    public string $oldDoctorId;
 
-    public string $checkedInAt;
+    public string $newDoctorId;
 
-    public function __construct(Appointment $appointment)
+    public function __construct(Appointment $appointment, string $oldDoctorId)
     {
         $this->appointmentId = (string) $appointment->id;
         $this->patientId = (string) $appointment->patient_id;
-        $this->patientName = $appointment->patient->full_name;
         $this->tenantId = (string) $appointment->tenant_id;
-        $this->doctorId = (string) $appointment->doctor_id;
-        $this->checkedInAt = $appointment->checked_in_at?->toIso8601String()
-            ?? now()->toIso8601String();
+        $this->oldDoctorId = $oldDoctorId;
+        $this->newDoctorId = (string) $appointment->doctor_id;
     }
 
     public function broadcastOn(): array
     {
         return [
-            new PrivateChannel("tenant.{$this->tenantId}.doctor.{$this->doctorId}"),
+            new PrivateChannel("tenant.{$this->tenantId}.doctor.{$this->oldDoctorId}"),
         ];
     }
 
     public function broadcastAs(): string
     {
-        return 'patient.checked-in';
+        return 'patient.reassigned';
     }
 
     public function broadcastWith(): array
@@ -53,8 +49,8 @@ class PatientCheckedIn implements ShouldBroadcast
         return [
             'appointment_id' => $this->appointmentId,
             'patient_id' => $this->patientId,
-            'patient_name' => $this->patientName,
-            'checked_in_at' => $this->checkedInAt,
+            'old_doctor_id' => $this->oldDoctorId,
+            'new_doctor_id' => $this->newDoctorId,
         ];
     }
 }

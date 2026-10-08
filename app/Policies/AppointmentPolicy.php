@@ -24,6 +24,14 @@ class AppointmentPolicy
     }
 
     /**
+     * Stale visits (checked_in / in_progress before today) list.
+     */
+    public function viewUnresolved(User $user): bool
+    {
+        return $this->viewAny($user);
+    }
+
+    /**
      * Determine whether the user can view the model.
      */
     public function view(User $user, Appointment $appointment): bool
@@ -69,20 +77,25 @@ class AppointmentPolicy
     }
 
     /**
-     * Determine whether the user can update the model status.
+     * Role and tenant permission to attempt a status change (ignores transition validity).
      */
-    public function updateStatus(User $user, Appointment $appointment, AppointmentStatus $newStatus): bool
+    public function updateStatusRole(User $user, Appointment $appointment, AppointmentStatus $newStatus): bool
     {
         if ($user->tenant_id !== $appointment->tenant_id) {
             return false;
         }
 
-        if (! $appointment->status->canTransitionTo($newStatus)) {
-            return false;
-        }
-
         if ($appointment->status === AppointmentStatus::COMPLETED) {
             return $user->isOwner();
+        }
+
+        if ($newStatus === AppointmentStatus::CHECKED_IN) {
+            return $this->userCanCheckIn($user, $appointment);
+        }
+
+        if (in_array($newStatus, [AppointmentStatus::IN_PROGRESS, AppointmentStatus::COMPLETED], true)) {
+            return $user->isOwner()
+                || ($user->hasClinicRole(UserRole::DOCTOR) && $user->id === $appointment->doctor_id);
         }
 
         return $user->hasAnyClinicRole([
@@ -91,6 +104,18 @@ class AppointmentPolicy
             UserRole::ASSISTANT,
             UserRole::RECEPTIONIST,
         ]);
+    }
+
+    /**
+     * Determine whether the user can update the model status.
+     */
+    public function updateStatus(User $user, Appointment $appointment, AppointmentStatus $newStatus): bool
+    {
+        if (! $appointment->status->canTransitionTo($newStatus)) {
+            return false;
+        }
+
+        return $this->updateStatusRole($user, $appointment, $newStatus);
     }
 
     /**
@@ -120,5 +145,13 @@ class AppointmentPolicy
     public function forceDelete(User $user, Appointment $appointment): bool
     {
         return false;
+    }
+
+    private function userCanCheckIn(User $user, Appointment $appointment): bool
+    {
+        return $user->isOwner()
+            || $user->hasClinicRole(UserRole::RECEPTIONIST)
+            || $user->hasClinicRole(UserRole::ASSISTANT)
+            || ($user->hasClinicRole(UserRole::DOCTOR) && $user->id === $appointment->doctor_id);
     }
 }

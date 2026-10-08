@@ -6,6 +6,7 @@ use App\Http\Middleware\ClearPlatformTenantContext;
 use App\Http\Middleware\EnsureTenantAccess;
 use App\Http\Middleware\EnsureUserIsAdmin;
 use App\Http\Middleware\EnsureUserRole;
+use App\Http\Middleware\MeasureRequestTime;
 use App\Http\Middleware\SetLocale;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Auth\Middleware\Authenticate;
@@ -37,7 +38,6 @@ return Application::configure(basePath: dirname(__DIR__))
         web: __DIR__.'/../routes/web.php',
         api: __DIR__.'/../routes/api.php',
         commands: __DIR__.'/../routes/console.php',
-        channels: __DIR__.'/../routes/channels.php',
         health: '/up',
         then: function () {
             Route::middleware('api')
@@ -53,6 +53,10 @@ return Application::configure(basePath: dirname(__DIR__))
             'tenant' => EnsureTenantAccess::class,
             'role' => EnsureUserRole::class,
             'locale' => SetLocale::class,
+        ]);
+
+        $middleware->api(append: [
+            MeasureRequestTime::class,
         ]);
 
         $middleware->priority([
@@ -78,7 +82,7 @@ return Application::configure(basePath: dirname(__DIR__))
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->render(function (Throwable $e, Request $request) {
-            if ($request->is('api/*') || $request->is('admin/*') || $request->wantsJson()) {
+            if ($request->is('api/*') || $request->is('admin/*') || $request->is('broadcasting/auth') || $request->wantsJson()) {
                 $status = 500;
                 $message = 'An unexpected error occurred.';
                 $errors = null;
@@ -129,5 +133,13 @@ return Application::configure(basePath: dirname(__DIR__))
 
                 return response()->json($response, $status, $headers);
             }
+        });
+
+        $exceptions->respond(function ($response, Throwable $e, Request $request) {
+            if ($request->is('api/*') || $request->is('admin/*')) {
+                return app(MeasureRequestTime::class)->applyTiming($request, $response);
+            }
+
+            return $response;
         });
     })->create();

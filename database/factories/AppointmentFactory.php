@@ -23,8 +23,25 @@ class AppointmentFactory extends Factory
             'created_by' => User::factory()->receptionist(),
             'scheduled_at' => fake()->dateTimeBetween('now', '+2 weeks'),
             'duration_minutes' => fake()->randomElement([15, 30, 45, 60]),
-            'status' => fake()->randomElement(AppointmentStatus::cases()),
+            'status' => AppointmentStatus::SCHEDULED,
             'notes' => fake()->optional()->sentence(),
         ];
+    }
+
+    public function checkedIn(): static
+    {
+        return $this->state(fn () => [
+            'status' => AppointmentStatus::CHECKED_IN,
+            'checked_in_at' => now(),
+        ]);
+    }
+
+    public function inProgress(): static
+    {
+        return $this->state(fn () => [
+            'status' => AppointmentStatus::IN_PROGRESS,
+            'checked_in_at' => now()->subMinutes(15),
+            'started_at' => now(),
+        ]);
     }
 }

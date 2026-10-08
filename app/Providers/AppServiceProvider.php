@@ -9,6 +9,8 @@ use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Str;
@@ -48,5 +50,21 @@ class AppServiceProvider extends ServiceProvider
 
             return Limit::perMinute(20)->by('admin-mutations|'.$actor);
         });
+
+        if (config('performance.request_timing_enabled')) {
+            DB::whenQueryingForLongerThan(
+                (int) config('performance.slow_query_threshold_ms', 500),
+                function ($connection, $event): void {
+                    if (! config('performance.request_timing_enabled')) {
+                        return;
+                    }
+
+                    Log::warning('Slow query', [
+                        'sql' => $event->sql,
+                        'duration_ms' => $event->time,
+                    ]);
+                }
+            );
+        }
     }
 }

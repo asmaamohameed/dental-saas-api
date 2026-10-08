@@ -207,6 +207,8 @@ class DashboardService
 
         return [
             'scheduled' => $getStatusCount(AppointmentStatus::SCHEDULED),
+            'checked_in' => $getStatusCount(AppointmentStatus::CHECKED_IN),
+            'in_progress' => $getStatusCount(AppointmentStatus::IN_PROGRESS),
             'completed' => $getStatusCount(AppointmentStatus::COMPLETED),
             'no_show' => $getStatusCount(AppointmentStatus::NO_SHOW),
             'cancelled' => $getStatusCount(AppointmentStatus::CANCELLED),

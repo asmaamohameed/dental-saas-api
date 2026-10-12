@@ -3,7 +3,7 @@
 namespace Tests\Feature\Models;
 
 use App\Enums\TreatmentCategory;
-use App\Enums\TreatmentVisitType;
+use App\Enums\TreatmentScope;
 use App\Models\Appointment;
 use App\Models\AuditLog;
 use App\Models\Invoice;
@@ -68,7 +68,7 @@ class TenantTest extends TestCase
             'category' => TreatmentCategory::MEDICAL,
             'default_price' => 100,
             'estimated_duration_minutes' => 30,
-            'visit_type' => TreatmentVisitType::SINGLE_VISIT,
+            'scope' => TreatmentScope::TOOTH,
             'is_active' => true,
         ]);
 

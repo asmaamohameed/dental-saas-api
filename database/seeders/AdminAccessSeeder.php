@@ -11,6 +11,16 @@ class AdminAccessSeeder extends Seeder
 {
     public function run(): void
     {
+        if (! app()->environment(['local', 'testing', 'staging'])) {
+            return;
+        }
+
+        if (DB::table('tenants')->where('subdomain', 'clinic-1')->exists()) {
+            $this->command->info('AdminAccessSeeder: clinic-1 tenant already exists.');
+
+            return;
+        }
+
         $tenantId = Str::uuid()->toString();
 
         DB::table('tenants')->insert([

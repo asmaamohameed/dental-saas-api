@@ -20,13 +20,12 @@ class TreatmentSessionResource extends JsonResource
             'session_date' => $this->session_date->toISOString(),
             'status' => $this->status,
             'notes' => $this->notes,
+            'tooth_numbers' => $this->tooth_numbers ?? [],
             'dentist' => $this->whenLoaded('dentist', fn () => $this->dentist ? [
                 'id' => $this->dentist->id,
                 'name' => $this->dentist->name,
             ] : null),
             'appointment' => new AppointmentResource($this->whenLoaded('appointment')),
-            'steps' => TreatmentSessionStepResource::collection($this->whenLoaded('steps')),
-            'components' => PatientTreatmentComponentResource::collection($this->whenLoaded('components')),
             'created_at' => $this->created_at?->toISOString(),
             'updated_at' => $this->updated_at?->toISOString(),
         ];

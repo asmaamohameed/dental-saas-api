@@ -384,22 +384,16 @@ class AppointmentCheckInDoctorReassignmentTest extends TestCase
             'name_ar' => 'علاج',
             'name_en' => 'Treatment',
             'category' => 'medical',
+            'scope' => 'tooth',
             'default_price' => 100,
             'estimated_duration_minutes' => 30,
-            'steps' => [[
-                'step_order' => 1,
-                'name_ar' => 'خطوة',
-                'name_en' => 'Step',
-                'default_duration_minutes' => 30,
-                'is_required' => true,
-                'is_repeatable' => false,
-            ]],
         ])->assertCreated()->json('data.id');
 
         $treatmentId = $this->postJson('/api/v1/patient-treatments', [
             'patient_id' => $this->patient->id,
             'treatment_template_id' => $templateId,
             'agreed_price' => 100,
+            'tooth_numbers' => ['16'],
         ])->assertCreated()->json('data.id');
 
         $treatment = PatientTreatment::query()->findOrFail($treatmentId);
@@ -444,22 +438,16 @@ class AppointmentCheckInDoctorReassignmentTest extends TestCase
             'name_ar' => 'علاج',
             'name_en' => 'Treatment',
             'category' => 'medical',
+            'scope' => 'tooth',
             'default_price' => 100,
             'estimated_duration_minutes' => 30,
-            'steps' => [[
-                'step_order' => 1,
-                'name_ar' => 'خطوة',
-                'name_en' => 'Step',
-                'default_duration_minutes' => 30,
-                'is_required' => true,
-                'is_repeatable' => false,
-            ]],
         ])->assertCreated()->json('data.id');
 
         $treatmentId = $this->postJson('/api/v1/patient-treatments', [
             'patient_id' => $this->patient->id,
             'treatment_template_id' => $templateId,
             'agreed_price' => 100,
+            'tooth_numbers' => ['16'],
         ])->assertCreated()->json('data.id');
 
         $treatment = PatientTreatment::query()->findOrFail($treatmentId);

@@ -10,7 +10,6 @@ use App\Models\Component;
 use App\Models\ComponentStockMovement;
 use App\Models\Expense;
 use App\Models\Invoice;
-use App\Models\PatientTreatmentComponent;
 use App\Models\Payment;
 use Illuminate\Support\Carbon;
 
@@ -306,19 +305,7 @@ class DashboardService
                 return (int) $movement->quantity * $price;
             });
 
-        $sessionUse = PatientTreatmentComponent::query()
-            ->whereHas('session', function ($query) use ($start, $end) {
-                $query->where('stock_applied', true)
-                    ->whereBetween('session_date', [$start, $end]);
-            })
-            ->get()
-            ->sum(function (PatientTreatmentComponent $row) {
-                $quantity = max(0, (float) $row->quantity - (float) $row->free_quantity);
-
-                return $quantity * (float) $row->unit_price;
-            });
-
-        return round($manualOut + $sessionUse, 2);
+        return round($manualOut, 2);
     }
 
     public function getComponentStock(): array

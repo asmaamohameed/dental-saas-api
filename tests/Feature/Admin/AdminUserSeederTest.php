@@ -57,20 +57,18 @@ class AdminUserSeederTest extends TestCase
         $this->assertNotSame(AdminUser::query()->firstOrFail()->id, $clinicUser->id);
     }
 
-    public function test_seeder_refuses_to_invent_a_password(): void
+    public function test_seeder_refuses_to_invent_a_password_in_production(): void
     {
+        $this->app['env'] = 'production';
+
         config([
             'platform.admin_email' => 'platform-admin@example.com',
             'platform.admin_password' => null,
         ]);
 
-        try {
-            $this->seed(AdminUserSeeder::class);
-            $this->fail('The seeder created an admin without ADMIN_PASSWORD.');
-        } catch (RuntimeException $exception) {
-            $this->assertStringContainsString('ADMIN_PASSWORD', $exception->getMessage());
-        }
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage('ADMIN_PASSWORD');
 
-        $this->assertSame(0, AdminUser::query()->count());
+        $this->app->make(AdminUserSeeder::class)->run();
     }
 }

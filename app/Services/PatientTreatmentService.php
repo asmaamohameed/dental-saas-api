@@ -2,26 +2,31 @@
 
 namespace App\Services;
 
+use App\Enums\AuditAction;
 use App\Enums\ConsentStatus;
 use App\Enums\FinancialStatus;
 use App\Enums\InvoiceStatus;
 use App\Enums\PatientTreatmentStatus;
-use App\Enums\SessionStepStatus;
+use App\Enums\TreatmentScope;
 use App\Enums\TreatmentSessionStatus;
+use App\Enums\TreatmentToothStatus;
 use App\Enums\TreatmentType;
-use App\Models\Component;
+use App\Enums\UserRole;
+use App\Models\AuditLog;
 use App\Models\Invoice;
 use App\Models\InvoiceItem;
 use App\Models\PatientTreatment;
+use App\Models\PatientTreatmentTooth;
 use App\Models\Payment;
 use App\Models\TreatmentSession;
-use App\Models\TreatmentSessionStep;
 use App\Models\TreatmentTemplate;
-use App\Models\TreatmentTemplateStep;
+use App\Models\User;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\ValidationException;
+use Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException;
 
 class PatientTreatmentService
 {
@@ -58,19 +63,21 @@ class PatientTreatmentService
     {
         return DB::transaction(function () use ($data, $userId) {
             /** @var TreatmentTemplate $template */
-            $template = TreatmentTemplate::query()
-                ->with(['steps.components.component'])
-                ->findOrFail($data['treatment_template_id']);
-
+            $template = TreatmentTemplate::query()->findOrFail($data['treatment_template_id']);
+            $scope = $template->scope;
             $toothNumbers = $this->normalizeToothNumbers($data['tooth_numbers'] ?? []);
+            $this->assertScopeToothRules($scope, $toothNumbers);
+
+            $unitPrice = $data['agreed_price'] ?? $template->default_price;
 
             $treatment = PatientTreatment::create([
                 'patient_id' => $data['patient_id'],
                 'treatment_plan_id' => $data['treatment_plan_id'] ?? null,
                 'treatment_template_id' => $template->id,
-                'treatment_template_version' => $template->version,
-                'agreed_price' => $data['agreed_price'] ?? $template->default_price,
-                'clinical_status' => $data['clinical_status'] ?? PatientTreatmentStatus::PLANNED,
+                'scope' => $scope,
+                'scope_detail' => $data['scope_detail'] ?? null,
+                'agreed_price' => $unitPrice,
+                'clinical_status' => PatientTreatmentStatus::PLANNED,
                 'financial_status' => FinancialStatus::UNPAID,
                 'consent_status' => $data['consent_status'] ?? ConsentStatus::NOT_REQUIRED,
                 'consent_document_ref' => $data['consent_document_ref'] ?? null,
@@ -83,7 +90,9 @@ class PatientTreatmentService
                 'created_by' => $userId,
             ]);
 
-            $this->syncTeeth($treatment, $toothNumbers);
+            if ($scope === TreatmentScope::TOOTH) {
+                $this->createTeeth($treatment, $toothNumbers, (string) $unitPrice);
+            }
 
             $treatment = $this->freshTreatment($treatment);
             $this->invoiceService->createInitialInvoiceForTreatment($treatment, $userId);
@@ -93,16 +102,26 @@ class PatientTreatmentService
         });
     }
 
-    public function update(PatientTreatment $treatment, array $data, string $userId): PatientTreatment
+    public function update(PatientTreatment $treatment, array $data, User $user): PatientTreatment
     {
-        return DB::transaction(function () use ($treatment, $data, $userId) {
+        return DB::transaction(function () use ($treatment, $data, $user) {
             $toothNumbers = array_key_exists('tooth_numbers', $data)
                 ? $this->normalizeToothNumbers($data['tooth_numbers'])
                 : null;
-            unset($data['tooth_numbers'], $data['tooth_number'], $data['status'], $data['doctor_id'], $data['actual_price']);
+            unset(
+                $data['tooth_numbers'],
+                $data['tooth_number'],
+                $data['status'],
+                $data['doctor_id'],
+                $data['actual_price'],
+                $data['clinical_status'],
+                $data['financial_status'],
+                $data['cancellation_reason'],
+            );
 
-            if (isset($data['clinical_status'])) {
-                $this->applyClinicalStatus($treatment, $data);
+            if (array_key_exists('agreed_price', $data)) {
+                $this->applyUnitPriceChange($treatment, (float) $data['agreed_price'], $user);
+                unset($data['agreed_price']);
             }
 
             $allowed = collect($data)->only([
@@ -113,24 +132,23 @@ class PatientTreatmentService
                 'notes',
                 'consent_status',
                 'consent_document_ref',
-                'agreed_price',
+                'scope_detail',
             ])->all();
 
             if ($allowed !== []) {
-                if (array_key_exists('agreed_price', $allowed) && $treatment->sessions()->exists()) {
-                    throw ValidationException::withMessages([
-                        'agreed_price' => 'Agreed price is locked after the first session is recorded.',
-                    ]);
-                }
-
                 $treatment->update($allowed);
             }
 
             if ($toothNumbers !== null) {
-                $this->syncTeeth($treatment, $toothNumbers);
+                if ($treatment->scope !== TreatmentScope::TOOTH) {
+                    throw ValidationException::withMessages([
+                        'tooth_numbers' => 'Tooth numbers cannot be changed for this treatment scope.',
+                    ]);
+                }
+                $this->assertScopeToothRules($treatment->scope, $toothNumbers);
+                $this->syncTeeth($treatment, $toothNumbers, (string) $treatment->agreed_price);
+                $this->invoiceService->syncTreatmentInvoiceItems($treatment);
             }
-
-            unset($userId);
 
             return $this->freshTreatment($treatment);
         });
@@ -141,6 +159,77 @@ class PatientTreatmentService
         return DB::transaction(function () use ($treatment, $data, $userId) {
             $this->applyClinicalStatus($treatment, $data);
             unset($userId);
+
+            return $this->freshTreatment($treatment);
+        });
+    }
+
+    /**
+     * @param  array{teeth: array<int, array{tooth_number: string, status?: string, price?: float|int|string}>}  $data
+     */
+    public function updateTeeth(PatientTreatment $treatment, array $data, User $user): PatientTreatment
+    {
+        return DB::transaction(function () use ($treatment, $data, $user) {
+            if ($treatment->scope !== TreatmentScope::TOOTH) {
+                throw ValidationException::withMessages([
+                    'teeth' => 'Per-tooth updates apply only to tooth-scoped treatments.',
+                ]);
+            }
+
+            $treatment->load('teeth');
+            $byNumber = $treatment->teeth->keyBy(fn (PatientTreatmentTooth $t) => (string) $t->tooth_number);
+
+            foreach ($data['teeth'] as $index => $row) {
+                $number = (string) $row['tooth_number'];
+                /** @var PatientTreatmentTooth|null $tooth */
+                $tooth = $byNumber->get($number);
+                if ($tooth === null) {
+                    throw ValidationException::withMessages([
+                        "teeth.{$index}.tooth_number" => "Tooth {$number} is not part of this treatment.",
+                    ]);
+                }
+
+                $previousStatus = $tooth->status;
+
+                if (isset($row['status'])) {
+                    $newStatus = TreatmentToothStatus::from((string) $row['status']);
+                    if ($previousStatus === TreatmentToothStatus::DONE && $newStatus !== TreatmentToothStatus::DONE) {
+                        if (! $this->userCanRevertDoneTooth($user)) {
+                            throw new AccessDeniedHttpException('Only owners and doctors may reopen a completed tooth.');
+                        }
+                    }
+                    $tooth->status = $newStatus;
+                    if ($newStatus === TreatmentToothStatus::DONE) {
+                        $tooth->completed_at = now();
+                    } elseif ($previousStatus === TreatmentToothStatus::DONE) {
+                        $tooth->completed_at = null;
+                    }
+                }
+
+                if (isset($row['price'])) {
+                    if (! Gate::forUser($user)->allows('canChangePrice')) {
+                        throw new AccessDeniedHttpException('You are not allowed to change treatment prices.');
+                    }
+                    if ($tooth->status === TreatmentToothStatus::DONE) {
+                        throw ValidationException::withMessages([
+                            "teeth.{$index}.price" => 'Price cannot be changed for a completed tooth.',
+                        ]);
+                    }
+
+                    $oldPrice = (string) $tooth->price;
+                    $newPrice = number_format((float) $row['price'], 2, '.', '');
+                    if ($oldPrice !== $newPrice) {
+                        $tooth->price = $newPrice;
+                        $this->logToothPriceChange($treatment, $number, $oldPrice, $newPrice, $user);
+                    }
+                }
+
+                $tooth->save();
+            }
+
+            $this->recomputeClinicalStatus($treatment, $user->id);
+            $treatment->refresh();
+            $this->invoiceService->syncTreatmentInvoiceItems($treatment);
 
             return $this->freshTreatment($treatment);
         });
@@ -168,18 +257,21 @@ class PatientTreatmentService
                 $treatment->save();
             }
 
+            $unitPrice = $data['agreed_price']
+                ?? ($treatment->template !== null ? $treatment->template->default_price : null)
+                ?? $treatment->agreed_price;
+
             $payload = [
                 'patient_id' => $treatment->patient_id,
                 'treatment_plan_id' => $data['treatment_plan_id'] ?? $treatment->treatment_plan_id,
                 'treatment_template_id' => $data['treatment_template_id'] ?? $treatment->treatment_template_id,
-                'agreed_price' => $data['agreed_price']
-                    ?? ($treatment->template !== null ? $treatment->template->default_price : null)
-                    ?? $treatment->agreed_price,
+                'agreed_price' => $unitPrice,
                 'dentist_id' => $data['dentist_id'] ?? $treatment->dentist_id,
                 'diagnosis' => $data['diagnosis'] ?? $treatment->diagnosis,
                 'priority' => $data['priority'] ?? $treatment->priority->value,
                 'notes' => $data['notes'] ?? null,
                 'consent_status' => $data['consent_status'] ?? $treatment->consent_status->value,
+                'scope_detail' => $data['scope_detail'] ?? $treatment->scope_detail,
                 'parent_treatment_id' => $treatment->id,
                 'treatment_type' => TreatmentType::RETREATMENT->value,
                 'tooth_numbers' => $data['tooth_numbers'] ?? $treatment->teeth()->pluck('tooth_number')->all(),
@@ -190,7 +282,7 @@ class PatientTreatmentService
     }
 
     /**
-     * @return array{session: TreatmentSession, low_stock_warnings: array<int, array<string, mixed>>}
+     * @return array{session: TreatmentSession}
      */
     public function createSession(PatientTreatment $treatment, array $data, string $userId): array
     {
@@ -202,35 +294,37 @@ class PatientTreatmentService
                 ]);
             }
 
+            $toothNumbers = $this->validateSessionToothNumbers($treatment, $data['tooth_numbers'] ?? null);
+
             $session = $treatment->sessions()->create([
                 'appointment_id' => $data['appointment_id'] ?? null,
                 'dentist_id' => $data['dentist_id'] ?? $treatment->dentist_id,
                 'session_date' => $data['session_date'] ?? now(),
                 'status' => $data['status'] ?? TreatmentSessionStatus::SCHEDULED,
                 'notes' => $data['notes'] ?? null,
+                'tooth_numbers' => $toothNumbers,
             ]);
 
-            foreach ($data['steps'] ?? [] as $stepData) {
-                $this->recordSessionStep($session, $stepData, false);
-            }
-
-            $warnings = $this->afterSessionMutation($session->fresh(['steps', 'components', 'treatment.template.steps', 'treatment.sessions.steps']), $userId);
+            $this->afterSessionMutation($session->fresh(['treatment.teeth']), $userId);
 
             return [
-                'session' => $session->fresh(['steps.templateStep', 'dentist', 'appointment', 'components']),
-                'low_stock_warnings' => $warnings,
+                'session' => $session->fresh(['dentist', 'appointment']),
             ];
         });
     }
 
     /**
-     * @return array{session: TreatmentSession, low_stock_warnings: array<int, array<string, mixed>>}
+     * @return array{session: TreatmentSession}
      */
     public function updateSession(TreatmentSession $session, array $data, string $userId): array
     {
         return DB::transaction(function () use ($session, $data, $userId) {
-            $session->load(['steps', 'components', 'treatment.template.steps', 'treatment.sessions.steps']);
+            $session->load(['treatment.teeth']);
             $previous = $this->sessionStatus($session);
+
+            if (array_key_exists('tooth_numbers', $data)) {
+                $data['tooth_numbers'] = $this->validateSessionToothNumbers($session->treatment, $data['tooth_numbers']);
+            }
 
             $session->update(collect($data)->only([
                 'appointment_id',
@@ -238,46 +332,20 @@ class PatientTreatmentService
                 'session_date',
                 'status',
                 'notes',
+                'tooth_numbers',
             ])->all());
 
             $session->refresh();
-            $warnings = $this->syncSessionStock($session, $previous, $this->sessionStatus($session));
+            $current = $this->sessionStatus($session);
+            if ($previous !== TreatmentSessionStatus::COMPLETED && $current === TreatmentSessionStatus::COMPLETED) {
+                $this->promotePlannedTeethOnSessionComplete($session);
+            }
+
             $this->recomputeClinicalStatus($session->treatment, $userId);
 
             return [
-                'session' => $session->fresh(['steps.templateStep', 'dentist', 'appointment', 'components']),
-                'low_stock_warnings' => $warnings,
+                'session' => $session->fresh(['dentist', 'appointment']),
             ];
-        });
-    }
-
-    public function addSessionStep(TreatmentSession $session, array $data, string $userId): TreatmentSessionStep
-    {
-        return DB::transaction(function () use ($session, $data, $userId) {
-            $step = $this->recordSessionStep($session, $data, true);
-            $this->afterSessionMutation($session->fresh(['steps', 'components', 'treatment.template.steps', 'treatment.sessions.steps']), $userId);
-
-            return $step->fresh(['templateStep']);
-        });
-    }
-
-    public function updateSessionStep(TreatmentSessionStep $step, array $data, string $userId): TreatmentSessionStep
-    {
-        return DB::transaction(function () use ($step, $data, $userId) {
-            $step->update(collect($data)->only(['status', 'notes', 'custom_step_name', 'custom_step_description'])->all());
-            $session = $step->session()->with(['steps', 'components', 'treatment.template.steps', 'treatment.sessions.steps'])->first();
-            $this->afterSessionMutation($session, $userId);
-
-            return $step->fresh(['templateStep']);
-        });
-    }
-
-    public function deleteSessionStep(TreatmentSessionStep $step, string $userId): void
-    {
-        DB::transaction(function () use ($step, $userId) {
-            $session = $step->session()->with(['steps', 'components', 'treatment.template.steps', 'treatment.sessions.steps'])->first();
-            $step->delete();
-            $this->afterSessionMutation($session->fresh(['steps', 'components', 'treatment.template.steps', 'treatment.sessions.steps']), $userId);
         });
     }
 
@@ -294,14 +362,16 @@ class PatientTreatmentService
         $sessions = TreatmentSession::query()
             ->where('appointment_id', $appointmentId)
             ->where('status', TreatmentSessionStatus::SCHEDULED)
-            ->with(['steps', 'components', 'treatment.template.steps', 'treatment.sessions.steps'])
+            ->with(['treatment.teeth'])
             ->get();
 
         foreach ($sessions as $session) {
             $previous = $this->sessionStatus($session);
             $session->update(['status' => $status]);
             $session->refresh();
-            $this->syncSessionStock($session, $previous, $status);
+            if ($previous !== TreatmentSessionStatus::COMPLETED && $status === TreatmentSessionStatus::COMPLETED) {
+                $this->promotePlannedTeethOnSessionComplete($session);
+            }
             $this->recomputeClinicalStatus($session->treatment, $userId);
         }
     }
@@ -388,8 +458,36 @@ class PatientTreatmentService
         $byTooth = [];
 
         foreach ($treatments as $treatment) {
+            $clinical = $this->clinical($treatment);
+
+            if ($clinical === PatientTreatmentStatus::FAILED) {
+                foreach ($treatment->teeth as $tooth) {
+                    $byTooth[(string) $tooth->tooth_number][] = 'failed';
+                }
+
+                continue;
+            }
+
+            if ($treatment->scope !== TreatmentScope::TOOTH) {
+                continue;
+            }
+
             foreach ($treatment->teeth as $tooth) {
-                $byTooth[(string) $tooth->tooth_number][] = $this->clinical($treatment);
+                if ($tooth->status === TreatmentToothStatus::SKIPPED) {
+                    continue;
+                }
+
+                if ($clinical === PatientTreatmentStatus::ON_HOLD) {
+                    $byTooth[(string) $tooth->tooth_number][] = 'in_progress';
+
+                    continue;
+                }
+
+                $byTooth[(string) $tooth->tooth_number][] = match ($tooth->status) {
+                    TreatmentToothStatus::DONE => 'completed',
+                    TreatmentToothStatus::IN_PROGRESS => 'in_progress',
+                    TreatmentToothStatus::PLANNED => 'planned',
+                };
             }
         }
 
@@ -424,21 +522,81 @@ class PatientTreatmentService
 
     public function recomputeClinicalStatus(PatientTreatment $treatment, string $userId): void
     {
-        $treatment->load(['template.steps', 'sessions.steps']);
+        $treatment->load(['teeth', 'sessions']);
         $clinical = $this->clinical($treatment);
 
-        if (in_array($clinical, [PatientTreatmentStatus::CANCELLED, PatientTreatmentStatus::FAILED, PatientTreatmentStatus::ON_HOLD], true)) {
+        if (in_array($clinical, [PatientTreatmentStatus::FAILED, PatientTreatmentStatus::ON_HOLD], true)) {
+            return;
+        }
+
+        if ($clinical === PatientTreatmentStatus::CANCELLED && $treatment->scope !== TreatmentScope::TOOTH) {
+            return;
+        }
+
+        if ($treatment->scope === TreatmentScope::TOOTH) {
+            $this->recomputeToothScopedClinicalStatus($treatment);
+
             return;
         }
 
         $hasCompletedSession = $treatment->sessions->contains(
             fn (TreatmentSession $session) => $this->sessionStatus($session) === TreatmentSessionStatus::COMPLETED
         );
-        $hasDoneStep = $treatment->sessions->flatMap->steps->contains(
-            fn (TreatmentSessionStep $step) => $this->stepStatus($step) === SessionStepStatus::DONE
+
+        if ($clinical === PatientTreatmentStatus::PLANNED && $hasCompletedSession) {
+            $treatment->clinical_status = PatientTreatmentStatus::IN_PROGRESS;
+            $treatment->started_at ??= now();
+            $treatment->completed_at = null;
+            $treatment->save();
+        }
+
+        unset($userId);
+    }
+
+    public function userCanRevertDoneTooth(User $user): bool
+    {
+        return $user->hasAnyClinicRole([UserRole::OWNER, UserRole::DOCTOR]);
+    }
+
+    private function recomputeToothScopedClinicalStatus(PatientTreatment $treatment): void
+    {
+        $clinical = $this->clinical($treatment);
+        $teeth = $treatment->teeth;
+
+        if ($clinical === PatientTreatmentStatus::CANCELLED) {
+            if (! $treatment->auto_cancelled) {
+                return;
+            }
+
+            $hasNonSkipped = $teeth->contains(
+                fn (PatientTreatmentTooth $t) => $t->status !== TreatmentToothStatus::SKIPPED
+            );
+            if (! $hasNonSkipped) {
+                return;
+            }
+
+            $treatment->cancellation_reason = null;
+            $treatment->cancelled_at = null;
+            $treatment->auto_cancelled = false;
+            if ($teeth->contains(
+                fn (PatientTreatmentTooth $t) => in_array($t->status, [TreatmentToothStatus::IN_PROGRESS, TreatmentToothStatus::DONE], true)
+            )) {
+                $treatment->clinical_status = PatientTreatmentStatus::IN_PROGRESS;
+                $treatment->started_at ??= now();
+                $treatment->completed_at = null;
+            } else {
+                $treatment->clinical_status = PatientTreatmentStatus::PLANNED;
+                $treatment->completed_at = null;
+            }
+            $treatment->save();
+            $clinical = $this->clinical($treatment);
+        }
+
+        $anyInProgressOrDone = $teeth->contains(
+            fn (PatientTreatmentTooth $t) => in_array($t->status, [TreatmentToothStatus::IN_PROGRESS, TreatmentToothStatus::DONE], true)
         );
 
-        if ($clinical === PatientTreatmentStatus::PLANNED && ($hasCompletedSession || $hasDoneStep)) {
+        if ($clinical === PatientTreatmentStatus::PLANNED && $anyInProgressOrDone) {
             $treatment->clinical_status = PatientTreatmentStatus::IN_PROGRESS;
             $treatment->started_at ??= now();
             $treatment->completed_at = null;
@@ -446,21 +604,88 @@ class PatientTreatmentService
             $clinical = PatientTreatmentStatus::IN_PROGRESS;
         }
 
-        if ($clinical === PatientTreatmentStatus::COMPLETED && ! $this->requiredStepsSatisfied($treatment)) {
-            $treatment->clinical_status = PatientTreatmentStatus::IN_PROGRESS;
-            $treatment->completed_at = null;
+        $allResolved = $teeth->isNotEmpty() && $teeth->every(
+            fn (PatientTreatmentTooth $t) => in_array($t->status, [TreatmentToothStatus::DONE, TreatmentToothStatus::SKIPPED], true)
+        );
+        $atLeastOneDone = $teeth->contains(fn (PatientTreatmentTooth $t) => $t->status === TreatmentToothStatus::DONE);
+
+        if ($clinical === PatientTreatmentStatus::IN_PROGRESS && $allResolved && $atLeastOneDone) {
+            $treatment->clinical_status = PatientTreatmentStatus::COMPLETED;
+            $treatment->completed_at = now();
             $treatment->save();
 
             return;
         }
 
-        if ($clinical === PatientTreatmentStatus::IN_PROGRESS && $this->requiredStepsSatisfied($treatment)) {
-            $treatment->clinical_status = PatientTreatmentStatus::COMPLETED;
-            $treatment->completed_at = now();
-            $treatment->save();
+        if ($allResolved && ! $atLeastOneDone) {
+            if ($clinical === PatientTreatmentStatus::IN_PROGRESS && $clinical->canTransitionTo(PatientTreatmentStatus::CANCELLED)) {
+                $treatment->clinical_status = PatientTreatmentStatus::CANCELLED;
+                $treatment->auto_cancelled = true;
+                $treatment->cancellation_reason ??= 'All teeth skipped';
+                $treatment->cancelled_at ??= now();
+                $treatment->completed_at = null;
+                $treatment->save();
+            }
+
+            return;
         }
 
-        unset($userId);
+        if ($clinical === PatientTreatmentStatus::COMPLETED) {
+            $reopened = $teeth->contains(
+                fn (PatientTreatmentTooth $t) => in_array($t->status, [TreatmentToothStatus::PLANNED, TreatmentToothStatus::IN_PROGRESS], true)
+            );
+            if ($reopened) {
+                $treatment->clinical_status = PatientTreatmentStatus::IN_PROGRESS;
+                $treatment->completed_at = null;
+                $treatment->save();
+            }
+        }
+    }
+
+    private function applyUnitPriceChange(PatientTreatment $treatment, float $newUnitPrice, User $user): void
+    {
+        if (! Gate::forUser($user)->allows('canChangePrice')) {
+            throw new AccessDeniedHttpException('You are not allowed to change treatment prices.');
+        }
+
+        if ($treatment->scope === TreatmentScope::TOOTH) {
+            $treatment->load('teeth');
+            $updatedAny = false;
+
+            foreach ($treatment->teeth as $tooth) {
+                if (! in_array($tooth->status, [TreatmentToothStatus::PLANNED, TreatmentToothStatus::IN_PROGRESS], true)) {
+                    continue;
+                }
+
+                $oldPrice = (string) $tooth->price;
+                $formatted = number_format($newUnitPrice, 2, '.', '');
+                if ($oldPrice !== $formatted) {
+                    $tooth->update(['price' => $formatted]);
+                    $this->logToothPriceChange($treatment, (string) $tooth->tooth_number, $oldPrice, $formatted, $user);
+                    $updatedAny = true;
+                }
+            }
+
+            if (! $updatedAny) {
+                throw ValidationException::withMessages([
+                    'agreed_price' => 'No teeth are available to reprice at the new unit price.',
+                ]);
+            }
+
+            $treatment->update(['agreed_price' => number_format($newUnitPrice, 2, '.', '')]);
+            $this->invoiceService->syncTreatmentInvoiceItems($treatment->fresh(['teeth', 'template']));
+
+            return;
+        }
+
+        if ($treatment->clinical_status === PatientTreatmentStatus::COMPLETED) {
+            throw ValidationException::withMessages([
+                'agreed_price' => 'Agreed price cannot be changed after the treatment is completed.',
+            ]);
+        }
+
+        $treatment->update(['agreed_price' => number_format($newUnitPrice, 2, '.', '')]);
+        $this->invoiceService->syncTreatmentInvoiceItems($treatment->fresh(['teeth', 'template']));
     }
 
     private function applyClinicalStatus(PatientTreatment $treatment, array $data): void
@@ -485,6 +710,18 @@ class PatientTreatmentService
             throw ValidationException::withMessages([
                 'clinical_status' => "Cannot change clinical status from {$current->value} to {$target->value}.",
             ]);
+        }
+
+        if ($target === PatientTreatmentStatus::COMPLETED && $treatment->scope === TreatmentScope::TOOTH) {
+            $treatment->load('teeth');
+            $unresolved = $treatment->teeth->contains(
+                fn (PatientTreatmentTooth $t) => ! in_array($t->status, [TreatmentToothStatus::DONE, TreatmentToothStatus::SKIPPED], true)
+            );
+            if ($unresolved) {
+                throw ValidationException::withMessages([
+                    'clinical_status' => 'Mark the remaining teeth first.',
+                ]);
+            }
         }
 
         if ($target === PatientTreatmentStatus::CANCELLED) {
@@ -514,265 +751,59 @@ class PatientTreatmentService
             $treatment->completed_at = null;
         }
 
+        $treatment->auto_cancelled = false;
         $treatment->clinical_status = $target;
         $treatment->save();
     }
 
-    private function recordSessionStep(TreatmentSession $session, array $data, bool $persistOccurrenceCheck): TreatmentSessionStep
+    private function afterSessionMutation(TreatmentSession $session, string $userId): void
     {
-        $templateStepId = $data['treatment_template_step_id'] ?? null;
-        $status = isset($data['status'])
-            ? SessionStepStatus::from((string) ($data['status'] instanceof SessionStepStatus ? $data['status']->value : $data['status']))
-            : SessionStepStatus::DONE;
-
-        if (! $templateStepId && empty($data['custom_step_name'])) {
-            throw ValidationException::withMessages([
-                'custom_step_name' => 'Provide a template step or a custom step name.',
-            ]);
+        if ($this->sessionStatus($session) === TreatmentSessionStatus::COMPLETED) {
+            $this->promotePlannedTeethOnSessionComplete($session);
         }
-
-        $occurrence = 1;
-
-        if ($templateStepId) {
-            /** @var TreatmentTemplateStep $templateStep */
-            $templateStep = TreatmentTemplateStep::query()->findOrFail($templateStepId);
-            $treatment = $session->treatment()->first();
-
-            if ($templateStep->treatment_template_id !== $treatment->treatment_template_id) {
-                throw ValidationException::withMessages([
-                    'treatment_template_step_id' => 'This step does not belong to the treatment template version.',
-                ]);
-            }
-
-            $doneCount = TreatmentSessionStep::query()
-                ->whereHas('session', fn ($q) => $q->where('patient_treatment_id', $session->patient_treatment_id))
-                ->where('treatment_template_step_id', $templateStepId)
-                ->where('status', SessionStepStatus::DONE)
-                ->count();
-
-            if ($persistOccurrenceCheck && ! $templateStep->is_repeatable && $status === SessionStepStatus::DONE && $doneCount > 0) {
-                throw ValidationException::withMessages([
-                    'treatment_template_step_id' => 'This step is not repeatable and has already been recorded as done.',
-                ]);
-            }
-
-            $occurrence = TreatmentSessionStep::query()
-                ->whereHas('session', fn ($q) => $q->where('patient_treatment_id', $session->patient_treatment_id))
-                ->where('treatment_template_step_id', $templateStepId)
-                ->count() + 1;
-        }
-
-        return $session->steps()->create([
-            'treatment_template_step_id' => $templateStepId,
-            'custom_step_name' => $data['custom_step_name'] ?? null,
-            'custom_step_description' => $data['custom_step_description'] ?? null,
-            'occurrence_number' => $data['occurrence_number'] ?? $occurrence,
-            'status' => $status,
-            'notes' => $data['notes'] ?? null,
-        ]);
-    }
-
-    /**
-     * @return array<int, array<string, mixed>>
-     */
-    private function afterSessionMutation(TreatmentSession $session, string $userId): array
-    {
-        $previousApplied = (bool) $session->stock_applied;
-        $current = $this->sessionStatus($session);
-        $warnings = $this->syncSessionStock(
-            $session,
-            $previousApplied ? TreatmentSessionStatus::COMPLETED : TreatmentSessionStatus::SCHEDULED,
-            $current
-        );
         $this->recomputeClinicalStatus($session->treatment, $userId);
-
-        return $warnings;
     }
 
-    /**
-     * @return array<int, array<string, mixed>>
-     */
-    private function syncSessionStock(TreatmentSession $session, TreatmentSessionStatus $previous, TreatmentSessionStatus $current): array
+    private function promotePlannedTeethOnSessionComplete(TreatmentSession $session): void
     {
-        $warnings = [];
-
-        if ($previous !== TreatmentSessionStatus::COMPLETED && $current === TreatmentSessionStatus::COMPLETED && ! $session->stock_applied) {
-            $this->copyStepComponentsOntoSession($session);
-            $warnings = $this->deductSessionComponents($session);
-            $session->update(['stock_applied' => true]);
-        }
-
-        if ($previous === TreatmentSessionStatus::COMPLETED && $current !== TreatmentSessionStatus::COMPLETED && $session->stock_applied) {
-            $this->restoreSessionComponents($session);
-            $session->update(['stock_applied' => false]);
-        }
-
-        return $warnings;
-    }
-
-    private function copyStepComponentsOntoSession(TreatmentSession $session): void
-    {
-        if ($session->components()->exists()) {
+        if ($session->treatment->scope !== TreatmentScope::TOOTH) {
             return;
         }
 
-        $session->unsetRelation('components');
-        $session->load(['steps.templateStep.components.component']);
+        $session->loadMissing('treatment.teeth');
+        $targetNumbers = $session->tooth_numbers;
+        if ($targetNumbers === null || $targetNumbers === []) {
+            return;
+        }
 
-        foreach ($session->steps as $step) {
-            if ($this->stepStatus($step) !== SessionStepStatus::DONE) {
+        $teeth = $session->treatment->teeth;
+
+        foreach ($teeth as $tooth) {
+            if ($tooth->status !== TreatmentToothStatus::PLANNED) {
                 continue;
             }
-
-            $templateStep = $step->templateStep;
-            if ($templateStep === null) {
+            if (! in_array((string) $tooth->tooth_number, $targetNumbers, true)) {
                 continue;
             }
-
-            foreach ($templateStep->components as $templateComponent) {
-                $component = $templateComponent->component;
-                $session->components()->create([
-                    'component_id' => $component?->id,
-                    'name' => $component?->name_en ?: $component?->name_ar ?: 'Component',
-                    'unit_price' => $templateComponent->unit_price,
-                    'quantity' => $templateComponent->quantity,
-                    'free_quantity' => $templateComponent->free_quantity,
-                    'unit' => $component?->unit ?: 'piece',
-                    'inventory_item_id' => $component?->inventory_item_id,
-                ]);
-            }
+            $tooth->update(['status' => TreatmentToothStatus::IN_PROGRESS]);
         }
     }
 
     /**
-     * @return array<int, array<string, mixed>>
-     */
-    private function deductSessionComponents(TreatmentSession $session): array
-    {
-        $warnings = [];
-        $session->unsetRelation('components');
-        $session->load('components');
-
-        foreach ($session->components as $ptc) {
-            if (! $ptc->component_id) {
-                continue;
-            }
-
-            $deduct = $this->billableComponentQuantity((float) $ptc->quantity, (float) $ptc->free_quantity);
-            if (bccomp($deduct, '0', 2) <= 0) {
-                continue;
-            }
-
-            /** @var Component|null $component */
-            $component = Component::query()->whereKey($ptc->component_id)->lockForUpdate()->first();
-            if (! $component) {
-                throw ValidationException::withMessages([
-                    'status' => 'One or more linked components could not be found for stock deduction.',
-                ]);
-            }
-
-            $available = bcadd((string) ($component->current_quantity ?? 0), '0', 2);
-            if (bccomp($available, $deduct, 2) === -1) {
-                throw ValidationException::withMessages([
-                    'status' => "Insufficient stock for {$component->name_en}. Available: {$available} {$component->unit}, Required: {$deduct} {$component->unit}.",
-                ]);
-            }
-
-            $newQuantity = bcsub($available, $deduct, 2);
-            $component->update(['current_quantity' => $newQuantity]);
-            $component->refresh();
-
-            if ($component->is_low_stock) {
-                $warnings[] = [
-                    'component_id' => $component->id,
-                    'name' => $component->name_en ?: $component->name_ar,
-                    'current_quantity' => (float) $component->current_quantity,
-                    'unit' => $component->unit,
-                ];
-            }
-        }
-
-        return $warnings;
-    }
-
-    private function restoreSessionComponents(TreatmentSession $session): void
-    {
-        $session->loadMissing('components');
-
-        foreach ($session->components as $ptc) {
-            if (! $ptc->component_id) {
-                continue;
-            }
-
-            $deduct = $this->billableComponentQuantity((float) $ptc->quantity, (float) $ptc->free_quantity);
-            if (bccomp($deduct, '0', 2) <= 0) {
-                continue;
-            }
-
-            /** @var Component|null $component */
-            $component = Component::query()->whereKey($ptc->component_id)->lockForUpdate()->first();
-            if (! $component) {
-                continue;
-            }
-
-            $restored = bcadd((string) ($component->current_quantity ?? 0), $deduct, 2);
-            $component->update(['current_quantity' => $restored]);
-        }
-    }
-
-    private function requiredStepsSatisfied(PatientTreatment $treatment): bool
-    {
-        $required = $treatment->template?->steps?->filter(fn (TreatmentTemplateStep $step) => (bool) $step->is_required) ?? collect();
-
-        if ($required->isEmpty()) {
-            return false;
-        }
-
-        $doneStepIds = collect();
-
-        foreach ($treatment->sessions as $session) {
-            if ($this->sessionStatus($session) !== TreatmentSessionStatus::COMPLETED) {
-                continue;
-            }
-
-            foreach ($session->steps as $step) {
-                if ($this->stepStatus($step) !== SessionStepStatus::DONE || ! $step->treatment_template_step_id) {
-                    continue;
-                }
-
-                $doneStepIds->push($step->treatment_template_step_id);
-            }
-        }
-
-        $doneStepIds = $doneStepIds->unique();
-
-        foreach ($required as $step) {
-            if (! $doneStepIds->contains($step->id)) {
-                return false;
-            }
-        }
-
-        return true;
-    }
-
-    /**
-     * @param  list<PatientTreatmentStatus>  $statuses
+     * @param  list<string>  $statuses
      */
     private function priorityColor(array $statuses): string
     {
-        if (collect($statuses)->contains(PatientTreatmentStatus::FAILED)) {
+        if (in_array('failed', $statuses, true)) {
             return 'failed';
         }
-        if (collect($statuses)->contains(PatientTreatmentStatus::IN_PROGRESS)) {
+        if (in_array('in_progress', $statuses, true)) {
             return 'in_progress';
         }
-        if (collect($statuses)->contains(PatientTreatmentStatus::ON_HOLD)) {
-            return 'in_progress';
-        }
-        if (collect($statuses)->contains(PatientTreatmentStatus::PLANNED)) {
+        if (in_array('planned', $statuses, true)) {
             return 'planned';
         }
-        if ($statuses !== [] && collect($statuses)->every(fn (PatientTreatmentStatus $s) => $s === PatientTreatmentStatus::COMPLETED)) {
+        if ($statuses !== [] && collect($statuses)->every(fn (string $s) => $s === 'completed')) {
             return 'completed';
         }
 
@@ -796,19 +827,111 @@ class PatientTreatmentService
     /**
      * @param  list<string>  $toothNumbers
      */
-    private function syncTeeth(PatientTreatment $treatment, array $toothNumbers): void
+    private function assertScopeToothRules(TreatmentScope $scope, array $toothNumbers): void
+    {
+        if ($scope === TreatmentScope::TOOTH) {
+            if ($toothNumbers === []) {
+                throw ValidationException::withMessages([
+                    'tooth_numbers' => 'At least one tooth is required for tooth-scoped treatments.',
+                ]);
+            }
+
+            foreach ($toothNumbers as $number) {
+                if (! preg_match('/^[1-4][1-8]$/', $number)) {
+                    throw ValidationException::withMessages([
+                        'tooth_numbers' => "Invalid tooth number: {$number}.",
+                    ]);
+                }
+            }
+
+            return;
+        }
+
+        if ($toothNumbers !== []) {
+            throw ValidationException::withMessages([
+                'tooth_numbers' => 'Tooth numbers must not be sent for this treatment scope.',
+            ]);
+        }
+    }
+
+    /**
+     * @param  list<string>  $toothNumbers
+     */
+    private function createTeeth(PatientTreatment $treatment, array $toothNumbers, string $unitPrice): void
+    {
+        foreach ($toothNumbers as $number) {
+            $treatment->teeth()->create([
+                'tooth_number' => $number,
+                'status' => TreatmentToothStatus::PLANNED,
+                'price' => $unitPrice,
+            ]);
+        }
+    }
+
+    /**
+     * @param  list<string>  $toothNumbers
+     */
+    private function syncTeeth(PatientTreatment $treatment, array $toothNumbers, string $unitPrice): void
     {
         $treatment->teeth()->delete();
+        $this->createTeeth($treatment, $toothNumbers, $unitPrice);
+    }
 
-        foreach ($toothNumbers as $number) {
+    /**
+     * @param  list<string>|null  $toothNumbers
+     * @return list<string>|null
+     */
+    private function validateSessionToothNumbers(PatientTreatment $treatment, ?array $toothNumbers): ?array
+    {
+        if ($toothNumbers === null) {
+            return null;
+        }
+
+        $normalized = $this->normalizeToothNumbers($toothNumbers);
+        if ($treatment->scope !== TreatmentScope::TOOTH) {
+            if ($normalized !== []) {
+                throw ValidationException::withMessages([
+                    'tooth_numbers' => 'Session tooth numbers apply only to tooth-scoped treatments.',
+                ]);
+            }
+
+            return null;
+        }
+
+        $allowed = collect($treatment->teeth()->pluck('tooth_number')->all())->map(fn ($n) => (string) $n);
+        foreach ($normalized as $number) {
             if (! preg_match('/^[1-4][1-8]$/', $number)) {
                 throw ValidationException::withMessages([
                     'tooth_numbers' => "Invalid tooth number: {$number}.",
                 ]);
             }
-
-            $treatment->teeth()->create(['tooth_number' => $number]);
+            if (! $allowed->contains($number)) {
+                throw ValidationException::withMessages([
+                    'tooth_numbers' => "Tooth {$number} is not part of this treatment.",
+                ]);
+            }
         }
+
+        return $normalized;
+    }
+
+    private function logToothPriceChange(PatientTreatment $treatment, string $toothNumber, string $oldPrice, string $newPrice, User $user): void
+    {
+        AuditLog::query()->create([
+            'tenant_id' => $treatment->tenant_id,
+            'user_id' => $user->id,
+            'action' => AuditAction::TREATMENT_TOOTH_PRICE_CHANGED,
+            'auditable_type' => $treatment->getMorphClass(),
+            'auditable_id' => $treatment->id,
+            'old_values' => [
+                'tooth_number' => $toothNumber,
+                'price' => $oldPrice,
+            ],
+            'new_values' => [
+                'tooth_number' => $toothNumber,
+                'price' => $newPrice,
+            ],
+        ]);
     }
 
     private function assertTreatmentBillingLocked(PatientTreatment $treatment): void
@@ -827,9 +950,19 @@ class PatientTreatmentService
 
     private function assertTreatmentCanBeDeleted(PatientTreatment $treatment): void
     {
-        if ($treatment->sessions()->exists()) {
+        $treatment->load(['teeth', 'sessions']);
+
+        if ($treatment->teeth->contains(fn (PatientTreatmentTooth $tooth) => $tooth->status === TreatmentToothStatus::DONE)) {
             throw ValidationException::withMessages([
-                'treatment' => 'Cannot delete a treatment that already has sessions. Cancel it instead.',
+                'treatment' => 'Cannot delete a treatment with a completed tooth.',
+            ]);
+        }
+
+        if ($treatment->sessions->contains(
+            fn (TreatmentSession $session) => $this->sessionStatus($session) === TreatmentSessionStatus::COMPLETED
+        )) {
+            throw ValidationException::withMessages([
+                'treatment' => 'Cannot delete a treatment with a completed session.',
             ]);
         }
 
@@ -856,13 +989,6 @@ class PatientTreatmentService
         }
     }
 
-    private function billableComponentQuantity(float $quantity, float $freeQuantity): string
-    {
-        $deduct = max(0, $quantity - $freeQuantity);
-
-        return number_format($deduct, 2, '.', '');
-    }
-
     private function clinical(PatientTreatment $treatment): PatientTreatmentStatus
     {
         return $treatment->clinical_status;
@@ -871,11 +997,6 @@ class PatientTreatmentService
     private function sessionStatus(TreatmentSession $session): TreatmentSessionStatus
     {
         return $session->status;
-    }
-
-    private function stepStatus(TreatmentSessionStep $step): SessionStepStatus
-    {
-        return $step->status;
     }
 
     private function freshTreatment(PatientTreatment $treatment): PatientTreatment
@@ -890,12 +1011,11 @@ class PatientTreatmentService
     {
         return [
             'patient',
-            'template.steps',
+            'template',
             'dentist',
             'plan',
             'teeth',
             'parentTreatment',
-            'sessions.steps.templateStep',
             'sessions.dentist',
             'sessions.appointment',
             'invoiceItems',
@@ -909,15 +1029,13 @@ class PatientTreatmentService
     {
         return [
             'patient',
-            'template.steps.components.component',
+            'template',
             'dentist',
             'plan',
             'teeth',
             'parentTreatment',
-            'sessions.steps.templateStep',
             'sessions.dentist',
             'sessions.appointment',
-            'sessions.components',
             'invoiceItems',
         ];
     }

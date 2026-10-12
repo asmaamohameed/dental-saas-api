@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\TreatmentToothStatus;
 use App\Models\Concerns\BelongsToTenant;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -14,6 +15,9 @@ use Illuminate\Support\Carbon;
  * @property string $tenant_id
  * @property string $patient_treatment_id
  * @property string $tooth_number
+ * @property TreatmentToothStatus $status
+ * @property string $price
+ * @property Carbon|null $completed_at
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  * @property-read PatientTreatment $treatment
@@ -25,7 +29,19 @@ class PatientTreatmentTooth extends Model
     protected $fillable = [
         'patient_treatment_id',
         'tooth_number',
+        'status',
+        'price',
+        'completed_at',
     ];
+
+    protected function casts(): array
+    {
+        return [
+            'status' => TreatmentToothStatus::class,
+            'price' => 'decimal:2',
+            'completed_at' => 'datetime',
+        ];
+    }
 
     /**
      * @return BelongsTo<PatientTreatment, $this>

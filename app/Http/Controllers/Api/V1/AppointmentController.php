@@ -163,7 +163,7 @@ class AppointmentController extends Controller
     {
         $this->authorize('view', $appointment);
 
-        $appointment->load(['patient', 'doctor', 'treatmentSessions.treatment.template', 'treatmentSessions.treatment.teeth', 'treatmentSessions.steps']);
+        $appointment->load(['patient', 'doctor', 'treatmentSessions.treatment.template', 'treatmentSessions.treatment.teeth']);
 
         return $this->successResponse(new AppointmentResource($appointment));
     }

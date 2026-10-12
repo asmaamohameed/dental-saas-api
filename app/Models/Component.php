@@ -61,11 +61,6 @@ class Component extends Model
         return $this->belongsTo(InventoryItem::class);
     }
 
-    public function templateComponents(): HasMany
-    {
-        return $this->hasMany(TreatmentTemplateComponent::class);
-    }
-
     public function movements(): HasMany
     {
         return $this->hasMany(ComponentStockMovement::class);

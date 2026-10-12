@@ -51,7 +51,7 @@ class InvoiceItemController extends Controller
                 $treatment = PatientTreatment::with('template')
                     ->where('tenant_id', app(CurrentTenant::class)->id())
                     ->findOrFail($validated['patient_treatment_id']);
-                $validated['price'] = $validated['price'] ?? (float) $treatment->agreed_price;
+                $validated['price'] = $validated['price'] ?? $treatment->total_price;
                 $validated['description'] ??= $treatment->template?->name_en ?: $treatment->template?->name_ar;
             }
 
@@ -92,7 +92,7 @@ class InvoiceItemController extends Controller
             if (! empty($validated['patient_treatment_id'])) {
                 $treatment = PatientTreatment::where('tenant_id', app(CurrentTenant::class)->id())
                     ->findOrFail($validated['patient_treatment_id']);
-                $validated['price'] = $validated['price'] ?? (float) $treatment->agreed_price;
+                $validated['price'] = $validated['price'] ?? $treatment->total_price;
             }
 
             $item->update($validated);

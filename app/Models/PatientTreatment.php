@@ -6,6 +6,8 @@ use App\Enums\ConsentStatus;
 use App\Enums\FinancialStatus;
 use App\Enums\PatientTreatmentStatus;
 use App\Enums\TreatmentPriority;
+use App\Enums\TreatmentScope;
+use App\Enums\TreatmentToothStatus;
 use App\Enums\TreatmentType;
 use App\Models\Concerns\Auditable;
 use App\Models\Concerns\BelongsToTenant;
@@ -24,8 +26,10 @@ use Illuminate\Support\Carbon;
  * @property string $patient_id
  * @property string|null $treatment_plan_id
  * @property string|null $treatment_template_id
- * @property int $treatment_template_version
+ * @property TreatmentScope $scope
+ * @property string|null $scope_detail
  * @property string $agreed_price
+ * @property-read float $total_price
  * @property PatientTreatmentStatus $clinical_status
  * @property string|null $cancellation_reason
  * @property FinancialStatus $financial_status
@@ -40,6 +44,7 @@ use Illuminate\Support\Carbon;
  * @property Carbon|null $started_at
  * @property Carbon|null $completed_at
  * @property Carbon|null $cancelled_at
+ * @property bool $auto_cancelled
  * @property string|null $created_by
  * @property Carbon $created_at
  * @property Carbon $updated_at
@@ -62,7 +67,8 @@ class PatientTreatment extends Model
         'patient_id',
         'treatment_plan_id',
         'treatment_template_id',
-        'treatment_template_version',
+        'scope',
+        'scope_detail',
         'agreed_price',
         'clinical_status',
         'cancellation_reason',
@@ -78,13 +84,14 @@ class PatientTreatment extends Model
         'started_at',
         'completed_at',
         'cancelled_at',
+        'auto_cancelled',
         'created_by',
     ];
 
     protected function casts(): array
     {
         return [
-            'treatment_template_version' => 'integer',
+            'scope' => TreatmentScope::class,
             'agreed_price' => 'decimal:2',
             'clinical_status' => PatientTreatmentStatus::class,
             'financial_status' => FinancialStatus::class,
@@ -94,7 +101,21 @@ class PatientTreatment extends Model
             'started_at' => 'datetime',
             'completed_at' => 'datetime',
             'cancelled_at' => 'datetime',
+            'auto_cancelled' => 'boolean',
         ];
+    }
+
+    public function getTotalPriceAttribute(): float
+    {
+        if ($this->scope === TreatmentScope::TOOTH) {
+            $this->loadMissing('teeth');
+
+            return (float) $this->teeth
+                ->filter(fn (PatientTreatmentTooth $tooth) => $tooth->status !== TreatmentToothStatus::SKIPPED)
+                ->sum(fn (PatientTreatmentTooth $tooth) => (float) $tooth->price);
+        }
+
+        return (float) $this->agreed_price;
     }
 
     /**

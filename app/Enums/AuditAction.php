@@ -8,4 +8,5 @@ enum AuditAction: string
     case UPDATED = 'updated';
     case DELETED = 'deleted';
     case RESTORED = 'restored';
+    case TREATMENT_TOOTH_PRICE_CHANGED = 'treatment_tooth_price_changed';
 }

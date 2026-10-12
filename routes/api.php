@@ -80,18 +80,21 @@ Route::prefix('v1')->group(function () {
         Route::apiResource('treatment-templates', TreatmentTemplateController::class)
             ->parameters(['treatment-templates' => 'treatmentTemplate'])
             ->only(['index', 'show']);
-        Route::get('treatment-templates/{treatmentTemplate}/versions', [TreatmentTemplateController::class, 'versions']);
         Route::apiResource('patient-treatments', PatientTreatmentController::class)
             ->parameters(['patient-treatments' => 'patientTreatment'])
             ->only(['index', 'show']);
         Route::get('patient-treatments/{patientTreatment}/invoice-summary', [PatientTreatmentController::class, 'invoiceSummary']);
 
-        Route::middleware(EnsureUserRole::using(UserRole::OWNER, UserRole::DOCTOR, UserRole::ASSISTANT, UserRole::RECEPTIONIST))->group(function () {
+        Route::middleware(EnsureUserRole::using(UserRole::OWNER, UserRole::DOCTOR))->group(function () {
+            Route::patch('patient-treatments/{patientTreatment}/status', [PatientTreatmentController::class, 'updateStatus']);
+            Route::post('patient-treatments/{patientTreatment}/retreat', [PatientTreatmentController::class, 'retreat']);
+            Route::delete('patient-treatments/{patientTreatment}', [PatientTreatmentController::class, 'destroy']);
+        });
+
+        Route::middleware(EnsureUserRole::using(UserRole::OWNER, UserRole::DOCTOR, UserRole::ASSISTANT))->group(function () {
             Route::post('patient-treatments/{patientTreatment}/sessions', [PatientTreatmentController::class, 'storeSession']);
             Route::patch('treatment-sessions/{treatmentSession}', [PatientTreatmentController::class, 'updateSession']);
-            Route::post('treatment-sessions/{treatmentSession}/steps', [PatientTreatmentController::class, 'storeSessionStep']);
-            Route::patch('treatment-session-steps/{treatmentSessionStep}', [PatientTreatmentController::class, 'updateSessionStep']);
-            Route::delete('treatment-session-steps/{treatmentSessionStep}', [PatientTreatmentController::class, 'destroySessionStep']);
+            Route::patch('patient-treatments/{patientTreatment}/teeth', [PatientTreatmentController::class, 'updateTeeth']);
         });
 
         Route::get('invoices', [InvoiceController::class, 'index']);
@@ -138,9 +141,6 @@ Route::prefix('v1')->group(function () {
             Route::put('treatment-plans/{treatmentPlan}', [TreatmentPlanController::class, 'update']);
             Route::post('patient-treatments', [PatientTreatmentController::class, 'store']);
             Route::put('patient-treatments/{patientTreatment}', [PatientTreatmentController::class, 'update']);
-            Route::patch('patient-treatments/{patientTreatment}/status', [PatientTreatmentController::class, 'updateStatus']);
-            Route::post('patient-treatments/{patientTreatment}/retreat', [PatientTreatmentController::class, 'retreat']);
-            Route::delete('patient-treatments/{patientTreatment}', [PatientTreatmentController::class, 'destroy']);
 
             Route::post('invoices', [InvoiceController::class, 'store']);
             Route::post('invoices/from-treatment/{patientTreatment}', [InvoiceController::class, 'storeFromTreatment']);

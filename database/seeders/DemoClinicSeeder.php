@@ -21,6 +21,7 @@ use App\Models\Tenant;
 use App\Models\TreatmentSession;
 use App\Models\TreatmentTemplate;
 use App\Models\User;
+use App\Services\DefaultTreatmentServicesProvisioner;
 use App\Services\InventoryTransactionService;
 use App\Services\InvoiceService;
 use App\Services\PatientTreatmentService;
@@ -150,31 +151,9 @@ class DemoClinicSeeder extends Seeder
      */
     private function seedTreatmentTemplates(): array
     {
-        $definitions = [
-            'filling' => [
-                'name_ar' => 'حشوة مركبة',
-                'name_en' => 'Composite Filling',
-                'category' => TreatmentCategory::MEDICAL,
-                'scope' => TreatmentScope::TOOTH,
-                'default_price' => 350,
-                'estimated_duration_minutes' => 45,
-            ],
-            'rct' => [
-                'name_ar' => 'علاج عصب',
-                'name_en' => 'Root Canal Treatment',
-                'category' => TreatmentCategory::MEDICAL,
-                'scope' => TreatmentScope::TOOTH,
-                'default_price' => 1500,
-                'estimated_duration_minutes' => 90,
-            ],
-            'scaling' => [
-                'name_ar' => 'تنظيف وتلميع',
-                'name_en' => 'Scaling and Polishing',
-                'category' => TreatmentCategory::PREVENTIVE,
-                'scope' => TreatmentScope::FULL_MOUTH,
-                'default_price' => 400,
-                'estimated_duration_minutes' => 60,
-            ],
+        $provisioned = app(DefaultTreatmentServicesProvisioner::class)->provision();
+
+        $demoExtras = [
             'quadrant_ortho' => [
                 'name_ar' => 'تقويم الربع العلوي',
                 'name_en' => 'Upper Quadrant Orthodontics',
@@ -193,8 +172,13 @@ class DemoClinicSeeder extends Seeder
             ],
         ];
 
-        $templates = [];
-        foreach ($definitions as $key => $data) {
+        $templates = [
+            'filling' => $provisioned['filling'],
+            'rct' => $provisioned['root_canal'],
+            'scaling' => $provisioned['cleaning'],
+        ];
+
+        foreach ($demoExtras as $key => $data) {
             $templates[$key] = TreatmentTemplate::query()->firstOrCreate(
                 ['name_en' => $data['name_en']],
                 array_merge($data, [
@@ -203,6 +187,10 @@ class DemoClinicSeeder extends Seeder
                 ])
             );
         }
+
+        $templates['filling']->update(['default_price' => 350]);
+        $templates['rct']->update(['default_price' => 1500]);
+        $templates['scaling']->update(['default_price' => 400]);
 
         return $templates;
     }
@@ -267,19 +255,17 @@ class DemoClinicSeeder extends Seeder
         $planned = $treatmentService->createFromTemplate([
             'patient_id' => $patients[0]->id,
             'treatment_template_id' => $templates['filling']->id,
-            'dentist_id' => $doctor->id,
             'tooth_numbers' => ['16'],
             'notes' => $demoTag.' planned filling',
-        ], $owner->id);
+        ], $doctor);
 
         $inProgress = $treatmentService->createFromTemplate([
             'patient_id' => $patients[1]->id,
             'treatment_template_id' => $templates['rct']->id,
-            'dentist_id' => $doctor->id,
             'tooth_numbers' => ['26', '36'],
             'agreed_price' => 1500,
             'notes' => $demoTag.' in-progress rct',
-        ], $owner->id);
+        ], $doctor);
 
         $inProgress->teeth()->where('tooth_number', '26')->update([
             'status' => TreatmentToothStatus::DONE,
@@ -293,10 +279,9 @@ class DemoClinicSeeder extends Seeder
         $completed = $treatmentService->createFromTemplate([
             'patient_id' => $patients[2]->id,
             'treatment_template_id' => $templates['filling']->id,
-            'dentist_id' => $doctor->id,
             'tooth_numbers' => ['11', '21'],
             'notes' => $demoTag.' completed filling',
-        ], $owner->id);
+        ], $doctor);
         foreach ($completed->teeth as $tooth) {
             $tooth->update([
                 'status' => TreatmentToothStatus::DONE,
@@ -308,9 +293,8 @@ class DemoClinicSeeder extends Seeder
         $cancelled = $treatmentService->createFromTemplate([
             'patient_id' => $patients[3]->id,
             'treatment_template_id' => $templates['scaling']->id,
-            'dentist_id' => $doctor->id,
             'notes' => $demoTag.' cancelled scaling',
-        ], $owner->id);
+        ], $doctor);
         $treatmentService->updateClinicalStatus($cancelled, [
             'clinical_status' => PatientTreatmentStatus::CANCELLED,
             'cancellation_reason' => 'Patient rescheduled abroad',
@@ -319,26 +303,23 @@ class DemoClinicSeeder extends Seeder
         $unpaidTreatment = $treatmentService->createFromTemplate([
             'patient_id' => $patients[4]->id,
             'treatment_template_id' => $templates['filling']->id,
-            'dentist_id' => $doctor->id,
             'tooth_numbers' => ['46'],
             'notes' => $demoTag.' invoice unpaid',
-        ], $owner->id);
+        ], $doctor);
 
         $partialTreatment = $treatmentService->createFromTemplate([
             'patient_id' => $patients[5]->id,
             'treatment_template_id' => $templates['filling']->id,
-            'dentist_id' => $doctor->id,
             'tooth_numbers' => ['36'],
             'notes' => $demoTag.' invoice partial',
-        ], $owner->id);
+        ], $doctor);
 
         $paidTreatment = $treatmentService->createFromTemplate([
             'patient_id' => $patients[6]->id,
             'treatment_template_id' => $templates['filling']->id,
-            'dentist_id' => $doctor->id,
             'tooth_numbers' => ['31'],
             'notes' => $demoTag.' invoice paid',
-        ], $owner->id);
+        ], $doctor);
 
         foreach ([$planned, $inProgress, $completed, $unpaidTreatment, $partialTreatment, $paidTreatment] as $treatment) {
             $fresh = $treatment->fresh(['teeth', 'template', 'invoiceItems']);

@@ -8,6 +8,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Resources\V1\TreatmentTemplateResource;
 use App\Models\TreatmentTemplate;
 use App\Services\TreatmentTemplateService;
+use App\Support\Validation\MoneyAmountRules;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -28,6 +29,18 @@ class TreatmentTemplateController extends Controller
 
         if ($request->filled('category')) {
             $query->where('category', $request->query('category'));
+        }
+
+        if ($request->filled('kind')) {
+            $request->validate([
+                'kind' => ['required', 'string', Rule::in(['visit', 'clinical'])],
+            ]);
+
+            if ($request->query('kind') === 'visit') {
+                $query->where('category', TreatmentCategory::VISIT);
+            } else {
+                $query->where('category', '!=', TreatmentCategory::VISIT);
+            }
         }
 
         if ($request->filled('scope')) {
@@ -101,9 +114,9 @@ class TreatmentTemplateController extends Controller
             'name_ar' => [$required, 'string', 'max:255'],
             'name_en' => ['nullable', 'string', 'max:255'],
             'category' => [$required, Rule::enum(TreatmentCategory::class)],
-            'scope' => [$partial ? 'sometimes' : 'required', Rule::enum(TreatmentScope::class)],
+            'scope' => ['nullable', Rule::enum(TreatmentScope::class)],
             'description' => ['nullable', 'string'],
-            'default_price' => [$required, 'numeric', 'min:0'],
+            'default_price' => array_merge([$required], MoneyAmountRules::wholeUnitBase()),
             'estimated_duration_minutes' => [$required, 'integer', 'min:5', 'max:120'],
             'is_active' => ['sometimes', 'boolean'],
         ]);

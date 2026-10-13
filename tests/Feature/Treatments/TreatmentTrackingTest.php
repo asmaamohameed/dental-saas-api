@@ -118,6 +118,25 @@ class TreatmentTrackingTest extends TestCase
         $this->assertSame('200.00', (string) $treatment->teeth()->where('tooth_number', '26')->value('price'));
     }
 
+    public function test_session_rejects_inactive_dentist_id(): void
+    {
+        $doctor = User::factory()->create(['tenant_id' => $this->tenant->id, 'role' => UserRole::DOCTOR]);
+        $inactive = User::factory()->create([
+            'tenant_id' => $this->tenant->id,
+            'role' => UserRole::DOCTOR,
+            'is_active' => false,
+        ]);
+        Sanctum::actingAs($doctor, ['*']);
+
+        $treatment = $this->createTreatment();
+
+        $this->postJson("/api/v1/patient-treatments/{$treatment->id}/sessions", [
+            'dentist_id' => $inactive->id,
+            'status' => 'scheduled',
+        ])->assertUnprocessable()
+            ->assertJsonValidationErrors(['dentist_id']);
+    }
+
     public function test_assistant_can_change_tooth_price(): void
     {
         $assistant = User::factory()->create(['tenant_id' => $this->tenant->id, 'role' => UserRole::ASSISTANT]);
@@ -466,6 +485,20 @@ class TreatmentTrackingTest extends TestCase
             ->assertJsonPath('data.items.0.name_en', 'Prophylaxis Clean');
     }
 
+    public function test_template_decimal_default_price_is_rejected(): void
+    {
+        $this->postJson('/api/v1/treatment-templates', [
+            'name_ar' => 'x',
+            'name_en' => 'Decimal Price',
+            'category' => 'medical',
+            'scope' => 'tooth',
+            'default_price' => 99.99,
+            'estimated_duration_minutes' => 30,
+        ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['default_price']);
+    }
+
     public function test_template_duration_must_be_between_5_and_120_minutes(): void
     {
         $this->postJson('/api/v1/treatment-templates', [
@@ -485,6 +518,17 @@ class TreatmentTrackingTest extends TestCase
             'default_price' => 100,
             'estimated_duration_minutes' => 121,
         ])->assertUnprocessable();
+    }
+
+    public function test_decimal_tooth_price_is_rejected(): void
+    {
+        $treatment = $this->createTreatment(['agreed_price' => 100, 'tooth_numbers' => ['16']]);
+
+        $this->patchJson("/api/v1/patient-treatments/{$treatment->id}/teeth", [
+            'teeth' => [['tooth_number' => '16', 'price' => 125.5]],
+        ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['teeth.0.price']);
     }
 
     public function test_invoice_sync_updates_unpaid_invoice_total(): void
@@ -605,16 +649,16 @@ class TreatmentTrackingTest extends TestCase
         $this->assertSame(TreatmentSessionStatus::NO_SHOW, $treatment->sessions()->first()->status);
     }
 
-    public function test_odontogram_treatment_status_uses_per_tooth_status_and_failed_priority(): void
+    public function test_odontogram_treatment_status_uses_per_tooth_in_progress_priority(): void
     {
         $template = $this->createTemplate();
         $patient = Patient::factory()->create(['tenant_id' => $this->tenant->id]);
 
-        $planned = $this->postJson('/api/v1/patient-treatments', [
+        $this->postJson('/api/v1/patient-treatments', [
             'patient_id' => $patient->id,
             'treatment_template_id' => $template->id,
             'tooth_numbers' => ['16'],
-        ])->assertCreated()->json('data.id');
+        ])->assertCreated();
 
         $inProgress = $this->postJson('/api/v1/patient-treatments', [
             'patient_id' => $patient->id,
@@ -626,24 +670,10 @@ class TreatmentTrackingTest extends TestCase
             'teeth' => [['tooth_number' => '16', 'status' => 'in_progress']],
         ])->assertOk();
 
-        $failed = $this->postJson('/api/v1/patient-treatments', [
-            'patient_id' => $patient->id,
-            'treatment_template_id' => $template->id,
-            'tooth_numbers' => ['16'],
-        ])->json('data.id');
-
-        $this->patchJson("/api/v1/patient-treatments/{$failed}/status", [
-            'clinical_status' => 'in_progress',
-        ])->assertOk();
-        $this->patchJson("/api/v1/patient-treatments/{$failed}/status", [
-            'clinical_status' => 'failed',
-        ])->assertOk();
-
-        unset($planned);
-
         $this->getJson("/api/v1/patients/{$patient->id}/odontogram")
             ->assertOk()
-            ->assertJsonPath('data.treatment_status_by_tooth.16', 'failed');
+            ->assertJsonPath('data.teeth.16.state', 'in_progress')
+            ->assertJsonPath('data.treatment_status_by_tooth.16', 'in_progress');
     }
 
     public function test_payment_updates_financial_status_without_changing_clinical_status(): void
@@ -681,6 +711,18 @@ class TreatmentTrackingTest extends TestCase
             'tooth_numbers' => ['16'],
         ], $overrides);
 
+        /** @var User $actor */
+        $actor = auth()->user();
+        if (! $actor->hasAnyClinicRole([UserRole::DOCTOR, UserRole::OWNER])) {
+            $doctor = User::factory()->create(['tenant_id' => $this->tenant->id, 'role' => UserRole::DOCTOR]);
+            $appointment = Appointment::factory()->create([
+                'tenant_id' => $this->tenant->id,
+                'patient_id' => $patient->id,
+                'doctor_id' => $doctor->id,
+            ]);
+            $payload['appointment_id'] = $appointment->id;
+        }
+
         $id = $this->postJson('/api/v1/patient-treatments', $payload)->assertCreated()->json('data.id');
 
         return PatientTreatment::query()->findOrFail($id);
@@ -689,7 +731,7 @@ class TreatmentTrackingTest extends TestCase
     private function createTemplate(TreatmentScope $scope = TreatmentScope::TOOTH): TreatmentTemplate
     {
         $id = $this->postJson('/api/v1/treatment-templates', [
-            'name_ar' => 'علاج',
+            'name_ar' => 'علاج '.uniqid(),
             'name_en' => 'Treatment '.uniqid(),
             'category' => 'medical',
             'scope' => $scope->value,

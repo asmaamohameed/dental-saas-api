@@ -7,6 +7,7 @@ use App\Models\AdminUser;
 use App\Models\Clinic;
 use App\Models\ClinicMember;
 use App\Models\User;
+use App\Services\DefaultTreatmentServicesProvisioner;
 use App\Support\Admin\ClinicHealthQuery;
 use App\Support\Tenancy\CurrentTenant;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
@@ -19,6 +20,7 @@ class AdminClinicService
     public function __construct(
         private readonly AdminAuditLogger $audit,
         private readonly CurrentTenant $currentTenant,
+        private readonly DefaultTreatmentServicesProvisioner $defaultTreatmentServicesProvisioner,
     ) {}
 
     /**
@@ -50,6 +52,10 @@ class AdminClinicService
             ],
             $request,
         );
+
+        $this->currentTenant->set($clinic->id);
+        $this->defaultTreatmentServicesProvisioner->provision();
+        $this->currentTenant->clear();
 
         return $this->show($clinic);
     }

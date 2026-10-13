@@ -7,14 +7,17 @@ use App\Enums\PatientTreatmentStatus;
 use App\Enums\TreatmentPriority;
 use App\Enums\TreatmentSessionStatus;
 use App\Enums\TreatmentToothStatus;
+use App\Enums\UserRole;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\V1\PatientTreatmentResource;
 use App\Http\Resources\V1\TreatmentSessionResource;
 use App\Models\Patient;
 use App\Models\PatientTreatment;
 use App\Models\TreatmentSession;
+use App\Models\User;
 use App\Services\PatientTreatmentService;
 use App\Support\Tenancy\CurrentTenant;
+use App\Support\Validation\MoneyAmountRules;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -61,9 +64,39 @@ class PatientTreatmentController extends Controller
 
     public function store(Request $request): JsonResponse
     {
-        $treatment = $this->patientTreatmentService->createFromTemplate($this->validated($request), $request->user()->id);
+        return $this->storeTreatment($request, null);
+    }
+
+    public function storeForPatient(Request $request, Patient $patient): JsonResponse
+    {
+        return $this->storeTreatment($request, $patient);
+    }
+
+    private function storeTreatment(Request $request, ?Patient $patient): JsonResponse
+    {
+        if ($patient !== null) {
+            $request->merge(['patient_id' => $patient->id]);
+        }
+
+        $this->normalizeServiceId($request);
+
+        /** @var User $user */
+        $user = $request->user();
+        $treatment = $this->patientTreatmentService->createFromTemplate($this->validated($request), $user);
 
         return $this->successResponse(new PatientTreatmentResource($treatment), 'Patient treatment created successfully.', 201);
+    }
+
+    private function normalizeServiceId(Request $request): void
+    {
+        if ($request->filled('service_id')) {
+            if ($request->filled('treatment_template_id')
+                && $request->input('service_id') !== $request->input('treatment_template_id')) {
+                $request->merge(['treatment_template_id' => $request->input('service_id')]);
+            } elseif (! $request->filled('treatment_template_id')) {
+                $request->merge(['treatment_template_id' => $request->input('service_id')]);
+            }
+        }
     }
 
     public function show(PatientTreatment $patientTreatment): JsonResponse
@@ -109,7 +142,7 @@ class PatientTreatmentController extends Controller
             'teeth' => ['required', 'array', 'min:1'],
             'teeth.*.tooth_number' => ['required', 'string', 'regex:/^[1-4][1-8]$/'],
             'teeth.*.status' => ['sometimes', Rule::enum(TreatmentToothStatus::class)],
-            'teeth.*.price' => ['sometimes', 'numeric', 'min:0'],
+            'teeth.*.price' => MoneyAmountRules::wholeUnitSometimes(),
         ]);
 
         $treatment = $this->patientTreatmentService->updateTeeth($patientTreatment, $data, $request->user());
@@ -142,7 +175,7 @@ class PatientTreatmentController extends Controller
                 'uuid',
                 Rule::exists('treatment_plans', 'id')->where('tenant_id', app(CurrentTenant::class)->id()),
             ],
-            'agreed_price' => ['nullable', 'numeric', 'min:0'],
+            'agreed_price' => MoneyAmountRules::wholeUnit(),
             'dentist_id' => [
                 'nullable',
                 'uuid',
@@ -178,7 +211,7 @@ class PatientTreatmentController extends Controller
             'dentist_id' => [
                 'nullable',
                 'uuid',
-                Rule::exists('users', 'id')->where('tenant_id', app(CurrentTenant::class)->id()),
+                Rule::exists('users', 'id')->where($this->activeTenantDoctorExistsRule()),
             ],
             'session_date' => ['nullable', 'date'],
             'status' => ['sometimes', Rule::enum(TreatmentSessionStatus::class)],
@@ -205,7 +238,7 @@ class PatientTreatmentController extends Controller
             'dentist_id' => [
                 'nullable',
                 'uuid',
-                Rule::exists('users', 'id')->where('tenant_id', app(CurrentTenant::class)->id()),
+                Rule::exists('users', 'id')->where($this->activeTenantDoctorExistsRule()),
             ],
             'session_date' => ['nullable', 'date'],
             'status' => ['sometimes', Rule::enum(TreatmentSessionStatus::class)],
@@ -219,6 +252,21 @@ class PatientTreatmentController extends Controller
         return $this->successResponse([
             'session' => new TreatmentSessionResource($result['session']),
         ], 'Treatment session updated successfully.');
+    }
+
+    private function activeTenantDoctorExistsRule(): \Closure
+    {
+        $tenantId = (string) app(CurrentTenant::class)->id();
+
+        return function ($query) use ($tenantId) {
+            $query->where('tenant_id', $tenantId)->where('is_active', true);
+            $query->where(function ($inner) use ($tenantId) {
+                User::constrainUsersWithClinicRole($inner, $tenantId, UserRole::DOCTOR->value);
+                $inner->orWhere(function ($ownerQuery) use ($tenantId) {
+                    User::constrainUsersWithClinicRole($ownerQuery, $tenantId, UserRole::OWNER->value);
+                });
+            });
+        };
     }
 
     private function validated(Request $request, bool $partial = false): array
@@ -236,21 +284,18 @@ class PatientTreatmentController extends Controller
                 'uuid',
                 Rule::exists('treatment_templates', 'id')->where('tenant_id', app(CurrentTenant::class)->id()),
             ],
+            'appointment_id' => [
+                'nullable',
+                'uuid',
+                Rule::exists('appointments', 'id')->where('tenant_id', app(CurrentTenant::class)->id()),
+            ],
             'treatment_plan_id' => [
                 'nullable',
                 'uuid',
                 Rule::exists('treatment_plans', 'id')->where('tenant_id', app(CurrentTenant::class)->id()),
             ],
-            'dentist_id' => [
-                'nullable',
-                'uuid',
-                Rule::exists('users', 'id')->where('tenant_id', app(CurrentTenant::class)->id()),
-            ],
-            'doctor_id' => [
-                'nullable',
-                'uuid',
-                Rule::exists('users', 'id')->where('tenant_id', app(CurrentTenant::class)->id()),
-            ],
+            'dentist_id' => ['prohibited'],
+            'doctor_id' => ['prohibited'],
             'tooth_numbers' => ['sometimes', 'array'],
             'tooth_numbers.*' => ['string', 'regex:/^[1-4][1-8]$/'],
             'scope_detail' => ['nullable', 'string', 'max:20'],
@@ -262,7 +307,7 @@ class PatientTreatmentController extends Controller
             'consent_status' => ['sometimes', Rule::enum(ConsentStatus::class)],
             'consent_document_ref' => ['nullable', 'string', 'max:255'],
             'priority' => ['sometimes', Rule::enum(TreatmentPriority::class)],
-            'agreed_price' => ['sometimes', 'numeric', 'min:0'],
+            'agreed_price' => MoneyAmountRules::wholeUnitSometimes(),
             'notes' => ['nullable', 'string'],
         ]);
     }

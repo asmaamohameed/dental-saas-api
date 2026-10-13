@@ -134,6 +134,26 @@ class AppointmentValidationTest extends TestCase
             ->assertJsonValidationErrors('patient_treatment_ids');
     }
 
+    public function test_decimal_appointment_fee_is_rejected(): void
+    {
+        $tenant = Tenant::factory()->create();
+        app(CurrentTenant::class)->set($tenant->id);
+        $patient = Patient::factory()->create(['tenant_id' => $tenant->id]);
+        $doctor = User::factory()->doctor()->create(['tenant_id' => $tenant->id]);
+
+        $this->actingAsTenantUser($tenant, UserRole::RECEPTIONIST);
+
+        $this->postJson('/api/v1/appointments', [
+            'patient_id' => $patient->id,
+            'doctor_id' => $doctor->id,
+            'scheduled_at' => now()->addDay()->toDateTimeString(),
+            'duration_minutes' => 30,
+            'fee' => 150.75,
+        ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['fee']);
+    }
+
     public function test_cannot_reassign_an_appointment_to_a_doctor_from_another_tenant(): void
     {
         $tenant = Tenant::factory()->create();

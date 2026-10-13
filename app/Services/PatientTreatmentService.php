@@ -2,16 +2,20 @@
 
 namespace App\Services;
 
+use App\Enums\AppointmentStatus;
 use App\Enums\AuditAction;
 use App\Enums\ConsentStatus;
 use App\Enums\FinancialStatus;
 use App\Enums\InvoiceStatus;
 use App\Enums\PatientTreatmentStatus;
+use App\Enums\TreatmentCategory;
+use App\Enums\TreatmentPriority;
 use App\Enums\TreatmentScope;
 use App\Enums\TreatmentSessionStatus;
 use App\Enums\TreatmentToothStatus;
 use App\Enums\TreatmentType;
 use App\Enums\UserRole;
+use App\Models\Appointment;
 use App\Models\AuditLog;
 use App\Models\Invoice;
 use App\Models\InvoiceItem;
@@ -59,16 +63,31 @@ class PatientTreatmentService
         return $query->latest()->paginate($perPage);
     }
 
-    public function createFromTemplate(array $data, string $userId): PatientTreatment
+    public function createFromTemplate(array $data, User $actor): PatientTreatment
     {
-        return DB::transaction(function () use ($data, $userId) {
+        return DB::transaction(function () use ($data, $actor) {
             /** @var TreatmentTemplate $template */
             $template = TreatmentTemplate::query()->findOrFail($data['treatment_template_id']);
+
+            if ($template->category === TreatmentCategory::VISIT) {
+                throw ValidationException::withMessages([
+                    'treatment_template_id' => 'Visit services cannot be used to create a patient treatment.',
+                ]);
+            }
+
             $scope = $template->scope;
             $toothNumbers = $this->normalizeToothNumbers($data['tooth_numbers'] ?? []);
             $this->assertScopeToothRules($scope, $toothNumbers);
 
-            $unitPrice = $data['agreed_price'] ?? $template->default_price;
+            $unitPrice = array_key_exists('agreed_price', $data) && $data['agreed_price'] !== null
+                ? $data['agreed_price']
+                : $template->default_price;
+
+            $dentistId = $data['_dentist_id'] ?? $this->resolveDentistForNewTreatment(
+                $actor,
+                (string) $data['patient_id'],
+                $data['appointment_id'] ?? null
+            );
 
             $treatment = PatientTreatment::create([
                 'patient_id' => $data['patient_id'],
@@ -83,11 +102,11 @@ class PatientTreatmentService
                 'consent_document_ref' => $data['consent_document_ref'] ?? null,
                 'parent_treatment_id' => $data['parent_treatment_id'] ?? null,
                 'treatment_type' => $data['treatment_type'] ?? TreatmentType::ORIGINAL,
-                'dentist_id' => $data['dentist_id'] ?? $data['doctor_id'] ?? null,
+                'dentist_id' => $dentistId,
                 'diagnosis' => $data['diagnosis'] ?? null,
-                'priority' => $data['priority'] ?? 'routine',
+                'priority' => $data['priority'] ?? TreatmentPriority::ROUTINE->value,
                 'notes' => $data['notes'] ?? null,
-                'created_by' => $userId,
+                'created_by' => $actor->id,
             ]);
 
             if ($scope === TreatmentScope::TOOTH) {
@@ -95,7 +114,7 @@ class PatientTreatmentService
             }
 
             $treatment = $this->freshTreatment($treatment);
-            $this->invoiceService->createInitialInvoiceForTreatment($treatment, $userId);
+            $this->invoiceService->createInitialInvoiceForTreatment($treatment, $actor->id);
             $this->invoiceService->recomputeFinancialStatus($treatment);
 
             return $this->freshTreatment($treatment);
@@ -266,7 +285,7 @@ class PatientTreatmentService
                 'treatment_plan_id' => $data['treatment_plan_id'] ?? $treatment->treatment_plan_id,
                 'treatment_template_id' => $data['treatment_template_id'] ?? $treatment->treatment_template_id,
                 'agreed_price' => $unitPrice,
-                'dentist_id' => $data['dentist_id'] ?? $treatment->dentist_id,
+                '_dentist_id' => $data['dentist_id'] ?? $treatment->dentist_id,
                 'diagnosis' => $data['diagnosis'] ?? $treatment->diagnosis,
                 'priority' => $data['priority'] ?? $treatment->priority->value,
                 'notes' => $data['notes'] ?? null,
@@ -277,8 +296,94 @@ class PatientTreatmentService
                 'tooth_numbers' => $data['tooth_numbers'] ?? $treatment->teeth()->pluck('tooth_number')->all(),
             ];
 
-            return $this->createFromTemplate($payload, $userId);
+            /** @var User $actor */
+            $actor = User::query()->findOrFail($userId);
+
+            return $this->createFromTemplate($payload, $actor);
         });
+    }
+
+    private function resolveDentistForNewTreatment(User $actor, string $patientId, ?string $appointmentId): string
+    {
+        if ($actor->hasAnyClinicRole([UserRole::DOCTOR, UserRole::OWNER])) {
+            return $actor->id;
+        }
+
+        if ($appointmentId === null || $appointmentId === '') {
+            throw ValidationException::withMessages([
+                'appointment_id' => 'A treating dentist is required. Provide appointment_id for this visit or sign in as a doctor.',
+            ]);
+        }
+
+        /** @var Appointment|null $appointment */
+        $appointment = Appointment::query()->find($appointmentId);
+        if ($appointment === null) {
+            throw ValidationException::withMessages([
+                'appointment_id' => 'The selected appointment is invalid.',
+            ]);
+        }
+
+        if ((string) $appointment->patient_id !== $patientId) {
+            throw ValidationException::withMessages([
+                'appointment_id' => 'The appointment does not belong to this patient.',
+            ]);
+        }
+
+        if (in_array($appointment->status, [AppointmentStatus::CANCELLED, AppointmentStatus::NO_SHOW], true)) {
+            throw ValidationException::withMessages([
+                'appointment_id' => 'Cannot use a cancelled or no-show appointment to assign a treating dentist.',
+            ]);
+        }
+
+        if ($appointment->doctor_id === null) {
+            throw ValidationException::withMessages([
+                'appointment_id' => 'The selected appointment has no assigned doctor.',
+            ]);
+        }
+
+        $doctorId = (string) $appointment->doctor_id;
+        $this->assertActiveTreatingClinician($doctorId, (string) $actor->tenant_id, 'appointment_id', doctorsOnly: true);
+
+        return $doctorId;
+    }
+
+    private function resolveDentistForNewSession(PatientTreatment $treatment, string $userId): ?string
+    {
+        /** @var User|null $actor */
+        $actor = User::query()->find($userId);
+        if (
+            $actor !== null
+            && $actor->is_active
+            && $actor->hasAnyClinicRole([UserRole::DOCTOR])
+        ) {
+            return $actor->id;
+        }
+
+        return $treatment->dentist_id;
+    }
+
+    private function assertActiveTreatingClinician(
+        string $userId,
+        string $tenantId,
+        string $errorKey = 'dentist_id',
+        bool $doctorsOnly = false,
+    ): void {
+        /** @var User|null $user */
+        $user = User::query()
+            ->where('id', $userId)
+            ->where('tenant_id', $tenantId)
+            ->where('is_active', true)
+            ->first();
+
+        $allowedRoles = $doctorsOnly
+            ? [UserRole::DOCTOR]
+            : [UserRole::DOCTOR, UserRole::OWNER];
+
+        if ($user === null || ! $user->hasAnyClinicRole($allowedRoles)) {
+            throw ValidationException::withMessages([
+                $errorKey => 'The selected user is not an active doctor in this clinic.',
+            ]);
+        }
     }
 
     /**
@@ -296,9 +401,23 @@ class PatientTreatmentService
 
             $toothNumbers = $this->validateSessionToothNumbers($treatment, $data['tooth_numbers'] ?? null);
 
+            $explicitDentist = array_key_exists('dentist_id', $data)
+                && $data['dentist_id'] !== null
+                && $data['dentist_id'] !== '';
+            $dentistId = $explicitDentist
+                ? (string) $data['dentist_id']
+                : $this->resolveDentistForNewSession($treatment, $userId);
+            if ($dentistId !== null && $dentistId !== '') {
+                $this->assertActiveTreatingClinician(
+                    (string) $dentistId,
+                    (string) $treatment->tenant_id,
+                    doctorsOnly: $explicitDentist,
+                );
+            }
+
             $session = $treatment->sessions()->create([
                 'appointment_id' => $data['appointment_id'] ?? null,
-                'dentist_id' => $data['dentist_id'] ?? $treatment->dentist_id,
+                'dentist_id' => $dentistId,
                 'session_date' => $data['session_date'] ?? now(),
                 'status' => $data['status'] ?? TreatmentSessionStatus::SCHEDULED,
                 'notes' => $data['notes'] ?? null,
@@ -324,6 +443,10 @@ class PatientTreatmentService
 
             if (array_key_exists('tooth_numbers', $data)) {
                 $data['tooth_numbers'] = $this->validateSessionToothNumbers($session->treatment, $data['tooth_numbers']);
+            }
+
+            if (array_key_exists('dentist_id', $data) && $data['dentist_id'] !== null && $data['dentist_id'] !== '') {
+                $this->assertActiveTreatingClinician((string) $data['dentist_id'], (string) $session->tenant_id, doctorsOnly: true);
             }
 
             $session->update(collect($data)->only([
@@ -442,61 +565,6 @@ class PatientTreatmentService
             'has_open_invoice' => $openInvoiceExists,
             'financial_status' => $treatment->financial_status,
         ];
-    }
-
-    /**
-     * @return array<string, string>
-     */
-    public function toothStatusMap(string $patientId): array
-    {
-        $treatments = PatientTreatment::query()
-            ->with('teeth')
-            ->where('patient_id', $patientId)
-            ->where('clinical_status', '!=', PatientTreatmentStatus::CANCELLED)
-            ->get();
-
-        $byTooth = [];
-
-        foreach ($treatments as $treatment) {
-            $clinical = $this->clinical($treatment);
-
-            if ($clinical === PatientTreatmentStatus::FAILED) {
-                foreach ($treatment->teeth as $tooth) {
-                    $byTooth[(string) $tooth->tooth_number][] = 'failed';
-                }
-
-                continue;
-            }
-
-            if ($treatment->scope !== TreatmentScope::TOOTH) {
-                continue;
-            }
-
-            foreach ($treatment->teeth as $tooth) {
-                if ($tooth->status === TreatmentToothStatus::SKIPPED) {
-                    continue;
-                }
-
-                if ($clinical === PatientTreatmentStatus::ON_HOLD) {
-                    $byTooth[(string) $tooth->tooth_number][] = 'in_progress';
-
-                    continue;
-                }
-
-                $byTooth[(string) $tooth->tooth_number][] = match ($tooth->status) {
-                    TreatmentToothStatus::DONE => 'completed',
-                    TreatmentToothStatus::IN_PROGRESS => 'in_progress',
-                    TreatmentToothStatus::PLANNED => 'planned',
-                };
-            }
-        }
-
-        $map = [];
-        foreach ($byTooth as $number => $statuses) {
-            $map[$number] = $this->priorityColor($statuses);
-        }
-
-        return $map;
     }
 
     public function nextForPatient(string $patientId): ?PatientTreatment
@@ -792,24 +860,6 @@ class PatientTreatmentService
     /**
      * @param  list<string>  $statuses
      */
-    private function priorityColor(array $statuses): string
-    {
-        if (in_array('failed', $statuses, true)) {
-            return 'failed';
-        }
-        if (in_array('in_progress', $statuses, true)) {
-            return 'in_progress';
-        }
-        if (in_array('planned', $statuses, true)) {
-            return 'planned';
-        }
-        if ($statuses !== [] && collect($statuses)->every(fn (string $s) => $s === 'completed')) {
-            return 'completed';
-        }
-
-        return 'default';
-    }
-
     /**
      * @param  array<int, string|int|null>  $toothNumbers
      * @return list<string>

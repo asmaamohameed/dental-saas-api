@@ -15,6 +15,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 /**
  * @property string $id
  * @property string $default_price
+ * @property TreatmentCategory $category
  * @property TreatmentScope $scope
  * @property-read Collection<int, PatientTreatment> $patientTreatments
  */
@@ -50,6 +51,14 @@ class TreatmentTemplate extends Model
     public function patientTreatments(): HasMany
     {
         return $this->hasMany(PatientTreatment::class);
+    }
+
+    /**
+     * @return HasMany<Appointment, $this>
+     */
+    public function appointments(): HasMany
+    {
+        return $this->hasMany(Appointment::class, 'service_id');
     }
 
     public function scopeActive(Builder $query): Builder

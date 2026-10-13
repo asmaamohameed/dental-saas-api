@@ -10,4 +10,10 @@ enum TreatmentCategory: string
     case ORTHODONTIC = 'orthodontic';
     case SURGICAL = 'surgical';
     case OTHER = 'other';
+    case VISIT = 'visit';
+
+    public function isVisit(): bool
+    {
+        return $this === self::VISIT;
+    }
 }

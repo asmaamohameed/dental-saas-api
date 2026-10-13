@@ -88,12 +88,6 @@ class LoadTestSeeder extends Seeder
             array_fill(0, 1, 'no_show'),
         );
 
-        // Valid tooth conditions per migration
-        $toothConditions = ['healthy', 'decayed', 'filled', 'missing', 'crown', 'root_canal', 'needs_extraction', 'impacted'];
-
-        // Valid treatment statuses per migration
-        $treatmentStatuses = ['planned', 'in_progress', 'completed'];
-
         for ($t = 1; $t <= $tenantCount; $t++) {
             $tenantStart = microtime(true);
             $subdomain = "loadtest-clinic-{$t}";
@@ -353,42 +347,6 @@ class LoadTestSeeder extends Seeder
             $completedAppointments = $allAppointments->where('status', 'completed')->values();
 
             $this->command->info("[Tenant {$t}] Completed appointments for invoicing: ".$completedAppointments->count());
-
-            /*
-            |------------------------------------------------------------------
-            | Tooth Records (2-4 per appointment, with patient_id derived
-            | from appointment, recorded_by from doctor, valid conditions)
-            |------------------------------------------------------------------
-            */
-
-            $this->command->info("[Tenant {$t}] Creating tooth records...");
-
-            $toothBatch = [];
-            foreach ($allAppointments as $appt) {
-                $recordCount = random_int(2, 4);
-                for ($tr = 0; $tr < $recordCount; $tr++) {
-                    $toothBatch[] = [
-                        'id' => Str::uuid()->toString(),
-                        'tenant_id' => $tenantId,
-                        'patient_id' => $appt->patient_id,
-                        'appointment_id' => $appt->id,
-                        'recorded_by' => $appt->doctor_id,
-                        'tooth_number' => (string) random_int(11, 48),
-                        'condition' => $toothConditions[array_rand($toothConditions)],
-                        'treatment_status' => $treatmentStatuses[array_rand($treatmentStatuses)],
-                        'notes' => 'Load test tooth record',
-                    ];
-                    if (count($toothBatch) >= $chunkSize) {
-                        DB::table('tooth_records')->insert($toothBatch);
-                        $toothBatch = [];
-                    }
-                }
-            }
-            if (! empty($toothBatch)) {
-                DB::table('tooth_records')->insert($toothBatch);
-            }
-
-            $this->command->info("[Tenant {$t}] Tooth records done.");
 
             /*
             |------------------------------------------------------------------

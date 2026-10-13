@@ -25,6 +25,8 @@ use Illuminate\Support\Carbon;
  * @property Carbon|null $started_at
  * @property Carbon|null $completed_at
  * @property int $duration_minutes
+ * @property string|null $service_id
+ * @property string|null $fee
  * @property AppointmentStatus $status
  * @property AppointmentType $appointment_type
  * @property string|null $notes
@@ -71,6 +73,8 @@ class Appointment extends Model
         'duration_minutes',
         'status',
         'appointment_type',
+        'service_id',
+        'fee',
         'notes',
         'checked_in_at',
         'started_at',
@@ -85,6 +89,7 @@ class Appointment extends Model
             'started_at' => 'datetime',
             'completed_at' => 'datetime',
             'duration_minutes' => 'integer',
+            'fee' => 'decimal:2',
             'status' => AppointmentStatus::class,
             'appointment_type' => AppointmentType::class,
             'created_at' => 'datetime',
@@ -96,6 +101,11 @@ class Appointment extends Model
     public function patient(): BelongsTo
     {
         return $this->belongsTo(Patient::class);
+    }
+
+    public function service(): BelongsTo
+    {
+        return $this->belongsTo(TreatmentTemplate::class, 'service_id');
     }
 
     public function doctor(): BelongsTo

@@ -140,6 +140,7 @@ Route::prefix('v1')->group(function () {
             Route::post('patients/{patient}/treatment-plans', [TreatmentPlanController::class, 'store']);
             Route::put('treatment-plans/{treatmentPlan}', [TreatmentPlanController::class, 'update']);
             Route::post('patient-treatments', [PatientTreatmentController::class, 'store']);
+            Route::post('patients/{patient}/treatments', [PatientTreatmentController::class, 'storeForPatient']);
             Route::put('patient-treatments/{patientTreatment}', [PatientTreatmentController::class, 'update']);
 
             Route::post('invoices', [InvoiceController::class, 'store']);

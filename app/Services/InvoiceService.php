@@ -22,7 +22,6 @@ class InvoiceService
         'creator',
         'items.patientTreatment.template',
         'items.patientTreatment.teeth',
-        'items.patientTreatment.sessions.steps.templateStep',
         'items.patientTreatment.sessions.dentist',
         'payments',
     ];
@@ -110,8 +109,8 @@ class InvoiceService
                 return null;
             }
 
-            $price = (float) $treatment->agreed_price;
-            $label = $treatment->template?->name_en ?: $treatment->template?->name_ar ?: 'Patient treatment';
+            $price = $treatment->total_price;
+            $label = $this->treatmentInvoiceDescription($treatment);
 
             $invoice = Invoice::create([
                 'patient_id' => $treatment->patient_id,
@@ -131,6 +130,67 @@ class InvoiceService
             $this->recomputeFinancialStatus($treatment);
 
             return $invoice->load(self::INVOICE_RELATIONS);
+        });
+    }
+
+    public function syncTreatmentInvoiceItems(PatientTreatment $treatment): void
+    {
+        DB::transaction(function () use ($treatment) {
+            $treatment->loadMissing(['template', 'teeth']);
+
+            $items = InvoiceItem::query()
+                ->where('patient_treatment_id', $treatment->id)
+                ->with('invoice')
+                ->get();
+
+            if ($items->isEmpty()) {
+                return;
+            }
+
+            $newPrice = $treatment->total_price;
+
+            foreach ($items->groupBy('invoice_id') as $invoiceId => $invoiceItems) {
+                /** @var Invoice|null $invoice */
+                $invoice = Invoice::query()->lockForUpdate()->find($invoiceId);
+                if (! $invoice) {
+                    continue;
+                }
+
+                if ($invoice->status === InvoiceStatus::PAID) {
+                    throw ValidationException::withMessages([
+                        'invoice' => 'Cannot change treatment pricing while its invoice is fully paid.',
+                    ]);
+                }
+
+                if (! in_array($invoice->status, [InvoiceStatus::UNPAID, InvoiceStatus::PARTIAL], true)) {
+                    continue;
+                }
+
+                foreach ($invoiceItems as $item) {
+                    $item->update([
+                        'price' => $newPrice,
+                        'quantity' => 1,
+                    ]);
+                }
+
+                $newTotal = (float) $invoice->items()->get()->sum(
+                    fn (InvoiceItem $row) => (float) $row->price * (int) $row->quantity
+                );
+
+                $totalPayments = (float) $invoice->payments()->sum('amount')
+                    + (float) $invoice->payments()->sum('deduct_amount');
+
+                if (bccomp((string) $newTotal, (string) $totalPayments, 2) === -1) {
+                    throw ValidationException::withMessages([
+                        'invoice' => 'Updated treatment total would be less than payments already applied to this invoice.',
+                    ]);
+                }
+
+                $invoice->update(['total_amount' => $newTotal]);
+                $this->recalculateStatus($invoice);
+            }
+
+            $this->recomputeFinancialStatus($treatment);
         });
     }
 
@@ -440,8 +500,8 @@ class InvoiceService
             $label = $treatment->template?->name_en ?: $treatment->template?->name_ar ?: 'Patient treatment';
 
             return [
-                isset($item['price']) ? (float) $item['price'] : (float) $treatment->agreed_price,
-                $item['description'] ?? $label,
+                isset($item['price']) ? (float) $item['price'] : $treatment->total_price,
+                $item['description'] ?? $this->treatmentInvoiceDescription($treatment),
             ];
         }
 
@@ -455,5 +515,17 @@ class InvoiceService
             (float) $item['price'],
             $item['description'] ?? null,
         ];
+    }
+
+    private function treatmentInvoiceDescription(PatientTreatment $treatment): string
+    {
+        $name = $treatment->template?->name_en ?: $treatment->template?->name_ar ?: 'Patient treatment';
+        $teeth = $treatment->toothNumbers();
+
+        if ($teeth === []) {
+            return $name;
+        }
+
+        return $name.' ('.implode(', ', $teeth).')';
     }
 }

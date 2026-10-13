@@ -2,6 +2,8 @@
 
 namespace Database\Seeders;
 
+use App\Models\Invoice;
+use App\Services\InvoiceService;
 use App\Support\Roles\ClinicMembershipSync;
 use App\Support\Tenancy\CurrentTenant;
 use Carbon\Carbon;
@@ -14,6 +16,12 @@ class LoadTestSeeder extends Seeder
 {
     public function run(): void
     {
+        if (! app()->environment(['local', 'staging'])) {
+            $this->command->warn('LoadTestSeeder runs only in local/staging (not via DatabaseSeeder).');
+
+            return;
+        }
+
         $this->command->info('Starting load test data seeding...');
 
         /*
@@ -79,12 +87,6 @@ class LoadTestSeeder extends Seeder
             array_fill(0, 1, 'cancelled'),
             array_fill(0, 1, 'no_show'),
         );
-
-        // Valid tooth conditions per migration
-        $toothConditions = ['healthy', 'decayed', 'filled', 'missing', 'crown', 'root_canal', 'needs_extraction', 'impacted'];
-
-        // Valid treatment statuses per migration
-        $treatmentStatuses = ['planned', 'in_progress', 'completed'];
 
         for ($t = 1; $t <= $tenantCount; $t++) {
             $tenantStart = microtime(true);
@@ -348,42 +350,6 @@ class LoadTestSeeder extends Seeder
 
             /*
             |------------------------------------------------------------------
-            | Tooth Records (2-4 per appointment, with patient_id derived
-            | from appointment, recorded_by from doctor, valid conditions)
-            |------------------------------------------------------------------
-            */
-
-            $this->command->info("[Tenant {$t}] Creating tooth records...");
-
-            $toothBatch = [];
-            foreach ($allAppointments as $appt) {
-                $recordCount = random_int(2, 4);
-                for ($tr = 0; $tr < $recordCount; $tr++) {
-                    $toothBatch[] = [
-                        'id' => Str::uuid()->toString(),
-                        'tenant_id' => $tenantId,
-                        'patient_id' => $appt->patient_id,
-                        'appointment_id' => $appt->id,
-                        'recorded_by' => $appt->doctor_id,
-                        'tooth_number' => (string) random_int(11, 48),
-                        'condition' => $toothConditions[array_rand($toothConditions)],
-                        'treatment_status' => $treatmentStatuses[array_rand($treatmentStatuses)],
-                        'notes' => 'Load test tooth record',
-                    ];
-                    if (count($toothBatch) >= $chunkSize) {
-                        DB::table('tooth_records')->insert($toothBatch);
-                        $toothBatch = [];
-                    }
-                }
-            }
-            if (! empty($toothBatch)) {
-                DB::table('tooth_records')->insert($toothBatch);
-            }
-
-            $this->command->info("[Tenant {$t}] Tooth records done.");
-
-            /*
-            |------------------------------------------------------------------
             | X-ray Attachments (5,000 per tenant)
             | Schema: file_url, file_type, uploaded_by, appointment_id
             |------------------------------------------------------------------
@@ -435,7 +401,7 @@ class LoadTestSeeder extends Seeder
                     'appointment_id' => $appt->id,
                     'created_by' => $appt->doctor_id,
                     'total_amount' => $price,
-                    'status' => ($inv % 3 === 0) ? 'paid' : (($inv % 3 === 1) ? 'unpaid' : 'partial'),
+                    'status' => 'unpaid',
                 ];
                 if (count($invoiceBatch) >= $chunkSize) {
                     DB::table('invoices')->insert($invoiceBatch);
@@ -464,21 +430,19 @@ class LoadTestSeeder extends Seeder
 
             $itemBatch = [];
             foreach ($invoiceIds as $idx => $invoiceId) {
-                $itemCount = random_int(1, 4);
-                for ($c = 0; $c < $itemCount; $c++) {
-                    $price = 150 + (($idx % 10) * 25);
-                    $itemBatch[] = [
-                        'id' => Str::uuid()->toString(),
-                        'tenant_id' => $tenantId,
-                        'invoice_id' => $invoiceId,
-                        'description' => 'Load test line item',
-                        'quantity' => 1,
-                        'price' => $price,
-                    ];
-                    if (count($itemBatch) >= $chunkSize) {
-                        DB::table('invoice_items')->insert($itemBatch);
-                        $itemBatch = [];
-                    }
+                $invoiceRow = DB::table('invoices')->where('id', $invoiceId)->first();
+                $price = (float) ($invoiceRow->total_amount ?? 0);
+                $itemBatch[] = [
+                    'id' => Str::uuid()->toString(),
+                    'tenant_id' => $tenantId,
+                    'invoice_id' => $invoiceId,
+                    'description' => 'Load test line item',
+                    'quantity' => 1,
+                    'price' => $price,
+                ];
+                if (count($itemBatch) >= $chunkSize) {
+                    DB::table('invoice_items')->insert($itemBatch);
+                    $itemBatch = [];
                 }
             }
             if (! empty($itemBatch)) {
@@ -498,28 +462,43 @@ class LoadTestSeeder extends Seeder
             $this->command->info("[Tenant {$t}] Creating payments...");
 
             $paymentBatch = [];
-            foreach ($invoiceIds as $invoiceId) {
-                $payCount = random_int(0, 3);
-                for ($p = 0; $p < $payCount; $p++) {
+            foreach ($invoiceIds as $idx => $invoiceId) {
+                $invoiceRow = DB::table('invoices')->where('id', $invoiceId)->first();
+                $total = (float) ($invoiceRow->total_amount ?? 0);
+                $targetStatus = ($idx % 3 === 0) ? 'paid' : (($idx % 3 === 1) ? 'unpaid' : 'partial');
+                $amount = match ($targetStatus) {
+                    'paid' => $total,
+                    'partial' => round($total / 2, 2),
+                    default => 0.0,
+                };
+
+                if ($amount > 0) {
                     $paymentBatch[] = [
                         'id' => Str::uuid()->toString(),
                         'tenant_id' => $tenantId,
                         'invoice_id' => $invoiceId,
-                        'amount' => random_int(10, 100),
+                        'amount' => $amount,
                         'paid_at' => Carbon::now()->subDays(random_int(0, 30)),
                         'method' => ['cash', 'transfer', 'card'][random_int(0, 2)],
                         'received_by' => $userIds[array_rand($userIds)],
                         'notes' => null,
                     ];
-                    if (count($paymentBatch) >= $chunkSize) {
-                        DB::table('payments')->insert($paymentBatch);
-                        $paymentBatch = [];
-                    }
+                }
+
+                if (count($paymentBatch) >= $chunkSize) {
+                    DB::table('payments')->insert($paymentBatch);
+                    $paymentBatch = [];
                 }
             }
             if (! empty($paymentBatch)) {
                 DB::table('payments')->insert($paymentBatch);
             }
+
+            /** @var InvoiceService $invoiceService */
+            $invoiceService = app(InvoiceService::class);
+            Invoice::query()
+                ->where('tenant_id', $tenantId)
+                ->each(fn (Invoice $invoice) => $invoiceService->recalculateStatus($invoice));
 
             $this->command->info("[Tenant {$t}] Payments done.");
 

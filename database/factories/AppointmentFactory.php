@@ -3,6 +3,7 @@
 namespace Database\Factories;
 
 use App\Enums\AppointmentStatus;
+use App\Enums\AppointmentType;
 use App\Models\Appointment;
 use App\Models\Patient;
 use App\Models\User;
@@ -24,6 +25,7 @@ class AppointmentFactory extends Factory
             'scheduled_at' => fake()->dateTimeBetween('now', '+2 weeks'),
             'duration_minutes' => fake()->randomElement([15, 30, 45, 60]),
             'status' => AppointmentStatus::SCHEDULED,
+            'appointment_type' => AppointmentType::CONSULTATION,
             'notes' => fake()->optional()->sentence(),
         ];
     }

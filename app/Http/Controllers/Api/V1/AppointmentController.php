@@ -15,6 +15,7 @@ use App\Http\Requests\V1\Appointment\UpdateAppointmentStatusRequest;
 use App\Http\Resources\V1\AppointmentResource;
 use App\Http\Resources\V1\UnresolvedAppointmentResource;
 use App\Models\Appointment;
+use App\Services\AppointmentService;
 use App\Services\PatientTreatmentService;
 use App\Traits\ApiResponse;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
@@ -26,13 +27,21 @@ class AppointmentController extends Controller
 {
     use ApiResponse, AuthorizesRequests;
 
-    public function __construct(private readonly PatientTreatmentService $patientTreatmentService) {}
+    public function __construct(
+        private readonly PatientTreatmentService $patientTreatmentService,
+        private readonly AppointmentService $appointmentService,
+    ) {}
 
     public function index(Request $request)
     {
         $this->authorize('viewAny', Appointment::class);
 
-        $query = Appointment::query()->with(['patient', 'doctor', 'treatmentSessions.treatment.template']);
+        $query = Appointment::query()->with([
+            'patient',
+            'doctor',
+            'service:id,name_ar,name_en,category',
+            'treatmentSessions.treatment.template',
+        ]);
 
         if ($request->filled('patient_id')) {
             $query->where('patient_id', $request->input('patient_id'));
@@ -131,7 +140,7 @@ class AppointmentController extends Controller
     {
         $this->authorize('create', Appointment::class);
 
-        $data = $request->validated();
+        $data = $this->appointmentService->applyServiceDefaults($request->validated());
         $treatmentIds = $this->treatmentIdsForType($data, $data['patient_treatment_ids'] ?? []);
         unset($data['patient_treatment_ids']);
 
@@ -150,7 +159,7 @@ class AppointmentController extends Controller
             );
         }
 
-        $appointment->load(['patient', 'doctor', 'treatmentSessions.treatment.template']);
+        $appointment->load(['patient', 'doctor', 'service:id,name_ar,name_en,category', 'treatmentSessions.treatment.template']);
 
         return $this->successResponse(
             new AppointmentResource($appointment),
@@ -163,7 +172,13 @@ class AppointmentController extends Controller
     {
         $this->authorize('view', $appointment);
 
-        $appointment->load(['patient', 'doctor', 'treatmentSessions.treatment.template', 'treatmentSessions.treatment.teeth', 'treatmentSessions.steps']);
+        $appointment->load([
+            'patient',
+            'doctor',
+            'service:id,name_ar,name_en,category',
+            'treatmentSessions.treatment.template',
+            'treatmentSessions.treatment.teeth',
+        ]);
 
         return $this->successResponse(new AppointmentResource($appointment));
     }
@@ -172,7 +187,7 @@ class AppointmentController extends Controller
     {
         $this->authorize('update', $appointment);
 
-        $data = $request->validated();
+        $data = $this->appointmentService->applyServiceDefaults($request->validated());
         $submittedTreatmentIds = array_key_exists('patient_treatment_ids', $data)
             ? $data['patient_treatment_ids']
             : null;
@@ -194,7 +209,7 @@ class AppointmentController extends Controller
             );
         }
 
-        $appointment->load(['patient', 'doctor', 'treatmentSessions.treatment.template']);
+        $appointment->load(['patient', 'doctor', 'service:id,name_ar,name_en,category', 'treatmentSessions.treatment.template']);
 
         return $this->successResponse(
             new AppointmentResource($appointment),
@@ -238,7 +253,7 @@ class AppointmentController extends Controller
                 });
             }
 
-            $appointment->load(['patient', 'doctor', 'treatmentSessions.treatment.template']);
+            $appointment->load(['patient', 'doctor', 'service:id,name_ar,name_en,category', 'treatmentSessions.treatment.template']);
 
             if ($doctorChanged && $appointment->status === AppointmentStatus::CHECKED_IN) {
                 $this->dispatchCheckedInDoctorReassignmentBroadcasts($appointment, $previousDoctorId);
@@ -311,7 +326,7 @@ class AppointmentController extends Controller
             );
         }
 
-        $appointment->load(['patient', 'doctor', 'treatmentSessions.treatment.template']);
+        $appointment->load(['patient', 'doctor', 'service:id,name_ar,name_en,category', 'treatmentSessions.treatment.template']);
 
         if (
             $appointment->status === AppointmentStatus::CHECKED_IN

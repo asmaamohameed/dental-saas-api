@@ -13,8 +13,12 @@ class DatabaseSeeder extends Seeder
     {
         $this->call([
             AdminUserSeeder::class,
-            DemoTenantSeeder::class,
-            TreatmentTemplateSeeder::class,
         ]);
+
+        if (app()->environment(['local', 'testing', 'staging'])) {
+            $this->call([
+                DemoClinicSeeder::class,
+            ]);
+        }
     }
 }

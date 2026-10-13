@@ -38,46 +38,33 @@ class ToothRecordTest extends TestCase
             ->assertForbidden();
     }
 
-    public function test_a_new_tooth_record_does_not_delete_or_overwrite_previous_ones(): void
+    public function test_create_tooth_record_returns_gone(): void
     {
         $this->actingAsTenantUser(role: UserRole::DOCTOR);
         $patient = Patient::factory()->create();
         $appointment = Appointment::factory()->create(['patient_id' => $patient->id]);
 
-        $this->postJson("/api/v1/patients/{$patient->id}/tooth-records", $this->validPayload($appointment->id, [
-            'condition' => 'decayed',
-        ]))->assertCreated();
+        $this->postJson("/api/v1/patients/{$patient->id}/tooth-records", $this->validPayload($appointment->id))
+            ->assertStatus(410)
+            ->assertJsonValidationErrors(['tooth_records']);
 
-        $this->postJson("/api/v1/patients/{$patient->id}/tooth-records", $this->validPayload($appointment->id, [
-            'condition' => 'filled',
-        ]))->assertCreated();
-
-        $this->assertDatabaseCount('tooth_records', 2);
-        $this->assertDatabaseHas('tooth_records', ['tooth_number' => 11, 'condition' => 'decayed']);
-        $this->assertDatabaseHas('tooth_records', ['tooth_number' => 11, 'condition' => 'filled']);
+        $this->assertDatabaseCount('tooth_records', 0);
     }
 
-    public function test_odontogram_returns_only_the_latest_record_per_tooth(): void
+    public function test_odontogram_returns_derived_payload_shape(): void
     {
         $this->actingAsTenantUser(role: UserRole::DOCTOR);
         $patient = Patient::factory()->create();
-        $appointment = Appointment::factory()->create(['patient_id' => $patient->id]);
 
-        $this->postJson("/api/v1/patients/{$patient->id}/tooth-records", $this->validPayload($appointment->id, [
-            'condition' => 'decayed',
-        ]))->assertCreated();
-
-        $this->postJson("/api/v1/patients/{$patient->id}/tooth-records", $this->validPayload($appointment->id, [
-            'condition' => 'filled',
-        ]))->assertCreated();
-
-        $response = $this->getJson("/api/v1/patients/{$patient->id}/odontogram")->assertOk();
-
-        $payload = $response->json('data');
-        $records = collect($payload['records'] ?? []);
-
-        $this->assertArrayHasKey('treatment_status_by_tooth', $payload);
-        $this->assertCount(1, $records->where('tooth_number', 11));
-        $this->assertSame('filled', $records->firstWhere('tooth_number', 11)['condition']);
+        $this->getJson("/api/v1/patients/{$patient->id}/odontogram")
+            ->assertOk()
+            ->assertJsonStructure([
+                'data' => [
+                    'records',
+                    'treatment_status_by_tooth',
+                    'teeth',
+                ],
+            ])
+            ->assertJsonPath('data.records', []);
     }
 }

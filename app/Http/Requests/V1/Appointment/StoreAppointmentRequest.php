@@ -4,6 +4,7 @@ namespace App\Http\Requests\V1\Appointment;
 
 use App\Enums\AppointmentType;
 use App\Enums\UserRole;
+use App\Http\Requests\V1\Appointment\Concerns\ValidatesAppointmentService;
 use App\Http\Requests\V1\Appointment\Concerns\ValidatesAppointmentTreatmentLinks;
 use App\Models\User;
 use App\Rules\AppointmentDoctorAvailable;
@@ -15,7 +16,7 @@ use Illuminate\Validation\Rule;
 
 class StoreAppointmentRequest extends FormRequest
 {
-    use ValidatesAppointmentTreatmentLinks;
+    use ValidatesAppointmentService, ValidatesAppointmentTreatmentLinks;
 
     public function authorize(): bool
     {
@@ -27,6 +28,8 @@ class StoreAppointmentRequest extends FormRequest
         if (! $this->filled('appointment_type')) {
             $this->merge(['appointment_type' => AppointmentType::CONSULTATION->value]);
         }
+
+        $this->mergeServiceDurationDefault();
     }
 
     public function rules(): array
@@ -52,9 +55,10 @@ class StoreAppointmentRequest extends FormRequest
                 }),
             ],
             'scheduled_at' => ['required', 'date'],
-            'duration_minutes' => ['required', 'integer', 'min:1'],
+            'duration_minutes' => ['nullable', 'integer', 'min:1', 'required_without:service_id'],
             'appointment_type' => ['required', Rule::enum(AppointmentType::class)],
             'notes' => ['nullable', 'string'],
+            ...$this->serviceFieldRules(),
         ];
     }
 

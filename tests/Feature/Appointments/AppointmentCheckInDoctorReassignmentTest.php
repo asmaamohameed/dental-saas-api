@@ -27,6 +27,8 @@ class AppointmentCheckInDoctorReassignmentTest extends TestCase
 
     private Patient $patient;
 
+    private int $appointmentSlotSequence = 0;
+
     protected function setUp(): void
     {
         parent::setUp();
@@ -34,6 +36,22 @@ class AppointmentCheckInDoctorReassignmentTest extends TestCase
         $this->tenant = Tenant::factory()->create();
         app(CurrentTenant::class)->set($this->tenant->id);
         $this->patient = Patient::factory()->create(['tenant_id' => $this->tenant->id]);
+        $this->appointmentSlotSequence = 0;
+    }
+
+    /**
+     * @param  array<string, mixed>  $attributes
+     */
+    private function makeAppointment(array $attributes = []): Appointment
+    {
+        $this->appointmentSlotSequence++;
+
+        return Appointment::factory()->create(array_merge([
+            'tenant_id' => $this->tenant->id,
+            'scheduled_at' => Carbon::parse('2026-01-02 07:00:00 UTC')->addMinutes($this->appointmentSlotSequence * 60),
+            'duration_minutes' => 30,
+            'status' => AppointmentStatus::SCHEDULED,
+        ], $attributes));
     }
 
     protected function tearDown(): void
@@ -54,22 +72,16 @@ class AppointmentCheckInDoctorReassignmentTest extends TestCase
         $slot = Carbon::parse('2026-10-06 11:00:00');
         $otherPatient = Patient::factory()->create(['tenant_id' => $this->tenant->id]);
 
-        Appointment::factory()->create([
-            'tenant_id' => $this->tenant->id,
+        $this->makeAppointment([
             'patient_id' => $otherPatient->id,
             'doctor_id' => $replacement->id,
             'scheduled_at' => $slot,
-            'duration_minutes' => 30,
-            'status' => AppointmentStatus::SCHEDULED,
         ]);
 
-        $appointment = Appointment::factory()->create([
-            'tenant_id' => $this->tenant->id,
+        $appointment = $this->makeAppointment([
             'patient_id' => $this->patient->id,
             'doctor_id' => $bookedDoctor->id,
             'scheduled_at' => $slot,
-            'duration_minutes' => 30,
-            'status' => AppointmentStatus::SCHEDULED,
         ]);
 
         Sanctum::actingAs($receptionist, ['*']);
@@ -89,11 +101,9 @@ class AppointmentCheckInDoctorReassignmentTest extends TestCase
         $doctor = User::factory()->doctor()->for($this->tenant)->create();
         Sanctum::actingAs($doctor, ['*']);
 
-        $appointment = Appointment::factory()->create([
-            'tenant_id' => $this->tenant->id,
+        $appointment = $this->makeAppointment([
             'patient_id' => $this->patient->id,
             'doctor_id' => $doctor->id,
-            'status' => AppointmentStatus::SCHEDULED,
         ]);
 
         $this->patchJson("/api/v1/appointments/{$appointment->id}/status", [
@@ -117,11 +127,9 @@ class AppointmentCheckInDoctorReassignmentTest extends TestCase
 
         Sanctum::actingAs($receptionist, ['*']);
 
-        $inactiveAppointment = Appointment::factory()->create([
-            'tenant_id' => $this->tenant->id,
+        $inactiveAppointment = $this->makeAppointment([
             'patient_id' => $this->patient->id,
             'doctor_id' => $doctor->id,
-            'status' => AppointmentStatus::SCHEDULED,
         ]);
 
         $this->patchJson("/api/v1/appointments/{$inactiveAppointment->id}/status", [
@@ -130,11 +138,9 @@ class AppointmentCheckInDoctorReassignmentTest extends TestCase
         ])->assertUnprocessable()
             ->assertJsonValidationErrors(['doctor_id']);
 
-        $foreignAppointment = Appointment::factory()->create([
-            'tenant_id' => $this->tenant->id,
+        $foreignAppointment = $this->makeAppointment([
             'patient_id' => $this->patient->id,
             'doctor_id' => $doctor->id,
-            'status' => AppointmentStatus::SCHEDULED,
         ]);
 
         $this->patchJson("/api/v1/appointments/{$foreignAppointment->id}/status", [
@@ -143,11 +149,9 @@ class AppointmentCheckInDoctorReassignmentTest extends TestCase
         ])->assertUnprocessable()
             ->assertJsonValidationErrors(['doctor_id']);
 
-        $assistantAppointment = Appointment::factory()->create([
-            'tenant_id' => $this->tenant->id,
+        $assistantAppointment = $this->makeAppointment([
             'patient_id' => $this->patient->id,
             'doctor_id' => $doctor->id,
-            'status' => AppointmentStatus::SCHEDULED,
         ]);
 
         $this->patchJson("/api/v1/appointments/{$assistantAppointment->id}/status", [
@@ -167,21 +171,16 @@ class AppointmentCheckInDoctorReassignmentTest extends TestCase
 
         $slot = Carbon::parse('2026-10-06 12:00:00');
 
-        Appointment::factory()->create([
-            'tenant_id' => $this->tenant->id,
+        $this->makeAppointment([
             'patient_id' => $this->patient->id,
             'doctor_id' => $otherDoctor->id,
             'scheduled_at' => $slot,
-            'duration_minutes' => 30,
-            'status' => AppointmentStatus::SCHEDULED,
         ]);
 
-        $appointment = Appointment::factory()->create([
-            'tenant_id' => $this->tenant->id,
+        $appointment = $this->makeAppointment([
             'patient_id' => $this->patient->id,
             'doctor_id' => $doctor->id,
             'scheduled_at' => $slot,
-            'duration_minutes' => 30,
             'status' => AppointmentStatus::CHECKED_IN,
         ]);
 
@@ -202,11 +201,9 @@ class AppointmentCheckInDoctorReassignmentTest extends TestCase
         $replacement = User::factory()->doctor()->for($this->tenant)->create();
         $receptionist = User::factory()->receptionist()->for($this->tenant)->create();
 
-        $appointment = Appointment::factory()->create([
-            'tenant_id' => $this->tenant->id,
+        $appointment = $this->makeAppointment([
             'patient_id' => $this->patient->id,
             'doctor_id' => $bookedDoctor->id,
-            'status' => AppointmentStatus::SCHEDULED,
         ]);
 
         Sanctum::actingAs($receptionist, ['*']);
@@ -236,8 +233,7 @@ class AppointmentCheckInDoctorReassignmentTest extends TestCase
         $receptionist = User::factory()->receptionist()->for($this->tenant)->create();
 
         $checkedInAt = Carbon::parse('2026-10-06 09:30:00');
-        $appointment = Appointment::factory()->create([
-            'tenant_id' => $this->tenant->id,
+        $appointment = $this->makeAppointment([
             'patient_id' => $this->patient->id,
             'doctor_id' => $oldDoctor->id,
             'status' => AppointmentStatus::CHECKED_IN,
@@ -265,8 +261,7 @@ class AppointmentCheckInDoctorReassignmentTest extends TestCase
         $receptionist = User::factory()->receptionist()->for($this->tenant)->create();
 
         $checkedInAt = Carbon::parse('2026-10-06 09:30:00');
-        $appointment = Appointment::factory()->create([
-            'tenant_id' => $this->tenant->id,
+        $appointment = $this->makeAppointment([
             'patient_id' => $this->patient->id,
             'doctor_id' => $oldDoctor->id,
             'status' => AppointmentStatus::CHECKED_IN,
@@ -315,8 +310,7 @@ class AppointmentCheckInDoctorReassignmentTest extends TestCase
         $doctor = User::factory()->doctor()->for($this->tenant)->create();
         $receptionist = User::factory()->receptionist()->for($this->tenant)->create();
 
-        $appointment = Appointment::factory()->create([
-            'tenant_id' => $this->tenant->id,
+        $appointment = $this->makeAppointment([
             'patient_id' => $this->patient->id,
             'doctor_id' => $doctor->id,
             'status' => AppointmentStatus::CHECKED_IN,
@@ -343,8 +337,7 @@ class AppointmentCheckInDoctorReassignmentTest extends TestCase
         $newDoctor = User::factory()->doctor()->for($this->tenant)->create();
         $receptionist = User::factory()->receptionist()->for($this->tenant)->create();
 
-        $appointment = Appointment::factory()->create([
-            'tenant_id' => $this->tenant->id,
+        $appointment = $this->makeAppointment([
             'patient_id' => $this->patient->id,
             'doctor_id' => $oldDoctor->id,
             'status' => AppointmentStatus::CHECKED_IN,
@@ -369,8 +362,7 @@ class AppointmentCheckInDoctorReassignmentTest extends TestCase
         $replacement = User::factory()->doctor()->for($this->tenant)->create();
         $receptionist = User::factory()->receptionist()->for($this->tenant)->create();
 
-        $appointment = Appointment::factory()->create([
-            'tenant_id' => $this->tenant->id,
+        $appointment = $this->makeAppointment([
             'patient_id' => $this->patient->id,
             'doctor_id' => $bookedDoctor->id,
             'status' => AppointmentStatus::CHECKED_IN,
@@ -384,22 +376,16 @@ class AppointmentCheckInDoctorReassignmentTest extends TestCase
             'name_ar' => 'علاج',
             'name_en' => 'Treatment',
             'category' => 'medical',
+            'scope' => 'tooth',
             'default_price' => 100,
             'estimated_duration_minutes' => 30,
-            'steps' => [[
-                'step_order' => 1,
-                'name_ar' => 'خطوة',
-                'name_en' => 'Step',
-                'default_duration_minutes' => 30,
-                'is_required' => true,
-                'is_repeatable' => false,
-            ]],
         ])->assertCreated()->json('data.id');
 
         $treatmentId = $this->postJson('/api/v1/patient-treatments', [
             'patient_id' => $this->patient->id,
             'treatment_template_id' => $templateId,
             'agreed_price' => 100,
+            'tooth_numbers' => ['16'],
         ])->assertCreated()->json('data.id');
 
         $treatment = PatientTreatment::query()->findOrFail($treatmentId);
@@ -430,11 +416,9 @@ class AppointmentCheckInDoctorReassignmentTest extends TestCase
         $replacement = User::factory()->doctor()->for($this->tenant)->create();
         $receptionist = User::factory()->receptionist()->for($this->tenant)->create();
 
-        $appointment = Appointment::factory()->create([
-            'tenant_id' => $this->tenant->id,
+        $appointment = $this->makeAppointment([
             'patient_id' => $this->patient->id,
             'doctor_id' => $bookedDoctor->id,
-            'status' => AppointmentStatus::SCHEDULED,
         ]);
 
         $owner = User::factory()->owner()->for($this->tenant)->create();
@@ -444,22 +428,16 @@ class AppointmentCheckInDoctorReassignmentTest extends TestCase
             'name_ar' => 'علاج',
             'name_en' => 'Treatment',
             'category' => 'medical',
+            'scope' => 'tooth',
             'default_price' => 100,
             'estimated_duration_minutes' => 30,
-            'steps' => [[
-                'step_order' => 1,
-                'name_ar' => 'خطوة',
-                'name_en' => 'Step',
-                'default_duration_minutes' => 30,
-                'is_required' => true,
-                'is_repeatable' => false,
-            ]],
         ])->assertCreated()->json('data.id');
 
         $treatmentId = $this->postJson('/api/v1/patient-treatments', [
             'patient_id' => $this->patient->id,
             'treatment_template_id' => $templateId,
             'agreed_price' => 100,
+            'tooth_numbers' => ['16'],
         ])->assertCreated()->json('data.id');
 
         $treatment = PatientTreatment::query()->findOrFail($treatmentId);

@@ -18,9 +18,10 @@ class AdminUserSeeder extends Seeder
         $email = config('platform.admin_email');
         $password = config('platform.admin_password');
         $name = config('platform.admin_name', 'Platform Administrator');
+        $allowsDefaults = app()->environment(['local', 'testing']);
 
         if (! is_string($email) || filter_var($email, FILTER_VALIDATE_EMAIL) === false) {
-            if (! app()->environment('local')) {
+            if (! $allowsDefaults) {
                 throw new RuntimeException('Set ADMIN_EMAIL to a valid address before seeding the platform admin.');
             }
 
@@ -28,7 +29,7 @@ class AdminUserSeeder extends Seeder
         }
 
         if (! is_string($password) || $password === '') {
-            if (! app()->environment('local')) {
+            if (! $allowsDefaults) {
                 throw new RuntimeException('Set ADMIN_PASSWORD before seeding the platform admin.');
             }
 

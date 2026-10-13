@@ -5,12 +5,10 @@ namespace App\Models;
 use App\Enums\TreatmentSessionStatus;
 use App\Models\Concerns\Auditable;
 use App\Models\Concerns\BelongsToTenant;
-use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Carbon;
 
 /**
@@ -22,14 +20,12 @@ use Illuminate\Support\Carbon;
  * @property Carbon $session_date
  * @property TreatmentSessionStatus $status
  * @property string|null $notes
- * @property bool $stock_applied
+ * @property list<string>|null $tooth_numbers
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  * @property-read PatientTreatment $treatment
  * @property-read Appointment|null $appointment
  * @property-read User|null $dentist
- * @property-read Collection<int, TreatmentSessionStep> $steps
- * @property-read Collection<int, PatientTreatmentComponent> $components
  */
 class TreatmentSession extends Model
 {
@@ -42,7 +38,7 @@ class TreatmentSession extends Model
         'session_date',
         'status',
         'notes',
-        'stock_applied',
+        'tooth_numbers',
     ];
 
     protected function casts(): array
@@ -50,7 +46,7 @@ class TreatmentSession extends Model
         return [
             'session_date' => 'datetime',
             'status' => TreatmentSessionStatus::class,
-            'stock_applied' => 'boolean',
+            'tooth_numbers' => 'array',
         ];
     }
 
@@ -76,21 +72,5 @@ class TreatmentSession extends Model
     public function dentist(): BelongsTo
     {
         return $this->belongsTo(User::class, 'dentist_id');
-    }
-
-    /**
-     * @return HasMany<TreatmentSessionStep, $this>
-     */
-    public function steps(): HasMany
-    {
-        return $this->hasMany(TreatmentSessionStep::class)->orderBy('created_at');
-    }
-
-    /**
-     * @return HasMany<PatientTreatmentComponent, $this>
-     */
-    public function components(): HasMany
-    {
-        return $this->hasMany(PatientTreatmentComponent::class);
     }
 }

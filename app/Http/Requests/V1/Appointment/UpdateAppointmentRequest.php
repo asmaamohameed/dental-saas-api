@@ -4,6 +4,7 @@ namespace App\Http\Requests\V1\Appointment;
 
 use App\Enums\AppointmentType;
 use App\Enums\UserRole;
+use App\Http\Requests\V1\Appointment\Concerns\ValidatesAppointmentService;
 use App\Http\Requests\V1\Appointment\Concerns\ValidatesAppointmentTreatmentLinks;
 use App\Models\User;
 use App\Rules\AppointmentDoctorAvailable;
@@ -15,11 +16,16 @@ use Illuminate\Validation\Rule;
 
 class UpdateAppointmentRequest extends FormRequest
 {
-    use ValidatesAppointmentTreatmentLinks;
+    use ValidatesAppointmentService, ValidatesAppointmentTreatmentLinks;
 
     public function authorize(): bool
     {
         return true;
+    }
+
+    protected function prepareForValidation(): void
+    {
+        $this->mergeServiceDurationDefault();
     }
 
     public function rules(): array
@@ -45,9 +51,10 @@ class UpdateAppointmentRequest extends FormRequest
                 }),
             ],
             'scheduled_at' => ['sometimes', 'date'],
-            'duration_minutes' => ['sometimes', 'integer', 'min:1'],
+            'duration_minutes' => ['sometimes', 'nullable', 'integer', 'min:1'],
             'appointment_type' => ['sometimes', Rule::enum(AppointmentType::class)],
             'notes' => ['sometimes', 'nullable', 'string'],
+            ...$this->serviceFieldRules(partial: true),
         ];
     }
 

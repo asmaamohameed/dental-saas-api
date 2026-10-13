@@ -3,6 +3,7 @@
 namespace App\Http\Resources\V1;
 
 use App\Models\PatientTreatment;
+use App\Models\PatientTreatmentTooth;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -16,8 +17,10 @@ class PatientTreatmentResource extends JsonResource
             'patient_id' => $this->patient_id,
             'treatment_plan_id' => $this->treatment_plan_id,
             'treatment_template_id' => $this->treatment_template_id,
-            'treatment_template_version' => (int) $this->treatment_template_version,
+            'scope' => $this->scope,
+            'scope_detail' => $this->scope_detail,
             'agreed_price' => (float) $this->agreed_price,
+            'total_price' => $this->total_price,
             'clinical_status' => $this->clinical_status,
             'status' => $this->clinical_status,
             'cancellation_reason' => $this->cancellation_reason,
@@ -36,6 +39,12 @@ class PatientTreatmentResource extends JsonResource
             'cancelled_at' => $this->cancelled_at?->toISOString(),
             'created_by' => $this->created_by,
             'tooth_numbers' => $this->whenLoaded('teeth', fn () => $this->teeth->pluck('tooth_number')->values()->all()),
+            'teeth' => $this->whenLoaded('teeth', fn () => $this->teeth->map(fn (PatientTreatmentTooth $tooth) => [
+                'tooth_number' => (string) $tooth->tooth_number,
+                'status' => $tooth->status,
+                'price' => (float) $tooth->price,
+                'completed_at' => $tooth->completed_at?->toISOString(),
+            ])->values()->all()),
             'invoice_id' => $this->whenLoaded('invoiceItems', fn () => $this->invoiceItems->sortByDesc('created_at')->first()?->invoice_id),
             'patient' => $this->whenLoaded('patient', fn () => [
                 'id' => $this->patient->id,

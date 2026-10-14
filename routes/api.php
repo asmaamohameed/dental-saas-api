@@ -118,7 +118,6 @@ Route::prefix('v1')->group(function () {
         Route::get('dashboard/patients', [DashboardController::class, 'patients']);
         Route::get('dashboard/cashflow', [DashboardController::class, 'cashflow']);
         Route::get('dashboard/expense-breakdown', [DashboardController::class, 'expenseBreakdown']);
-        Route::get('dashboard/component-stock', [DashboardController::class, 'componentStock']);
         Route::get('dashboard/invoice-status', [DashboardController::class, 'invoiceStatus']);
 
         // Expenses

@@ -698,52 +698,6 @@
                     }
                 },
                 {
-                    "name": "GET /api/v1/patients/search",
-                    "request": {
-                        "method": "GET",
-                        "header": [
-                            {
-                                "key": "Accept",
-                                "value": "application/json"
-                            }
-                        ],
-                        "url": {
-                            "raw": "{{base_url}}/api/v1/patients/search",
-                            "host": [
-                                "{{base_url}}"
-                            ],
-                            "path": [
-                                "api",
-                                "v1",
-                                "patients",
-                                "search"
-                            ],
-                            "query": [
-                                {
-                                    "key": "search",
-                                    "value": "John",
-                                    "disabled": true
-                                },
-                                {
-                                    "key": "per_page",
-                                    "value": "15",
-                                    "disabled": true
-                                }
-                            ]
-                        },
-                        "auth": {
-                            "type": "bearer",
-                            "bearer": [
-                                {
-                                    "key": "token",
-                                    "value": "{{token}}",
-                                    "type": "string"
-                                }
-                            ]
-                        }
-                    }
-                },
-                {
                     "name": "POST /api/v1/patients",
                     "request": {
                         "method": "POST",

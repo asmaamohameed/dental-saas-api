@@ -18,7 +18,7 @@ use Illuminate\Support\Facades\DB;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
 
-class ServiceCatalogAndAppointmentsTest extends TestCase
+class TreatmentTemplateCatalogAndAppointmentsTest extends TestCase
 {
     use RefreshDatabase;
 

@@ -21,7 +21,7 @@ use App\Models\Tenant;
 use App\Models\TreatmentSession;
 use App\Models\TreatmentTemplate;
 use App\Models\User;
-use App\Services\DefaultTreatmentServicesProvisioner;
+use App\Services\DefaultTreatmentTemplatesProvisioner;
 use App\Services\InventoryTransactionService;
 use App\Services\InvoiceService;
 use App\Services\PatientTreatmentService;
@@ -151,7 +151,7 @@ class DemoClinicSeeder extends Seeder
      */
     private function seedTreatmentTemplates(): array
     {
-        $provisioned = app(DefaultTreatmentServicesProvisioner::class)->provision();
+        $provisioned = app(DefaultTreatmentTemplatesProvisioner::class)->provision();
 
         $demoExtras = [
             'quadrant_ortho' => [

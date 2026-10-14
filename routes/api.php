@@ -107,8 +107,8 @@ Route::prefix('v1')->group(function () {
 
         // Inventory
         Route::apiResource('inventory-items', InventoryItemController::class)->parameters(['inventory-items' => 'inventoryItem']);
-        Route::get('inventory-items/{item}/transactions', [InventoryTransactionController::class, 'index']);
-        Route::post('inventory-items/{item}/transactions', [InventoryTransactionController::class, 'store']);
+        Route::get('inventory-items/{inventoryItem}/transactions', [InventoryTransactionController::class, 'index']);
+        Route::post('inventory-items/{inventoryItem}/transactions', [InventoryTransactionController::class, 'store']);
         Route::patch('inventory-items/{inventoryItem}/restore', [InventoryItemController::class, 'restore']);
         Route::patch('inventory-items/{inventoryItem}', [InventoryItemController::class, 'update']);
 

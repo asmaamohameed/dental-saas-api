@@ -11,7 +11,7 @@ class StoreInventoryTransactionRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return $this->user()->can('create', [InventoryTransaction::class, $this->route('item')]);
+        return $this->user()->can('create', [InventoryTransaction::class, $this->route('inventoryItem')]);
     }
 
     public function rules(): array

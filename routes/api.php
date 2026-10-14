@@ -52,7 +52,6 @@ Route::prefix('v1')->group(function () {
 
         // Patients API Resource
         Route::apiResource('patients', PatientController::class);
-        Route::get('/patients/search', [PatientController::class, 'search']);
 
         // Tooth Records
         Route::get('patients/{patient}/tooth-records', [ToothRecordController::class, 'index']);

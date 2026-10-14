@@ -10,7 +10,6 @@ use App\Http\Controllers\Api\V1\Auth\ProfileAvatarController;
 use App\Http\Controllers\Api\V1\Auth\ProfileController;
 use App\Http\Controllers\Api\V1\Auth\ResetPasswordController;
 use App\Http\Controllers\Api\V1\ClinicBrandingController;
-use App\Http\Controllers\Api\V1\ComponentController;
 use App\Http\Controllers\Api\V1\DashboardController;
 use App\Http\Controllers\Api\V1\ExpenseController;
 use App\Http\Controllers\Api\V1\InventoryItemController;
@@ -72,10 +71,6 @@ Route::prefix('v1')->group(function () {
         // Read-only endpoints (owner, receptionist, doctor)
         Route::get('doctors/availability', [UserController::class, 'doctorAvailability']);
         Route::get('doctors', [UserController::class, 'doctors']);
-        Route::get('components/low-stock', [ComponentController::class, 'lowStock']);
-        Route::post('components/{component}/stock', [ComponentController::class, 'adjustStock']);
-        Route::get('components/{component}/movements', [ComponentController::class, 'movements']);
-        Route::apiResource('components', ComponentController::class)->only(['index', 'show']);
         Route::apiResource('treatment-templates', TreatmentTemplateController::class)
             ->parameters(['treatment-templates' => 'treatmentTemplate'])
             ->only(['index', 'show']);
@@ -123,13 +118,6 @@ Route::prefix('v1')->group(function () {
         // Expenses
         Route::get('expenses', [ExpenseController::class, 'index']);
 
-        // Catalog edits stay with the owner and receptionist.
-        Route::middleware(EnsureUserRole::using(UserRole::OWNER, UserRole::RECEPTIONIST))->group(function () {
-            Route::post('components', [ComponentController::class, 'store']);
-            Route::put('components/{component}', [ComponentController::class, 'update']);
-            Route::patch('components/{component}/toggle-active', [ComponentController::class, 'toggleActive']);
-        });
-
         // Treatments, invoices, and expense bills: owner, doctor, assistant, receptionist.
         Route::middleware(EnsureUserRole::using(UserRole::OWNER, UserRole::DOCTOR, UserRole::ASSISTANT, UserRole::RECEPTIONIST))->group(function () {
             Route::post('treatment-templates', [TreatmentTemplateController::class, 'store']);
@@ -161,7 +149,6 @@ Route::prefix('v1')->group(function () {
             Route::post('staff', [UserController::class, 'store']);
             Route::put('staff/{user}', [UserController::class, 'update']);
             Route::patch('staff/{user}/toggle-active', [UserController::class, 'toggleActive']);
-            Route::delete('components/{component}', [ComponentController::class, 'destroy']);
             Route::delete('treatment-templates/{treatmentTemplate}', [TreatmentTemplateController::class, 'destroy']);
             Route::delete('treatment-plans/{treatmentPlan}', [TreatmentPlanController::class, 'destroy']);
             Route::delete('invoices/{invoice}', [InvoiceController::class, 'destroy']);

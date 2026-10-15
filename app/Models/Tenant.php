@@ -19,6 +19,7 @@ use Illuminate\Support\Facades\Storage;
  * @property TenantStatus $status
  * @property string|null $logo_path
  * @property ClinicTheme|null $theme
+ * @property array<string, array{is_open: bool, open: string, close: string}>|null $working_hours
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  * @property int|null $members_count
@@ -40,6 +41,7 @@ class Tenant extends Model
         'status',
         'logo_path',
         'theme',
+        'working_hours',
     ];
 
     protected function casts(): array
@@ -47,6 +49,7 @@ class Tenant extends Model
         return [
             'status' => TenantStatus::class,
             'theme' => ClinicTheme::class,
+            'working_hours' => 'array',
         ];
     }
 

@@ -10,6 +10,7 @@ use App\Http\Controllers\Api\V1\Auth\ProfileAvatarController;
 use App\Http\Controllers\Api\V1\Auth\ProfileController;
 use App\Http\Controllers\Api\V1\Auth\ResetPasswordController;
 use App\Http\Controllers\Api\V1\ClinicBrandingController;
+use App\Http\Controllers\Api\V1\ClinicWorkingHoursController;
 use App\Http\Controllers\Api\V1\DashboardController;
 use App\Http\Controllers\Api\V1\ExpenseController;
 use App\Http\Controllers\Api\V1\InventoryItemController;
@@ -39,6 +40,8 @@ Route::prefix('v1')->group(function () {
 
         // Audit Logs (Owner only)
         Route::get('audit-logs', [AuditLogController::class, 'index']);
+
+        Route::get('clinic/working-hours', [ClinicWorkingHoursController::class, 'show']);
 
         // Profile & Auth
         Route::prefix('auth')->group(function () {
@@ -145,6 +148,7 @@ Route::prefix('v1')->group(function () {
         Route::middleware(EnsureUserRole::using(UserRole::OWNER))->group(function () {
             Route::post('clinic/logo', [ClinicBrandingController::class, 'updateLogo']);
             Route::patch('clinic/theme', [ClinicBrandingController::class, 'updateTheme']);
+            Route::put('clinic/working-hours', [ClinicWorkingHoursController::class, 'update']);
             Route::get('staff', [UserController::class, 'index']);
             Route::post('staff', [UserController::class, 'store']);
             Route::put('staff/{user}', [UserController::class, 'update']);

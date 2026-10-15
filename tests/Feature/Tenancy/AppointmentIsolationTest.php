@@ -50,7 +50,7 @@ class AppointmentIsolationTest extends TestCase
         $this->actingAsTenantUser();
 
         $this->putJson("/api/v1/appointments/{$appointmentB->id}", [
-            'scheduled_at' => now()->addDay()->toDateTimeString(),
+            'scheduled_at' => $this->scheduledAtWithinClinicHours(),
             'duration_minutes' => 30,
         ])->assertNotFound();
     }

@@ -79,7 +79,7 @@ class TreatmentTemplateCatalogAndAppointmentsTest extends TestCase
         $this->postJson('/api/v1/appointments', [
             'patient_id' => $patient->id,
             'doctor_id' => $doctor->id,
-            'scheduled_at' => now()->addDay()->toDateTimeString(),
+            'scheduled_at' => $this->scheduledAtWithinClinicHours(),
             'service_id' => $service->id,
         ])->assertCreated()
             ->assertJsonPath('data.fee', '250.00');
@@ -119,7 +119,7 @@ class TreatmentTemplateCatalogAndAppointmentsTest extends TestCase
         $this->postJson('/api/v1/appointments', [
             'patient_id' => $patient->id,
             'doctor_id' => $doctor->id,
-            'scheduled_at' => now()->addDay()->toDateTimeString(),
+            'scheduled_at' => $this->scheduledAtWithinClinicHours(),
             'duration_minutes' => 30,
             'service_id' => $inactive->id,
         ])->assertUnprocessable()
@@ -133,7 +133,7 @@ class TreatmentTemplateCatalogAndAppointmentsTest extends TestCase
         $this->postJson('/api/v1/appointments', [
             'patient_id' => $patient->id,
             'doctor_id' => $doctor->id,
-            'scheduled_at' => now()->addDay()->toDateTimeString(),
+            'scheduled_at' => $this->scheduledAtWithinClinicHours(),
             'duration_minutes' => 30,
             'service_id' => $foreign->id,
         ])->assertUnprocessable()

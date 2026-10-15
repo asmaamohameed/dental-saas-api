@@ -8,6 +8,7 @@ use App\Models\User;
 use App\Support\Tenancy\CurrentTenant;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Foundation\Testing\TestCase as BaseTestCase;
+use Illuminate\Support\Carbon;
 use Laravel\Sanctum\Sanctum;
 
 abstract class TestCase extends BaseTestCase
@@ -29,5 +30,20 @@ abstract class TestCase extends BaseTestCase
         Sanctum::actingAs($user);
 
         return $user;
+    }
+
+    /**
+     * Build an ISO-8601 UTC instant for a future clinic-local wall time (within default hours).
+     */
+    protected function scheduledAtWithinClinicHours(int $daysFromNow = 1, string $localTime = '10:00'): string
+    {
+        $tz = (string) config('clinic.timezone', 'Africa/Cairo');
+        [$hours, $minutes] = array_map(intval(...), explode(':', $localTime));
+
+        return Carbon::now($tz)
+            ->addDays($daysFromNow)
+            ->setTime($hours, $minutes, 0)
+            ->utc()
+            ->toIso8601String();
     }
 }

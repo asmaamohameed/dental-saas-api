@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\V1\Clinic;
 
+use App\Services\ClinicWorkingHoursService;
 use App\Support\WorkingDay;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Validator;
@@ -74,6 +75,6 @@ class UpdateClinicWorkingHoursRequest extends FormRequest
             ];
         }
 
-        return app(\App\Services\ClinicWorkingHoursService::class)->normalizeSchedule($payload);
+        return app(ClinicWorkingHoursService::class)->normalizeSchedule($payload);
     }
 }

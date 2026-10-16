@@ -108,7 +108,6 @@ Route::prefix('v1')->group(function () {
         Route::get('inventory-items/{inventoryItem}/transactions', [InventoryTransactionController::class, 'index']);
         Route::post('inventory-items/{inventoryItem}/transactions', [InventoryTransactionController::class, 'store']);
         Route::patch('inventory-items/{inventoryItem}/restore', [InventoryItemController::class, 'restore']);
-        Route::patch('inventory-items/{inventoryItem}', [InventoryItemController::class, 'update']);
 
         // Dashboard Analytics
         Route::get('dashboard/financial-analytics', [DashboardController::class, 'financialAnalytics']);

@@ -58,6 +58,7 @@ class InventoryItemControllerTest extends TestCase
         $this->postJson('/api/v1/inventory-items', [
             'name' => 'Gloves',
             'unit' => 'box',
+            'cost_price' => 5,
         ])->assertStatus(403);
     }
 
@@ -68,6 +69,7 @@ class InventoryItemControllerTest extends TestCase
         $this->postJson('/api/v1/inventory-items', [
             'name' => 'Gloves',
             'unit' => 'box',
+            'cost_price' => 12.5,
             'minimum_threshold' => 5,
         ])->assertCreated()->assertJsonPath('data.name', 'Gloves');
     }
@@ -80,6 +82,7 @@ class InventoryItemControllerTest extends TestCase
         $this->postJson('/api/v1/inventory-items', [
             'name' => 'Gloves',
             'unit' => 'box',
+            'cost_price' => 1,
         ])->assertStatus(422)->assertJsonValidationErrors(['name']);
     }
 

@@ -17,6 +17,9 @@ class InventoryItemResource extends JsonResource
             'id' => $this->id,
             'name' => $this->name,
             'unit' => $this->unit,
+            'cost_price' => (float) $this->cost_price,
+            'expiry_date' => $this->expiry_date?->format('Y-m-d'),
+            'supplier' => $this->supplier,
             'current_quantity' => (float) $this->current_quantity,
             'minimum_threshold' => $this->minimum_threshold !== null ? (float) $this->minimum_threshold : null,
             'is_low_stock' => $this->minimum_threshold !== null

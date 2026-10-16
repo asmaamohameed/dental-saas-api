@@ -4,7 +4,6 @@ namespace Tests\Feature\Clinic;
 
 use App\Enums\AuditAction;
 use App\Enums\UserRole;
-use App\Models\AuditLog;
 use App\Models\Tenant;
 use App\Models\User;
 use App\Support\Tenancy\CurrentTenant;

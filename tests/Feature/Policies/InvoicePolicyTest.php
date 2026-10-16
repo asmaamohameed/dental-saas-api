@@ -94,5 +94,4 @@ class InvoicePolicyTest extends TestCase
         $this->putJson("/api/v1/invoices/{$invoice->id}", $this->validItemsPayload())
             ->assertOk();
     }
-
 }

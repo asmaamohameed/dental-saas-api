@@ -16,6 +16,9 @@ use Illuminate\Support\Carbon;
  * @property string $tenant_id
  * @property string $name
  * @property string $unit
+ * @property string $cost_price
+ * @property Carbon|null $expiry_date
+ * @property string|null $supplier
  * @property string $current_quantity
  * @property string|null $minimum_threshold
  * @property bool $is_active
@@ -30,6 +33,9 @@ class InventoryItem extends Model
     protected $fillable = [
         'name',
         'unit',
+        'cost_price',
+        'expiry_date',
+        'supplier',
         'minimum_threshold',
         'is_active',
     ];
@@ -38,6 +44,8 @@ class InventoryItem extends Model
     {
         return [
             'current_quantity' => 'decimal:2',
+            'cost_price' => 'decimal:2',
+            'expiry_date' => 'date',
             'minimum_threshold' => 'decimal:2',
             'is_active' => 'boolean',
         ];

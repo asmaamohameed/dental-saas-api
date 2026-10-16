@@ -303,16 +303,20 @@ Filters: `status`, `patient_id`, `date_from`, `date_to`.
 #### Inventory
 | Method | Path | Auth | Roles |
 |--------|------|------|-------|
-| GET | `/inventory-items` | Yes | doctor, receptionist, owner |
+| GET | `/inventory-items` | Yes | doctor, assistant, receptionist, owner |
 | POST | `/inventory-items` | Yes | owner only |
-| GET | `/inventory-items/{inventoryItem}` | Yes | doctor, receptionist, owner |
+| GET | `/inventory-items/{inventoryItem}` | Yes | doctor, assistant, receptionist, owner |
 | PUT/PATCH | `/inventory-items/{inventoryItem}` | Yes | owner only |
 | DELETE | `/inventory-items/{inventoryItem}` | Yes | owner only (deactivates) |
 | PATCH | `/inventory-items/{inventoryItem}/restore` | Yes | owner only |
-| GET | `/inventory-items/{item}/transactions` | Yes | doctor, receptionist, owner |
-| POST | `/inventory-items/{item}/transactions` | Yes | doctor, receptionist, owner |
+| GET | `/inventory-items/{item}/transactions` | Yes | doctor, assistant, receptionist, owner |
+| POST | `/inventory-items/{item}/transactions` | Yes | owner, doctor, receptionist (assistant: view only) |
 
-Inventory index filtering: `low_stock` (boolean).
+Inventory index query params:
+- `low_stock` (boolean): active items at or below `minimum_threshold` only.
+- `status` (optional): `active` (default), `inactive`, or `all`. Listing inactive or all items is **owner only**; other roles receive 403. Invalid values return 422. When `low_stock=1`, results are always active low-stock items regardless of `status`.
+
+Inventory item fields (create/update): `name`, `unit`, `cost_price` (required on create; cost per one unit), optional `expiry_date` (`Y-m-d`), optional `supplier`, optional `minimum_threshold`. Stock level changes only via transactions.
 
 ### Admin Routes (`/api/admin`)
 

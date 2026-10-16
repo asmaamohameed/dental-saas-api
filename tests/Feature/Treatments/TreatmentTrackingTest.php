@@ -9,6 +9,7 @@ use App\Enums\ConsentStatus;
 use App\Enums\FinancialStatus;
 use App\Enums\InvoiceStatus;
 use App\Enums\PatientTreatmentStatus;
+use App\Enums\RefundReasonCode;
 use App\Enums\TreatmentScope;
 use App\Enums\TreatmentSessionStatus;
 use App\Enums\TreatmentToothStatus;
@@ -674,6 +675,58 @@ class TreatmentTrackingTest extends TestCase
             ->assertOk()
             ->assertJsonPath('data.teeth.16.state', 'in_progress')
             ->assertJsonPath('data.treatment_status_by_tooth.16', 'in_progress');
+    }
+
+    public function test_refund_does_not_change_treatment_status_price_or_notes(): void
+    {
+        $treatment = $this->createTreatment(['agreed_price' => 100, 'tooth_numbers' => ['16']]);
+        $invoiceId = $treatment->invoiceItems()->first()->invoice_id;
+        $notes = $treatment->notes;
+        $clinical = $treatment->clinical_status;
+
+        $this->postJson("/api/v1/invoices/{$invoiceId}/payments", [
+            'amount' => 100,
+            'method' => 'cash',
+        ])->assertCreated();
+
+        $treatment->refresh();
+        $this->assertSame(FinancialStatus::PAID, $treatment->financial_status);
+
+        $this->postJson("/api/v1/invoices/{$invoiceId}/refunds", [
+            'reason_code' => RefundReasonCode::DUPLICATE_PAYMENT->value,
+        ])->assertCreated();
+
+        $treatment->refresh();
+        $this->assertSame($clinical, $treatment->clinical_status);
+        $this->assertSame(FinancialStatus::PAID, $treatment->financial_status);
+        $this->assertEquals(100, (float) $treatment->agreed_price);
+        $this->assertSame($notes, $treatment->notes);
+        $this->assertSame(InvoiceStatus::REFUNDED, Invoice::query()->find($invoiceId)->status);
+    }
+
+    public function test_treatment_price_change_does_not_update_a_refunded_invoice(): void
+    {
+        $treatment = $this->createTreatment(['agreed_price' => 100, 'tooth_numbers' => ['16']]);
+        $invoiceId = $treatment->invoiceItems()->first()->invoice_id;
+
+        $this->postJson("/api/v1/invoices/{$invoiceId}/payments", [
+            'amount' => 100,
+            'method' => 'cash',
+        ])->assertCreated();
+
+        $this->postJson("/api/v1/invoices/{$invoiceId}/refunds", [
+            'reason_code' => RefundReasonCode::DUPLICATE_PAYMENT->value,
+        ])->assertCreated();
+
+        $this->patchJson("/api/v1/patient-treatments/{$treatment->id}/teeth", [
+            'teeth' => [['tooth_number' => '16', 'price' => 200]],
+        ])->assertOk();
+
+        $invoice = Invoice::query()->findOrFail($invoiceId);
+        $this->assertSame(InvoiceStatus::REFUNDED, $invoice->status);
+        $this->assertSame('100.00', (string) $invoice->fresh()->total_amount);
+        $this->assertSame('100.00', (string) $invoice->items()->first()->price);
+        $this->assertEquals(200, (float) $treatment->fresh()->teeth()->first()->price);
     }
 
     public function test_payment_updates_financial_status_without_changing_clinical_status(): void

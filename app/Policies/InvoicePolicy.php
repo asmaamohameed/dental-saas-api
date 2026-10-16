@@ -21,12 +21,16 @@ class InvoicePolicy
     public function updateItems(User $user, Invoice $invoice): bool
     {
 
-        if (! $user->hasAnyClinicRole([
+        if (! $user->clinicCan('invoice:edit', $user->hasAnyClinicRole([
             UserRole::OWNER,
             UserRole::DOCTOR,
             UserRole::ASSISTANT,
             UserRole::RECEPTIONIST,
-        ])) {
+        ]))) {
+            return false;
+        }
+
+        if (in_array($invoice->status, [InvoiceStatus::PAID, InvoiceStatus::REFUNDED, InvoiceStatus::CANCELLED], true)) {
             return false;
         }
 

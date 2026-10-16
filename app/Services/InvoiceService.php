@@ -9,6 +9,8 @@ use App\Models\Invoice;
 use App\Models\InvoiceItem;
 use App\Models\PatientTreatment;
 use App\Models\Payment;
+use App\Models\Refund;
+use App\Support\Billing\InvoiceFinancials;
 use App\Support\Tenancy\CurrentTenant;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\DB;
@@ -24,6 +26,7 @@ class InvoiceService
         'items.patientTreatment.teeth',
         'items.patientTreatment.sessions.dentist',
         'payments',
+        'refund.refundedBy',
     ];
 
     public function list(array $filters = [], int $perPage = 15): LengthAwarePaginator
@@ -162,6 +165,10 @@ class InvoiceService
                     ]);
                 }
 
+                if (InvoiceFinancials::isLocked($invoice)) {
+                    continue;
+                }
+
                 if (! in_array($invoice->status, [InvoiceStatus::UNPAID, InvoiceStatus::PARTIAL], true)) {
                     continue;
                 }
@@ -177,8 +184,7 @@ class InvoiceService
                     fn (InvoiceItem $row) => (float) $row->price * (int) $row->quantity
                 );
 
-                $totalPayments = (float) $invoice->payments()->sum('amount')
-                    + (float) $invoice->payments()->sum('deduct_amount');
+                $totalPayments = InvoiceFinancials::appliedCredits($invoice);
 
                 if (bccomp((string) $newTotal, (string) $totalPayments, 2) === -1) {
                     throw ValidationException::withMessages([
@@ -236,6 +242,8 @@ class InvoiceService
         return DB::transaction(function () use ($invoice, $data) {
             $lockedInvoice = Invoice::lockForUpdate()->find($invoice->id);
 
+            InvoiceFinancials::assertMutable($lockedInvoice);
+
             if ($lockedInvoice->status === InvoiceStatus::PAID) {
                 throw ValidationException::withMessages([
                     'invoice' => 'Fully paid invoices cannot be updated.',
@@ -290,8 +298,7 @@ class InvoiceService
                     ];
                 }
 
-                $totalPayments = (float) $lockedInvoice->payments()->sum('amount')
-                    + (float) $lockedInvoice->payments()->sum('deduct_amount');
+                $totalPayments = InvoiceFinancials::appliedCredits($lockedInvoice);
 
                 if (bccomp((string) $totalAmount, (string) $totalPayments, 2) === -1) {
                     throw ValidationException::withMessages([
@@ -320,6 +327,7 @@ class InvoiceService
     {
         return DB::transaction(function () use ($invoice) {
             $lockedInvoice = Invoice::lockForUpdate()->find($invoice->id);
+            InvoiceFinancials::assertMutable($lockedInvoice);
             $treatmentIds = $lockedInvoice->items()->pluck('patient_treatment_id')->filter()->unique();
 
             if ($lockedInvoice->payments()->exists()) {
@@ -388,14 +396,12 @@ class InvoiceService
     public function recalculateStatus(Invoice $invoice): void
     {
         $invoice->load('payments');
-        $applied = $invoice->appliedCredits();
-        $total = (float) $invoice->total_amount;
 
-        $status = match (true) {
-            $applied >= $total && $total > 0 => InvoiceStatus::PAID,
-            $applied > 0 => InvoiceStatus::PARTIAL,
-            default => InvoiceStatus::UNPAID,
-        };
+        if (InvoiceFinancials::isClosed($invoice)) {
+            return;
+        }
+
+        $status = InvoiceFinancials::deriveOpenStatus($invoice);
 
         if ($invoice->status !== $status) {
             $invoice->update(['status' => $status]);
@@ -441,9 +447,7 @@ class InvoiceService
             }
 
             $invoiceTotal = (float) $invoice->total_amount;
-            $invoicePaid = (float) $invoice->payments->sum(function (Payment $payment) {
-                return (float) $payment->amount + (float) ($payment->deduct_amount ?? 0);
-            });
+            $invoicePaid = InvoiceFinancials::appliedCredits($invoice);
             $treatmentAmount = (float) $invoiceItems->sum(fn ($item) => (float) $item->price * (int) $item->quantity);
 
             if ($invoiceTotal <= 0) {
@@ -466,18 +470,21 @@ class InvoiceService
 
     public function getPatientSummary(string $patientId): array
     {
-        $invoices = Invoice::where('patient_id', $patientId)->get();
+        $invoices = Invoice::where('patient_id', $patientId)->with(['payments', 'refund'])->get();
+        $invoiceIds = $invoices->pluck('id');
 
         $totalBilled = $invoices->sum('total_amount');
-        $totalPaid = Payment::whereIn('invoice_id', $invoices->pluck('id'))->sum('amount');
-        $totalDeducted = Payment::whereIn('invoice_id', $invoices->pluck('id'))->sum('deduct_amount');
+        $totalPaid = Payment::whereIn('invoice_id', $invoiceIds)->sum('amount');
+        $totalRefunded = Refund::whereIn('invoice_id', $invoiceIds)->sum('amount');
+        $totalRemaining = $invoices->sum(fn (Invoice $invoice) => InvoiceFinancials::remainingAmount($invoice));
 
         return [
             'patient_id' => $patientId,
             'total_invoices_count' => $invoices->count(),
             'total_billed' => (float) $totalBilled,
             'total_paid' => (float) $totalPaid,
-            'total_remaining' => (float) max(0, $totalBilled - $totalPaid - $totalDeducted),
+            'total_refunded' => (float) $totalRefunded,
+            'total_remaining' => (float) max(0, $totalRemaining),
         ];
     }
 

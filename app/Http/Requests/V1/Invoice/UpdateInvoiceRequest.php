@@ -41,6 +41,10 @@ class UpdateInvoiceRequest extends FormRequest
                 );
             }
 
+            if ($invoice && $invoice->status === InvoiceStatus::REFUNDED) {
+                $validator->errors()->add('invoice', 'A refunded invoice cannot be modified.');
+            }
+
             if ($invoice && $invoice->status === InvoiceStatus::PAID) {
                 $validator->errors()->add('invoice', 'Fully paid invoices cannot be updated.');
             }

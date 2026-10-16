@@ -7,6 +7,7 @@ use App\Models\Concerns\BelongsToTenant;
 use App\Models\Concerns\HasClinicRoles;
 use App\Notifications\ResetPasswordNotification;
 use App\Support\Roles\ClinicMembershipSync;
+use App\Support\Roles\ClinicPermissionGate;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
@@ -144,5 +145,17 @@ class User extends Authenticatable
     public function canManageFinance(): bool
     {
         return $this->hasAnyClinicRole([UserRole::DOCTOR, UserRole::RECEPTIONIST]);
+    }
+
+    /**
+     * Role check first. A saved clinic override replaces that answer for this permission.
+     */
+    public function clinicCan(string $permission, bool $roleAllows): bool
+    {
+        if ($this->isOwner()) {
+            return true;
+        }
+
+        return app(ClinicPermissionGate::class)->override($this, $permission) ?? $roleAllows;
     }
 }

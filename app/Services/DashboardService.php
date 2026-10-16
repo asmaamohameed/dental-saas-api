@@ -5,12 +5,15 @@ namespace App\Services;
 use App\Enums\AppointmentStatus;
 use App\Enums\ExpenseCategory;
 use App\Enums\InvoiceStatus;
+use App\Enums\RefundReasonCode;
 use App\Models\Appointment;
 use App\Models\Component;
 use App\Models\ComponentStockMovement;
 use App\Models\Expense;
 use App\Models\Invoice;
 use App\Models\Payment;
+use App\Models\Refund;
+use App\Support\Billing\InvoiceFinancials;
 use Illuminate\Support\Carbon;
 
 class DashboardService
@@ -78,18 +81,22 @@ class DashboardService
         // 1. KPIs
         $totalInvoicedMtd = (float) Invoice::whereBetween('created_at', [$startMtd, $endMtd])->sum('total_amount');
         $totalCollectedMtd = (float) Payment::whereBetween('created_at', [$startMtd, $endMtd])->sum('amount');
+        $totalRefundedMtd = (float) Refund::whereBetween('refunded_at', [$startMtd, $endMtd])->sum('amount');
+        $refundsCountMtd = Refund::whereBetween('refunded_at', [$startMtd, $endMtd])->count();
+        $netCollectedMtd = $totalCollectedMtd - $totalRefundedMtd;
         $totalExpensesMtd = (float) Expense::whereBetween('expense_date', [$startMtd->format('Y-m-d'), $endMtd->format('Y-m-d')])->sum('amount');
-        $netProfitMtd = $totalCollectedMtd - $totalExpensesMtd;
-        $collectionRateMtd = $totalInvoicedMtd > 0 ? round(($totalCollectedMtd / $totalInvoicedMtd) * 100, 1) : 0.0;
+        $netProfitMtd = $netCollectedMtd - $totalExpensesMtd;
+        $collectionRateMtd = $totalInvoicedMtd > 0 ? round(($netCollectedMtd / $totalInvoicedMtd) * 100, 1) : 0.0;
 
-        $totalAllInvoiced = (float) Invoice::sum('total_amount');
-        $totalAllPayments = (float) Payment::sum('amount');
-        $outstandingAllTime = max(0.0, $totalAllInvoiced - $totalAllPayments);
+        $outstandingAllTime = (float) Invoice::query()
+            ->whereIn('status', [InvoiceStatus::UNPAID->value, InvoiceStatus::PARTIAL->value])
+            ->get()
+            ->sum(fn (Invoice $invoice) => InvoiceFinancials::remainingAmount($invoice));
 
         $overdueAmount = (float) Invoice::whereIn('status', [InvoiceStatus::UNPAID->value, InvoiceStatus::PARTIAL->value])
             ->where('created_at', '<', $now->copy()->startOfDay())
             ->get()
-            ->sum('remaining_amount');
+            ->sum(fn (Invoice $invoice) => InvoiceFinancials::remainingAmount($invoice));
 
         // 2. Invoices summary MTD
         $invoicesMtd = Invoice::whereBetween('created_at', [$startMtd, $endMtd])->get();
@@ -98,6 +105,7 @@ class DashboardService
             'paid_invoices' => $invoicesMtd->filter(fn ($i) => $i->status->value === InvoiceStatus::PAID->value)->count(),
             'partially_paid_invoices' => $invoicesMtd->filter(fn ($i) => $i->status->value === InvoiceStatus::PARTIAL->value)->count(),
             'unpaid_invoices' => $invoicesMtd->filter(fn ($i) => $i->status->value === InvoiceStatus::UNPAID->value)->count(),
+            'refunded_invoices' => $invoicesMtd->filter(fn ($i) => $i->status->value === InvoiceStatus::REFUNDED->value)->count(),
         ];
 
         // 3. Expenses breakdown MTD
@@ -127,7 +135,7 @@ class DashboardService
             $mEnd = $now->copy()->subMonths($i)->endOfMonth();
 
             $categories[] = $mStart->format('M');
-            $incomeData[] = (float) Payment::whereBetween('created_at', [$mStart, $mEnd])->sum('amount');
+            $incomeData[] = $this->netCollectedBetween($mStart, $mEnd);
             $expenseData[] = (float) Expense::whereBetween('expense_date', [$mStart->format('Y-m-d'), $mEnd->format('Y-m-d')])->sum('amount');
         }
 
@@ -140,12 +148,16 @@ class DashboardService
             'kpis' => [
                 'total_invoiced_mtd' => $totalInvoicedMtd,
                 'total_collected_mtd' => $totalCollectedMtd,
+                'total_refunded_mtd' => $totalRefundedMtd,
+                'refunds_count_mtd' => $refundsCountMtd,
+                'net_collected_mtd' => $netCollectedMtd,
                 'total_expenses_mtd' => $totalExpensesMtd,
                 'net_profit_mtd' => $netProfitMtd,
                 'collection_rate_mtd' => $collectionRateMtd,
                 'outstanding_balance_all_time' => $outstandingAllTime,
                 'overdue_amount_all_time' => $overdueAmount,
             ],
+            'refunds_by_reason_mtd' => $this->refundsByReason($startMtd, $endMtd),
             'invoices_summary_mtd' => $invoicesSummaryMtd,
             'expenses_breakdown_mtd' => $expensesBreakdownMtd,
             'charts' => [
@@ -162,8 +174,11 @@ class DashboardService
     {
         [$start, $end, $prevStart, $prevEnd] = $this->parseDateRange($range);
 
-        $totalIncome = (float) Payment::whereBetween('created_at', [$start, $end])->sum('amount');
-        $prevIncome = (float) Payment::whereBetween('created_at', [$prevStart, $prevEnd])->sum('amount');
+        $grossIncome = (float) Payment::whereBetween('created_at', [$start, $end])->sum('amount');
+        $refunded = (float) Refund::whereBetween('refunded_at', [$start, $end])->sum('amount');
+        $refundsCount = Refund::whereBetween('refunded_at', [$start, $end])->count();
+        $totalIncome = $grossIncome - $refunded;
+        $prevIncome = $this->netCollectedBetween($prevStart, $prevEnd);
         $incomeChangePct = $this->percentChange($totalIncome, $prevIncome);
 
         $totalExpenses = (float) Expense::whereBetween('expense_date', [$start->format('Y-m-d'), $end->format('Y-m-d')])->sum('amount');
@@ -176,13 +191,15 @@ class DashboardService
             $mStart = $curr->copy()->startOfMonth();
             $mEnd = $curr->copy()->endOfMonth();
 
-            $inc = (float) Payment::whereBetween('created_at', [$mStart, $mEnd])->sum('amount');
+            $inc = $this->netCollectedBetween($mStart, $mEnd);
             $exp = (float) Expense::whereBetween('expense_date', [$mStart->format('Y-m-d'), $mEnd->format('Y-m-d')])->sum('amount');
+            $refunds = $this->refundedBetween($mStart, $mEnd);
 
             $series[] = [
                 'period' => $curr->format('M Y'),
                 'income' => $inc,
                 'expenses' => $exp,
+                'refunds' => $refunds,
             ];
 
             $curr->addMonth();
@@ -190,6 +207,9 @@ class DashboardService
 
         return [
             'total_income' => $totalIncome,
+            'gross_income' => $grossIncome,
+            'total_refunded' => $refunded,
+            'refunds_count' => $refundsCount,
             'income_change_pct' => $incomeChangePct,
             'total_expenses' => $totalExpenses,
             'expense_change_pct' => $expenseChangePct,
@@ -218,8 +238,8 @@ class DashboardService
     {
         [$start, $end, $prevStart, $prevEnd] = $this->parseDateRange($range);
 
-        $total = (float) Payment::whereBetween('created_at', [$start, $end])->sum('amount');
-        $prevTotal = (float) Payment::whereBetween('created_at', [$prevStart, $prevEnd])->sum('amount');
+        $total = $this->netCollectedBetween($start, $end);
+        $prevTotal = $this->netCollectedBetween($prevStart, $prevEnd);
         $changePct = $this->percentChange($total, $prevTotal);
 
         $points = [];
@@ -229,7 +249,7 @@ class DashboardService
             while ($curr->lte($end)) {
                 $dayStart = $curr->copy()->startOfDay();
                 $dayEnd = $curr->copy()->endOfDay();
-                $amt = (float) Payment::whereBetween('created_at', [$dayStart, $dayEnd])->sum('amount');
+                $amt = $this->netCollectedBetween($dayStart, $dayEnd);
 
                 $points[] = [
                     'date' => $curr->format('Y-m-d'),
@@ -242,7 +262,7 @@ class DashboardService
             while ($curr->lte($end)) {
                 $mStart = $curr->copy()->startOfMonth();
                 $mEnd = $curr->copy()->endOfMonth();
-                $amt = (float) Payment::whereBetween('created_at', [$mStart, $mEnd])->sum('amount');
+                $amt = $this->netCollectedBetween($mStart, $mEnd);
 
                 $points[] = [
                     'date' => $curr->format('Y-m-d'),
@@ -347,13 +367,65 @@ class DashboardService
         $paid = $getAmount(InvoiceStatus::PAID);
         $partial = $getAmount(InvoiceStatus::PARTIAL);
         $unpaid = $getAmount(InvoiceStatus::UNPAID);
+        $refunded = $getAmount(InvoiceStatus::REFUNDED);
         $total = (float) $invoices->sum(fn ($i) => (float) $i->total_amount);
 
         return [
             'paid' => round($paid, 2),
             'partial' => round($partial, 2),
             'unpaid' => round($unpaid, 2),
+            'refunded' => round($refunded, 2),
             'total' => round($total, 2),
         ];
+    }
+
+    public function getRefundBreakdown(?string $range): array
+    {
+        [$start, $end] = $this->parseDateRange($range);
+
+        $breakdown = $this->refundsByReason($start, $end);
+        $totalAmount = array_sum($breakdown);
+        $count = Refund::whereBetween('refunded_at', [$start, $end])->count();
+
+        return [
+            'total_amount' => round((float) $totalAmount, 2),
+            'total_count' => $count,
+            'by_reason' => $breakdown,
+        ];
+    }
+
+    private function netCollectedBetween(Carbon $start, Carbon $end): float
+    {
+        $collected = (float) Payment::whereBetween('created_at', [$start, $end])->sum('amount');
+        $refunded = $this->refundedBetween($start, $end);
+
+        return round($collected - $refunded, 2);
+    }
+
+    private function refundedBetween(Carbon $start, Carbon $end): float
+    {
+        return round((float) Refund::whereBetween('refunded_at', [$start, $end])->sum('amount'), 2);
+    }
+
+    /**
+     * @return array<string, float>
+     */
+    private function refundsByReason(Carbon $start, Carbon $end): array
+    {
+        $refunds = Refund::whereBetween('refunded_at', [$start, $end])->get();
+        $breakdown = [];
+
+        foreach (RefundReasonCode::ordered() as $reason) {
+            $breakdown[$reason->value] = round(
+                (float) $refunds->filter(
+                    fn (Refund $refund) => ($refund->reason_code instanceof RefundReasonCode
+                        ? $refund->reason_code->value
+                        : $refund->reason_code) === $reason->value
+                )->sum('amount'),
+                2
+            );
+        }
+
+        return $breakdown;
     }
 }

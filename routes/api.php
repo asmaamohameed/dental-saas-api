@@ -10,6 +10,7 @@ use App\Http\Controllers\Api\V1\Auth\ProfileAvatarController;
 use App\Http\Controllers\Api\V1\Auth\ProfileController;
 use App\Http\Controllers\Api\V1\Auth\ResetPasswordController;
 use App\Http\Controllers\Api\V1\ClinicBrandingController;
+use App\Http\Controllers\Api\V1\ClinicRolePermissionController;
 use App\Http\Controllers\Api\V1\ComponentController;
 use App\Http\Controllers\Api\V1\DashboardController;
 use App\Http\Controllers\Api\V1\ExpenseController;
@@ -20,6 +21,7 @@ use App\Http\Controllers\Api\V1\InvoiceItemController;
 use App\Http\Controllers\Api\V1\PatientController;
 use App\Http\Controllers\Api\V1\PatientTreatmentController;
 use App\Http\Controllers\Api\V1\PaymentController;
+use App\Http\Controllers\Api\V1\RefundController;
 use App\Http\Controllers\Api\V1\ToothRecordController;
 use App\Http\Controllers\Api\V1\TreatmentPlanController;
 use App\Http\Controllers\Api\V1\TreatmentTemplateController;
@@ -97,9 +99,9 @@ Route::prefix('v1')->group(function () {
             Route::patch('patient-treatments/{patientTreatment}/teeth', [PatientTreatmentController::class, 'updateTeeth']);
         });
 
-        Route::get('invoices', [InvoiceController::class, 'index']);
-        Route::get('invoices/{invoice}', [InvoiceController::class, 'show']);
-        Route::get('patients/{patient}/invoices-summary', [InvoiceController::class, 'patientSummary']);
+        Route::get('invoices', [InvoiceController::class, 'index'])->middleware('clinic.permission:invoice:view');
+        Route::get('invoices/{invoice}', [InvoiceController::class, 'show'])->middleware('clinic.permission:invoice:view');
+        Route::get('patients/{patient}/invoices-summary', [InvoiceController::class, 'patientSummary'])->middleware('clinic.permission:invoice:view');
 
         Route::get('invoices/{invoice}/items', [InvoiceItemController::class, 'index']);
 
@@ -121,6 +123,7 @@ Route::prefix('v1')->group(function () {
         Route::get('dashboard/expense-breakdown', [DashboardController::class, 'expenseBreakdown']);
         Route::get('dashboard/component-stock', [DashboardController::class, 'componentStock']);
         Route::get('dashboard/invoice-status', [DashboardController::class, 'invoiceStatus']);
+        Route::get('dashboard/refund-breakdown', [DashboardController::class, 'refundBreakdown']);
 
         // Expenses
         Route::get('expenses', [ExpenseController::class, 'index']);
@@ -134,41 +137,52 @@ Route::prefix('v1')->group(function () {
 
         // Treatments, invoices, and expense bills: owner, doctor, assistant, receptionist.
         Route::middleware(EnsureUserRole::using(UserRole::OWNER, UserRole::DOCTOR, UserRole::ASSISTANT, UserRole::RECEPTIONIST))->group(function () {
-            Route::post('treatment-templates', [TreatmentTemplateController::class, 'store']);
-            Route::put('treatment-templates/{treatmentTemplate}', [TreatmentTemplateController::class, 'update']);
-            Route::patch('treatment-templates/{treatmentTemplate}/toggle-active', [TreatmentTemplateController::class, 'toggleActive']);
+            Route::post('treatment-templates', [TreatmentTemplateController::class, 'store'])->middleware('clinic.permission:treatment:create');
+            Route::put('treatment-templates/{treatmentTemplate}', [TreatmentTemplateController::class, 'update'])->middleware('clinic.permission:treatment:edit');
+            Route::patch('treatment-templates/{treatmentTemplate}/toggle-active', [TreatmentTemplateController::class, 'toggleActive'])->middleware('clinic.permission:treatment:toggleActive');
             Route::post('patients/{patient}/treatment-plans', [TreatmentPlanController::class, 'store']);
             Route::put('treatment-plans/{treatmentPlan}', [TreatmentPlanController::class, 'update']);
             Route::post('patient-treatments', [PatientTreatmentController::class, 'store']);
             Route::post('patients/{patient}/treatments', [PatientTreatmentController::class, 'storeForPatient']);
             Route::put('patient-treatments/{patientTreatment}', [PatientTreatmentController::class, 'update']);
 
-            Route::post('invoices', [InvoiceController::class, 'store']);
-            Route::post('invoices/from-treatment/{patientTreatment}', [InvoiceController::class, 'storeFromTreatment']);
-            Route::put('invoices/{invoice}', [InvoiceController::class, 'update']);
+            Route::post('invoices', [InvoiceController::class, 'store'])->middleware('clinic.permission:invoice:create');
+            Route::post('invoices/from-treatment/{patientTreatment}', [InvoiceController::class, 'storeFromTreatment'])->middleware('clinic.permission:invoice:create');
+            Route::put('invoices/{invoice}', [InvoiceController::class, 'update'])->middleware('clinic.permission:invoice:edit');
 
             Route::post('invoices/{invoice}/items', [InvoiceItemController::class, 'store']);
             Route::put('invoices/{invoice}/items/{item}', [InvoiceItemController::class, 'update']);
             Route::delete('invoices/{invoice}/items/{item}', [InvoiceItemController::class, 'destroy']);
 
-            Route::post('invoices/{invoice}/payments', [PaymentController::class, 'store']);
+            Route::post('invoices/{invoice}/payments', [PaymentController::class, 'store'])->middleware('clinic.permission:payment:create');
             Route::post('expenses', [ExpenseController::class, 'store']);
         });
 
-        // Owner-only sensitive actions (delete invoice, delete payment, edit payment, etc.)
-        Route::middleware(EnsureUserRole::using(UserRole::OWNER))->group(function () {
+        Route::middleware('clinic.permission:invoice:refund')->group(function () {
+            Route::get('refunds', [RefundController::class, 'index']);
+            Route::get('refunds/{refund}', [RefundController::class, 'show']);
+            Route::post('invoices/{invoice}/refunds', [RefundController::class, 'store']);
+        });
+
+        Route::middleware('clinic.permission:clinic:branding')->group(function () {
             Route::post('clinic/logo', [ClinicBrandingController::class, 'updateLogo']);
             Route::patch('clinic/theme', [ClinicBrandingController::class, 'updateTheme']);
-            Route::get('staff', [UserController::class, 'index']);
-            Route::post('staff', [UserController::class, 'store']);
-            Route::put('staff/{user}', [UserController::class, 'update']);
-            Route::patch('staff/{user}/toggle-active', [UserController::class, 'toggleActive']);
+        });
+
+        Route::get('staff', [UserController::class, 'index'])->middleware('clinic.permission:staff:view');
+        Route::post('staff', [UserController::class, 'store'])->middleware('clinic.permission:staff:create');
+        Route::put('staff/{user}', [UserController::class, 'update'])->middleware('clinic.permission:staff:edit');
+        Route::patch('staff/{user}/toggle-active', [UserController::class, 'toggleActive'])->middleware('clinic.permission:staff:toggleActive');
+        Route::delete('treatment-templates/{treatmentTemplate}', [TreatmentTemplateController::class, 'destroy'])->middleware('clinic.permission:treatment:delete');
+        Route::delete('invoices/{invoice}', [InvoiceController::class, 'destroy'])->middleware('clinic.permission:invoice:delete');
+        Route::put('invoices/{invoice}/payments/{payment}', [PaymentController::class, 'update'])->middleware('clinic.permission:payment:edit');
+        Route::delete('invoices/{invoice}/payments/{payment}', [PaymentController::class, 'destroy'])->middleware('clinic.permission:payment:delete');
+
+        Route::middleware(EnsureUserRole::using(UserRole::OWNER))->group(function () {
+            Route::get('role-permissions', [ClinicRolePermissionController::class, 'index']);
+            Route::put('role-permissions/{role}', [ClinicRolePermissionController::class, 'update']);
             Route::delete('components/{component}', [ComponentController::class, 'destroy']);
-            Route::delete('treatment-templates/{treatmentTemplate}', [TreatmentTemplateController::class, 'destroy']);
             Route::delete('treatment-plans/{treatmentPlan}', [TreatmentPlanController::class, 'destroy']);
-            Route::delete('invoices/{invoice}', [InvoiceController::class, 'destroy']);
-            Route::put('invoices/{invoice}/payments/{payment}', [PaymentController::class, 'update']);
-            Route::delete('invoices/{invoice}/payments/{payment}', [PaymentController::class, 'destroy']);
             Route::delete('expenses/{expense}', [ExpenseController::class, 'destroy']);
         });
     });

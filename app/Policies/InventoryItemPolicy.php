@@ -19,44 +19,43 @@ class InventoryItemPolicy
 
     public function viewAny(User $user): bool
     {
-        return $user->hasAnyClinicRole([
+        return $user->clinicCan('inventory:view', $user->hasAnyClinicRole([
             UserRole::DOCTOR,
             UserRole::ASSISTANT,
             UserRole::RECEPTIONIST,
-        ]);
+        ]));
     }
 
     public function view(User $user, InventoryItem $item): bool
     {
         return $user->tenant_id === $item->tenant_id
-            && $user->hasAnyClinicRole([
+            && $user->clinicCan('inventory:view', $user->hasAnyClinicRole([
                 UserRole::DOCTOR,
                 UserRole::ASSISTANT,
                 UserRole::RECEPTIONIST,
-            ]);
+            ]));
     }
 
     public function create(User $user): bool
     {
-        // Only the owner may create items — granted via before().
-        return false;
+        return $user->clinicCan('inventory:create', false);
     }
 
     public function update(User $user, InventoryItem $item): bool
     {
-        // Only the owner may update items — granted via before().
-        return false;
+        return $user->tenant_id === $item->tenant_id
+            && $user->clinicCan('inventory:edit', false);
     }
 
     public function delete(User $user, InventoryItem $item): bool
     {
-        // Only the owner may deactivate items — granted via before().
-        return false;
+        return $user->tenant_id === $item->tenant_id
+            && $user->clinicCan('inventory:delete', false);
     }
 
     public function restore(User $user, InventoryItem $item): bool
     {
-        // Only the owner may restore items — granted via before().
-        return false;
+        return $user->tenant_id === $item->tenant_id
+            && $user->clinicCan('inventory:restore', false);
     }
 }

@@ -15,12 +15,12 @@ class AppointmentPolicy
      */
     public function viewAny(User $user): bool
     {
-        return $user->hasAnyClinicRole([
+        return $user->clinicCan('appointment:view', $user->hasAnyClinicRole([
             UserRole::OWNER,
             UserRole::DOCTOR,
             UserRole::ASSISTANT,
             UserRole::RECEPTIONIST,
-        ]);
+        ]));
     }
 
     /**
@@ -37,12 +37,12 @@ class AppointmentPolicy
     public function view(User $user, Appointment $appointment): bool
     {
         return $user->tenant_id === $appointment->tenant_id
-            && $user->hasAnyClinicRole([
+            && $user->clinicCan('appointment:view', $user->hasAnyClinicRole([
                 UserRole::OWNER,
                 UserRole::DOCTOR,
                 UserRole::ASSISTANT,
                 UserRole::RECEPTIONIST,
-            ]);
+            ]));
     }
 
     /**
@@ -50,12 +50,12 @@ class AppointmentPolicy
      */
     public function create(User $user): bool
     {
-        return $user->hasAnyClinicRole([
+        return $user->clinicCan('appointment:create', $user->hasAnyClinicRole([
             UserRole::OWNER,
             UserRole::DOCTOR,
             UserRole::ASSISTANT,
             UserRole::RECEPTIONIST,
-        ]);
+        ]));
     }
 
     /**
@@ -68,12 +68,12 @@ class AppointmentPolicy
         }
 
         return $user->tenant_id === $appointment->tenant_id
-            && $user->hasAnyClinicRole([
+            && $user->clinicCan('appointment:edit', $user->hasAnyClinicRole([
                 UserRole::OWNER,
                 UserRole::DOCTOR,
                 UserRole::ASSISTANT,
                 UserRole::RECEPTIONIST,
-            ]);
+            ]));
     }
 
     /**
@@ -82,6 +82,10 @@ class AppointmentPolicy
     public function updateStatusRole(User $user, Appointment $appointment, AppointmentStatus $newStatus): bool
     {
         if ($user->tenant_id !== $appointment->tenant_id) {
+            return false;
+        }
+
+        if (! $user->clinicCan('appointment:edit', true)) {
             return false;
         }
 
@@ -128,7 +132,7 @@ class AppointmentPolicy
         }
 
         return $user->tenant_id === $appointment->tenant_id
-            && $user->isOwner();
+            && $user->clinicCan('appointment:delete', $user->isOwner());
     }
 
     /**

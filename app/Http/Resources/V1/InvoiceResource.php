@@ -26,6 +26,7 @@ class InvoiceResource extends JsonResource
             'remaining_amount' => (float) $this->remaining_amount,
             'paid_amount' => $this->paidAmount(),
             'deducted_amount' => $this->deductedAmount(),
+            'refunded_amount' => $this->refundedAmount(),
             'status' => $this->status,
             'patient' => $this->whenLoaded('patient', function (Patient $patient) {
                 return [
@@ -49,6 +50,10 @@ class InvoiceResource extends JsonResource
             }),
             'items' => InvoiceItemResource::collection($this->whenLoaded('items')),
             'payments' => PaymentResource::collection($this->whenLoaded('payments')),
+            'refund' => $this->whenLoaded('refund', fn () => $this->refund
+                ? new RefundResource($this->refund)
+                : null
+            ),
             'created_at' => $this->created_at?->toISOString(),
             'updated_at' => $this->updated_at?->toISOString(),
         ];

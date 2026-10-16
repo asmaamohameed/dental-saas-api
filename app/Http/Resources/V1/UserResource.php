@@ -3,6 +3,7 @@
 namespace App\Http\Resources\V1;
 
 use App\Models\User;
+use App\Support\Roles\ClinicPermissionGate;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -21,6 +22,7 @@ class UserResource extends JsonResource
             'avatar_url' => $this->avatar_url,
             'role' => $this->role,
             'roles' => $this->currentClinicRoleNames(),
+            'permissions' => app(ClinicPermissionGate::class)->forUser($this->resource),
             'locale' => $this->locale,
             'is_active' => $this->is_active,
             'tenant' => new TenantResource($this->whenLoaded('tenant')),

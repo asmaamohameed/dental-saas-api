@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Enums\InvoiceStatus;
 use App\Models\Invoice;
 use App\Models\Payment;
+use App\Support\Billing\InvoiceFinancials;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -17,6 +18,7 @@ class PaymentService
     {
         return DB::transaction(function () use ($invoice, $data, $receivedBy) {
             $lockedInvoice = Invoice::lockForUpdate()->find($invoice->id);
+            InvoiceFinancials::assertMutable($lockedInvoice);
 
             $amount = (string) ($data['amount'] ?? 0);
             $deduct = (string) ($data['deduct_amount'] ?? 0);
@@ -61,6 +63,7 @@ class PaymentService
     {
         return DB::transaction(function () use ($invoice, $payment, $data) {
             $lockedInvoice = Invoice::lockForUpdate()->find($invoice->id);
+            InvoiceFinancials::assertMutable($lockedInvoice);
 
             $changesAmount = array_key_exists('amount', $data);
 
@@ -102,6 +105,7 @@ class PaymentService
     {
         return DB::transaction(function () use ($invoice, $payment) {
             $lockedInvoice = Invoice::lockForUpdate()->find($invoice->id);
+            InvoiceFinancials::assertMutable($lockedInvoice);
 
             if ($lockedInvoice->status === InvoiceStatus::PAID) {
                 throw ValidationException::withMessages([

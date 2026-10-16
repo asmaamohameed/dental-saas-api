@@ -25,29 +25,29 @@ class InventoryTransactionPolicy
     public function viewAny(User $user, InventoryItem $item): bool
     {
         return $user->tenant_id === $item->tenant_id
-            && $user->hasAnyClinicRole([
+            && $user->clinicCan('inventory:view', $user->hasAnyClinicRole([
                 UserRole::DOCTOR,
                 UserRole::ASSISTANT,
                 UserRole::RECEPTIONIST,
-            ]);
+            ]));
     }
 
     public function view(User $user, InventoryTransaction $transaction): bool
     {
         return $user->tenant_id === $transaction->tenant_id
-            && $user->hasAnyClinicRole([
+            && $user->clinicCan('inventory:view', $user->hasAnyClinicRole([
                 UserRole::DOCTOR,
                 UserRole::ASSISTANT,
                 UserRole::RECEPTIONIST,
-            ]);
+            ]));
     }
 
     public function create(User $user, InventoryItem $item): bool
     {
         return $user->tenant_id === $item->tenant_id
-            && $user->hasAnyClinicRole([
+            && $user->clinicCan('inventory:transact', $user->hasAnyClinicRole([
                 UserRole::DOCTOR,
                 UserRole::RECEPTIONIST,
-            ]);
+            ]));
     }
 }

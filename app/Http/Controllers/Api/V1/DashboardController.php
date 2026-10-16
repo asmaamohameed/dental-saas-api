@@ -65,4 +65,12 @@ class DashboardController extends Controller
 
         return $this->successResponse($data, 'Invoice status analytics retrieved successfully.');
     }
+
+    public function refundBreakdown(Request $request): JsonResponse
+    {
+        $range = $request->query('range');
+        $data = $this->dashboardService->getRefundBreakdown($range);
+
+        return $this->successResponse($data, 'Refund breakdown retrieved successfully.');
+    }
 }

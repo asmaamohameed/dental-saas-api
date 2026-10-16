@@ -19,52 +19,52 @@ class PatientPolicy
 
     public function viewAny(User $user): bool
     {
-        return $user->hasAnyClinicRole([
+        return $user->clinicCan('patient:view', $user->hasAnyClinicRole([
             UserRole::DOCTOR,
             UserRole::ASSISTANT,
             UserRole::RECEPTIONIST,
-        ]);
+        ]));
     }
 
     public function view(User $user, Patient $patient): bool
     {
         return $user->tenant_id === $patient->tenant_id
-            && $user->hasAnyClinicRole([
+            && $user->clinicCan('patient:view', $user->hasAnyClinicRole([
                 UserRole::DOCTOR,
                 UserRole::ASSISTANT,
                 UserRole::RECEPTIONIST,
-            ]);
+            ]));
     }
 
     public function viewMedicalHistory(User $user): bool
     {
-        return $user->isDoctor() || $user->isAssistant();
+        return $user->clinicCan('patient:viewMedicalHistory', $user->isDoctor() || $user->isAssistant());
     }
 
     public function create(User $user): bool
     {
-        return $user->hasAnyClinicRole([
+        return $user->clinicCan('patient:create', $user->hasAnyClinicRole([
             UserRole::OWNER,
             UserRole::DOCTOR,
             UserRole::ASSISTANT,
             UserRole::RECEPTIONIST,
-        ]);
+        ]));
     }
 
     public function update(User $user, Patient $patient): bool
     {
         return $user->tenant_id === $patient->tenant_id
-            && $user->hasAnyClinicRole([
+            && $user->clinicCan('patient:edit', $user->hasAnyClinicRole([
                 UserRole::OWNER,
                 UserRole::DOCTOR,
                 UserRole::ASSISTANT,
                 UserRole::RECEPTIONIST,
-            ]);
+            ]));
     }
 
     public function delete(User $user, Patient $patient): bool
     {
         return $user->tenant_id === $patient->tenant_id
-            && $user->isOwner();
+            && $user->clinicCan('patient:delete', $user->isOwner());
     }
 }

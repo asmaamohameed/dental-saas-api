@@ -33,6 +33,7 @@ class OdontogramService
         return DB::table('patient_treatment_teeth as ptt')
             ->join('patient_treatments as pt', 'pt.id', '=', 'ptt.patient_treatment_id')
             ->leftJoin('treatment_templates as tt', 'tt.id', '=', 'pt.treatment_template_id')
+            ->leftJoin('users as dentist', 'dentist.id', '=', 'pt.dentist_id')
             ->where('pt.patient_id', $patient->id)
             ->where('pt.tenant_id', $patient->tenant_id)
             ->where('pt.clinical_status', '!=', PatientTreatmentStatus::CANCELLED->value)
@@ -44,8 +45,10 @@ class OdontogramService
                 'ptt.status as tooth_status',
                 'ptt.price',
                 'ptt.completed_at',
+                'dentist.name as dentist_name',
                 'ptt.updated_at as row_updated_at',
                 'pt.id as patient_treatment_id',
+                DB::raw('(select ii.invoice_id from invoice_items as ii where ii.patient_treatment_id = pt.id order by ii.created_at desc limit 1) as invoice_id'),
                 'tt.name_ar as service_name_ar',
                 'tt.name_en as service_name_en',
             ])
@@ -105,6 +108,10 @@ class OdontogramService
                 'service_name_en' => $row->service_name_en,
                 'status' => $row->tooth_status,
                 'price' => number_format((float) $row->price, 2, '.', ''),
+                'completed_at' => isset($row->completed_at) ? $row->completed_at : null,
+                'updated_at' => isset($row->row_updated_at) ? $row->row_updated_at : null,
+                'dentist_name' => isset($row->dentist_name) ? $row->dentist_name : null,
+                'invoice_id' => isset($row->invoice_id) ? $row->invoice_id : null,
             ];
         }, $entries);
     }

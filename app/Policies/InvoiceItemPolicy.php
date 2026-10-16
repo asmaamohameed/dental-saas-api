@@ -27,12 +27,12 @@ class InvoiceItemPolicy
     public function viewAny(User $user, Invoice $invoice): bool
     {
         return $user->tenant_id === $invoice->tenant_id
-            && $user->hasAnyClinicRole([UserRole::DOCTOR, UserRole::RECEPTIONIST]);
+            && $user->clinicCan('invoice:view', $user->hasAnyClinicRole([UserRole::DOCTOR, UserRole::RECEPTIONIST]));
     }
 
     public function create(User $user, Invoice $invoice): bool
     {
-        if ($invoice->status === InvoiceStatus::PAID) {
+        if (in_array($invoice->status, [InvoiceStatus::PAID, InvoiceStatus::REFUNDED, InvoiceStatus::CANCELLED], true)) {
             return false;
         }
 
@@ -41,13 +41,13 @@ class InvoiceItemPolicy
         }
 
         return $user->tenant_id === $invoice->tenant_id
-            && $user->hasAnyClinicRole([UserRole::DOCTOR, UserRole::ASSISTANT, UserRole::RECEPTIONIST])
+            && $user->clinicCan('invoice:edit', $user->hasAnyClinicRole([UserRole::DOCTOR, UserRole::ASSISTANT, UserRole::RECEPTIONIST]))
             && Gate::forUser($user)->allows('updateItems', $invoice);
     }
 
     public function update(User $user, InvoiceItem $invoiceItem): bool
     {
-        if ($invoiceItem->invoice->status === InvoiceStatus::PAID) {
+        if (in_array($invoiceItem->invoice->status, [InvoiceStatus::PAID, InvoiceStatus::REFUNDED, InvoiceStatus::CANCELLED], true)) {
             return false;
         }
 
@@ -56,13 +56,13 @@ class InvoiceItemPolicy
         }
 
         return $user->tenant_id === $invoiceItem->invoice->tenant_id
-            && $user->hasAnyClinicRole([UserRole::DOCTOR, UserRole::ASSISTANT, UserRole::RECEPTIONIST])
+            && $user->clinicCan('invoice:edit', $user->hasAnyClinicRole([UserRole::DOCTOR, UserRole::ASSISTANT, UserRole::RECEPTIONIST]))
             && Gate::forUser($user)->allows('updateItems', $invoiceItem->invoice);
     }
 
     public function delete(User $user, InvoiceItem $invoiceItem): bool
     {
-        if ($invoiceItem->invoice->status === InvoiceStatus::PAID) {
+        if (in_array($invoiceItem->invoice->status, [InvoiceStatus::PAID, InvoiceStatus::REFUNDED, InvoiceStatus::CANCELLED], true)) {
             return false;
         }
 
@@ -71,7 +71,7 @@ class InvoiceItemPolicy
         }
 
         return $user->tenant_id === $invoiceItem->invoice->tenant_id
-            && $user->hasAnyClinicRole([UserRole::DOCTOR, UserRole::ASSISTANT, UserRole::RECEPTIONIST])
+            && $user->clinicCan('invoice:edit', $user->hasAnyClinicRole([UserRole::DOCTOR, UserRole::ASSISTANT, UserRole::RECEPTIONIST]))
             && Gate::forUser($user)->allows('updateItems', $invoiceItem->invoice);
     }
 }

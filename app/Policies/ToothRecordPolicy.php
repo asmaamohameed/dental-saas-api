@@ -11,12 +11,12 @@ class ToothRecordPolicy
     public function viewAny(User $user, Patient $patient): bool
     {
         return $user->tenant_id === $patient->tenant_id
-            && $user->hasAnyClinicRole([UserRole::OWNER, UserRole::DOCTOR, UserRole::ASSISTANT]);
+            && $user->clinicCan('toothRecord:view', $user->hasAnyClinicRole([UserRole::OWNER, UserRole::DOCTOR, UserRole::ASSISTANT]));
     }
 
     public function create(User $user, Patient $patient): bool
     {
         return $user->tenant_id === $patient->tenant_id
-            && $user->hasAnyClinicRole([UserRole::OWNER, UserRole::DOCTOR, UserRole::ASSISTANT]);
+            && $user->clinicCan('toothRecord:create', $user->hasAnyClinicRole([UserRole::OWNER, UserRole::DOCTOR, UserRole::ASSISTANT]));
     }
 }

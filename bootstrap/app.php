@@ -5,6 +5,7 @@ use App\Exceptions\ServiceProtectedException;
 use App\Http\Middleware\ClearPlatformTenantContext;
 use App\Http\Middleware\EnsureTenantAccess;
 use App\Http\Middleware\EnsureUserIsAdmin;
+use App\Http\Middleware\EnsureClinicPermission;
 use App\Http\Middleware\EnsureUserRole;
 use App\Http\Middleware\MeasureRequestTime;
 use App\Http\Middleware\SetLocale;
@@ -52,6 +53,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'platform.context' => ClearPlatformTenantContext::class,
             'tenant' => EnsureTenantAccess::class,
             'role' => EnsureUserRole::class,
+            'clinic.permission' => EnsureClinicPermission::class,
             'locale' => SetLocale::class,
         ]);
 

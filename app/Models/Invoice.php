@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Enums\InvoiceStatus;
 use App\Models\Concerns\Auditable;
 use App\Models\Concerns\BelongsToTenant;
+use App\Support\Billing\InvoiceFinancials;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
@@ -12,6 +13,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 /**
@@ -28,6 +30,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
  * @property-read User|null $creator
  * @property-read Collection<int, InvoiceItem> $items
  * @property-read Collection<int, Payment> $payments
+ * @property-read Refund|null $refund
  */
 class Invoice extends Model
 {
@@ -85,55 +88,38 @@ class Invoice extends Model
         return $this->hasMany(Payment::class);
     }
 
+    /**
+     * @return HasOne<Refund, $this>
+     */
+    public function refund(): HasOne
+    {
+        return $this->hasOne(Refund::class);
+    }
+
     // Computed Attributes
     public function getRemainingAmountAttribute(): float
     {
-        $applied = $this->appliedCredits();
-
-        return max(0, (float) $this->total_amount - $applied);
+        return InvoiceFinancials::remainingAmount($this);
     }
 
     public function appliedCredits(): float
     {
-        if ($this->relationLoaded('payments')) {
-            return (float) $this->payments->sum(function (Payment $payment) {
-                return (float) $payment->amount + (float) ($payment->deduct_amount ?? 0);
-            });
-        }
-
-        if (array_key_exists('paid_amount', $this->attributes)) {
-            return (float) $this->attributes['paid_amount']
-                + (float) ($this->attributes['deducted_amount'] ?? 0);
-        }
-
-        return (float) $this->payments()->sum('amount')
-            + (float) $this->payments()->sum('deduct_amount');
+        return InvoiceFinancials::appliedCredits($this);
     }
 
     public function paidAmount(): float
     {
-        if ($this->relationLoaded('payments')) {
-            return (float) $this->payments->sum('amount');
-        }
-
-        if (array_key_exists('paid_amount', $this->attributes)) {
-            return (float) $this->attributes['paid_amount'];
-        }
-
-        return (float) $this->payments()->sum('amount');
+        return InvoiceFinancials::paidAmount($this);
     }
 
     public function deductedAmount(): float
     {
-        if ($this->relationLoaded('payments')) {
-            return (float) $this->payments->sum(fn (Payment $payment) => (float) ($payment->deduct_amount ?? 0));
-        }
+        return InvoiceFinancials::deductedAmount($this);
+    }
 
-        if (array_key_exists('deducted_amount', $this->attributes)) {
-            return (float) $this->attributes['deducted_amount'];
-        }
-
-        return (float) $this->payments()->sum('deduct_amount');
+    public function refundedAmount(): float
+    {
+        return InvoiceFinancials::refundedAmount($this);
     }
 
     // Scopes

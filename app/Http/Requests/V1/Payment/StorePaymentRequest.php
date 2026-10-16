@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\V1\Payment;
 
+use App\Enums\InvoiceStatus;
 use App\Models\Payment;
 use Illuminate\Foundation\Http\FormRequest;
 
@@ -46,6 +47,10 @@ class StorePaymentRequest extends FormRequest
             }
 
             if ($invoice) {
+                if ($invoice->status === InvoiceStatus::REFUNDED) {
+                    $validator->errors()->add('invoice', 'A refunded invoice cannot be modified.');
+                }
+
                 $applied = $amount + $deduct;
                 $remaining = (float) $invoice->remaining_amount;
 

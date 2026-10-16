@@ -21,41 +21,46 @@ class PaymentPolicy
     public function viewAny(User $user, Invoice $invoice): bool
     {
         return $user->tenant_id === $invoice->tenant_id
-            && $user->hasAnyClinicRole([
+            && $user->clinicCan('payment:view', $user->hasAnyClinicRole([
                 UserRole::DOCTOR,
                 UserRole::RECEPTIONIST,
-            ]);
+            ]));
     }
 
     public function view(User $user, Payment $payment): bool
     {
         return $user->tenant_id === $payment->invoice->tenant_id
-            && $user->hasAnyClinicRole([
+            && $user->clinicCan('payment:view', $user->hasAnyClinicRole([
                 UserRole::DOCTOR,
                 UserRole::RECEPTIONIST,
-            ]);
+            ]));
     }
 
     public function create(User $user, Invoice $invoice): bool
     {
         return $user->tenant_id === $invoice->tenant_id
-            && $user->hasAnyClinicRole([
+            && $user->clinicCan('payment:create', $user->hasAnyClinicRole([
                 UserRole::DOCTOR,
                 UserRole::ASSISTANT,
                 UserRole::RECEPTIONIST,
-            ]);
+            ]));
     }
 
     public function update(User $user, Payment $payment): bool
     {
-        // Only the owner may edit a payment — granted via before().
-        // Any non-owner reaching this point is explicitly denied.
-        return false;
+        if (! $user->clinicCan('payment:edit', false)) {
+            return false;
+        }
+
+        return $user->tenant_id === $payment->invoice->tenant_id;
     }
 
     public function delete(User $user, Payment $payment): bool
     {
-        // Only the owner may delete a payment — granted via before().
-        return false;
+        if (! $user->clinicCan('payment:delete', false)) {
+            return false;
+        }
+
+        return $user->tenant_id === $payment->invoice->tenant_id;
     }
 }

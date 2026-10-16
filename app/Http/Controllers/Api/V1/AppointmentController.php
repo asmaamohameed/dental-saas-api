@@ -20,6 +20,7 @@ use App\Services\PatientTreatmentService;
 use App\Traits\ApiResponse;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 
@@ -144,6 +145,11 @@ class AppointmentController extends Controller
         $treatmentIds = $this->treatmentIdsForType($data, $data['patient_treatment_ids'] ?? []);
         unset($data['patient_treatment_ids']);
 
+        $this->appointmentService->assertWithinClinicHours(
+            Carbon::parse($data['scheduled_at']),
+            (int) $data['duration_minutes'],
+        );
+
         $data['created_by'] = auth()->id();
         $data['status'] = AppointmentStatus::SCHEDULED;
 
@@ -187,11 +193,23 @@ class AppointmentController extends Controller
     {
         $this->authorize('update', $appointment);
 
-        $data = $this->appointmentService->applyServiceDefaults($request->validated());
+        $validated = $request->validated();
+        $data = $this->appointmentService->applyServiceDefaults($validated);
         $submittedTreatmentIds = array_key_exists('patient_treatment_ids', $data)
             ? $data['patient_treatment_ids']
             : null;
         unset($data['patient_treatment_ids']);
+
+        if ($this->appointmentService->shouldValidateClinicHoursOnUpdate($validated, $appointment)) {
+            $scheduledAt = array_key_exists('scheduled_at', $data)
+                ? Carbon::parse($data['scheduled_at'])
+                : $appointment->scheduled_at->copy();
+            $duration = array_key_exists('duration_minutes', $data)
+                ? (int) $data['duration_minutes']
+                : (int) $appointment->duration_minutes;
+
+            $this->appointmentService->assertWithinClinicHours($scheduledAt, $duration);
+        }
 
         $appointment->update($data);
 

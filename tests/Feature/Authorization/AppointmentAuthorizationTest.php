@@ -9,6 +9,7 @@ use App\Models\Patient;
 use App\Models\Tenant;
 use App\Models\User;
 use App\Support\Tenancy\CurrentTenant;
+use Illuminate\Support\Carbon;
 use Tests\TestCase;
 
 class AppointmentAuthorizationTest extends TestCase
@@ -19,6 +20,8 @@ class AppointmentAuthorizationTest extends TestCase
         $appointment = Appointment::factory()->create([
             'doctor_id' => $doctor->id,
             'status' => AppointmentStatus::SCHEDULED,
+            'scheduled_at' => Carbon::parse($this->scheduledAtWithinClinicHours()),
+            'duration_minutes' => 30,
         ]);
 
         $this->putJson("/api/v1/appointments/{$appointment->id}", [
@@ -91,7 +94,7 @@ class AppointmentAuthorizationTest extends TestCase
         $this->postJson('/api/v1/appointments', [
             'patient_id' => $patient->id,
             'doctor_id' => $otherDoctor->id,
-            'scheduled_at' => now()->addDay()->toDateTimeString(),
+            'scheduled_at' => $this->scheduledAtWithinClinicHours(),
             'duration_minutes' => 30,
         ])->assertCreated();
     }

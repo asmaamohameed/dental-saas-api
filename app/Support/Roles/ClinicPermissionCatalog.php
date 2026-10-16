@@ -74,7 +74,6 @@ class ClinicPermissionCatalog
             'inventory:edit',
             'inventory:delete',
             'inventory:restore',
-            'inventory:transact',
             'staff:view',
             'staff:create',
             'staff:edit',
@@ -110,10 +109,13 @@ class ClinicPermissionCatalog
             $receptionist[$denied] = false;
         }
 
+        $assistant = $clinical;
+        $assistant['inventory:transact'] = false;
+
         return [
             'owner' => $owner,
             'doctor' => $clinical,
-            'assistant' => $clinical,
+            'assistant' => $assistant,
             'receptionist' => $receptionist,
         ];
     }

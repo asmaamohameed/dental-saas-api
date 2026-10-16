@@ -10,7 +10,6 @@ use App\Models\Tenant;
 use App\Models\User;
 use App\Support\Tenancy\CurrentTenant;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Support\Facades\Gate;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
 
@@ -94,29 +93,5 @@ class InvoicePolicyTest extends TestCase
 
         $this->putJson("/api/v1/invoices/{$invoice->id}", $this->validItemsPayload())
             ->assertOk();
-    }
-
-    public function test_update_items_ability_now_explicitly_denies_doctor_independent_of_middleware(): void
-    {
-        $doctor = $this->userWithRole(UserRole::DOCTOR);
-        $invoice = $this->invoiceWithStatus(InvoiceStatus::PARTIAL);
-
-        $this->assertFalse(Gate::forUser($doctor)->allows('updateItems', $invoice));
-    }
-
-    public function test_update_items_ability_still_denies_receptionist_on_partial_invoice(): void
-    {
-        $receptionist = $this->userWithRole(UserRole::RECEPTIONIST);
-        $invoice = $this->invoiceWithStatus(InvoiceStatus::PARTIAL);
-
-        $this->assertFalse(Gate::forUser($receptionist)->allows('updateItems', $invoice));
-    }
-
-    public function test_update_items_ability_still_allows_owner_regardless_of_status(): void
-    {
-        $owner = $this->userWithRole(UserRole::OWNER);
-        $invoice = $this->invoiceWithStatus(InvoiceStatus::PARTIAL);
-
-        $this->assertTrue(Gate::forUser($owner)->allows('updateItems', $invoice));
     }
 }

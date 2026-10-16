@@ -21,7 +21,7 @@ use App\Models\Tenant;
 use App\Models\TreatmentSession;
 use App\Models\TreatmentTemplate;
 use App\Models\User;
-use App\Services\DefaultTreatmentServicesProvisioner;
+use App\Services\DefaultTreatmentTemplatesProvisioner;
 use App\Services\InventoryTransactionService;
 use App\Services\InvoiceService;
 use App\Services\PatientTreatmentService;
@@ -151,7 +151,7 @@ class DemoClinicSeeder extends Seeder
      */
     private function seedTreatmentTemplates(): array
     {
-        $provisioned = app(DefaultTreatmentServicesProvisioner::class)->provision();
+        $provisioned = app(DefaultTreatmentTemplatesProvisioner::class)->provision();
 
         $demoExtras = [
             'quadrant_ortho' => [
@@ -446,8 +446,8 @@ class DemoClinicSeeder extends Seeder
         $inventoryTx = app(InventoryTransactionService::class);
 
         $items = [
-            ['name' => 'Composite resin A2', 'unit' => 'syringe', 'qty' => '40.00'],
-            ['name' => 'Disposable gloves (M)', 'unit' => 'box', 'qty' => '25.00'],
+            ['name' => 'Composite resin A2', 'unit' => 'syringe', 'qty' => '40.00', 'cost_price' => '85.00', 'supplier' => 'Dental Supply Co.'],
+            ['name' => 'Disposable gloves (M)', 'unit' => 'box', 'qty' => '25.00', 'cost_price' => '12.50', 'supplier' => 'MediGlove'],
         ];
 
         foreach ($items as $row) {
@@ -455,6 +455,8 @@ class DemoClinicSeeder extends Seeder
                 ['name' => $row['name']],
                 [
                     'unit' => $row['unit'],
+                    'cost_price' => $row['cost_price'],
+                    'supplier' => $row['supplier'],
                     'minimum_threshold' => 5,
                     'is_active' => true,
                 ]

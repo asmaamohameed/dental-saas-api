@@ -25,6 +25,9 @@ class UpdateInventoryItemRequest extends FormRequest
                     ->ignore($this->route('inventoryItem')),
             ],
             'unit' => ['sometimes', 'string', 'max:50'],
+            'cost_price' => ['sometimes', 'required', 'numeric', 'min:0', 'max:99999999.99'],
+            'expiry_date' => ['nullable', 'date'],
+            'supplier' => ['nullable', 'string', 'max:255'],
             'minimum_threshold' => ['nullable', 'numeric', 'min:0'],
         ];
     }

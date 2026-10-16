@@ -7,6 +7,7 @@ use App\Enums\UserRole;
 use App\Models\Appointment;
 use App\Models\Patient;
 use App\Models\User;
+use Illuminate\Support\Carbon;
 use Tests\TestCase;
 
 class AppointmentCrudTest extends TestCase
@@ -20,7 +21,7 @@ class AppointmentCrudTest extends TestCase
         $response = $this->postJson('/api/v1/appointments', [
             'patient_id' => $patient->id,
             'doctor_id' => $doctor->id,
-            'scheduled_at' => now()->addDay()->toDateTimeString(),
+            'scheduled_at' => $this->scheduledAtWithinClinicHours(),
             'duration_minutes' => 30,
         ]);
 
@@ -39,6 +40,7 @@ class AppointmentCrudTest extends TestCase
         $appointment = Appointment::factory()->create([
             'duration_minutes' => 30,
             'status' => AppointmentStatus::SCHEDULED,
+            'scheduled_at' => Carbon::parse($this->scheduledAtWithinClinicHours()),
         ]);
 
         $response = $this->putJson("/api/v1/appointments/{$appointment->id}", [

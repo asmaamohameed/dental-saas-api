@@ -10,7 +10,7 @@ use App\Http\Controllers\Api\V1\Auth\ProfileAvatarController;
 use App\Http\Controllers\Api\V1\Auth\ProfileController;
 use App\Http\Controllers\Api\V1\Auth\ResetPasswordController;
 use App\Http\Controllers\Api\V1\ClinicBrandingController;
-use App\Http\Controllers\Api\V1\ComponentController;
+use App\Http\Controllers\Api\V1\ClinicWorkingHoursController;
 use App\Http\Controllers\Api\V1\DashboardController;
 use App\Http\Controllers\Api\V1\ExpenseController;
 use App\Http\Controllers\Api\V1\InventoryItemController;
@@ -41,6 +41,8 @@ Route::prefix('v1')->group(function () {
         // Audit Logs (Owner only)
         Route::get('audit-logs', [AuditLogController::class, 'index']);
 
+        Route::get('clinic/working-hours', [ClinicWorkingHoursController::class, 'show']);
+
         // Profile & Auth
         Route::prefix('auth')->group(function () {
             Route::post('logout', LogoutController::class);
@@ -52,7 +54,6 @@ Route::prefix('v1')->group(function () {
 
         // Patients API Resource
         Route::apiResource('patients', PatientController::class);
-        Route::get('/patients/search', [PatientController::class, 'search']);
 
         // Tooth Records
         Route::get('patients/{patient}/tooth-records', [ToothRecordController::class, 'index']);
@@ -73,10 +74,6 @@ Route::prefix('v1')->group(function () {
         // Read-only endpoints (owner, receptionist, doctor)
         Route::get('doctors/availability', [UserController::class, 'doctorAvailability']);
         Route::get('doctors', [UserController::class, 'doctors']);
-        Route::get('components/low-stock', [ComponentController::class, 'lowStock']);
-        Route::post('components/{component}/stock', [ComponentController::class, 'adjustStock']);
-        Route::get('components/{component}/movements', [ComponentController::class, 'movements']);
-        Route::apiResource('components', ComponentController::class)->only(['index', 'show']);
         Route::apiResource('treatment-templates', TreatmentTemplateController::class)
             ->parameters(['treatment-templates' => 'treatmentTemplate'])
             ->only(['index', 'show']);
@@ -108,10 +105,9 @@ Route::prefix('v1')->group(function () {
 
         // Inventory
         Route::apiResource('inventory-items', InventoryItemController::class)->parameters(['inventory-items' => 'inventoryItem']);
-        Route::get('inventory-items/{item}/transactions', [InventoryTransactionController::class, 'index']);
-        Route::post('inventory-items/{item}/transactions', [InventoryTransactionController::class, 'store']);
+        Route::get('inventory-items/{inventoryItem}/transactions', [InventoryTransactionController::class, 'index']);
+        Route::post('inventory-items/{inventoryItem}/transactions', [InventoryTransactionController::class, 'store']);
         Route::patch('inventory-items/{inventoryItem}/restore', [InventoryItemController::class, 'restore']);
-        Route::patch('inventory-items/{inventoryItem}', [InventoryItemController::class, 'update']);
 
         // Dashboard Analytics
         Route::get('dashboard/financial-analytics', [DashboardController::class, 'financialAnalytics']);
@@ -119,18 +115,10 @@ Route::prefix('v1')->group(function () {
         Route::get('dashboard/patients', [DashboardController::class, 'patients']);
         Route::get('dashboard/cashflow', [DashboardController::class, 'cashflow']);
         Route::get('dashboard/expense-breakdown', [DashboardController::class, 'expenseBreakdown']);
-        Route::get('dashboard/component-stock', [DashboardController::class, 'componentStock']);
         Route::get('dashboard/invoice-status', [DashboardController::class, 'invoiceStatus']);
 
         // Expenses
         Route::get('expenses', [ExpenseController::class, 'index']);
-
-        // Catalog edits stay with the owner and receptionist.
-        Route::middleware(EnsureUserRole::using(UserRole::OWNER, UserRole::RECEPTIONIST))->group(function () {
-            Route::post('components', [ComponentController::class, 'store']);
-            Route::put('components/{component}', [ComponentController::class, 'update']);
-            Route::patch('components/{component}/toggle-active', [ComponentController::class, 'toggleActive']);
-        });
 
         // Treatments, invoices, and expense bills: owner, doctor, assistant, receptionist.
         Route::middleware(EnsureUserRole::using(UserRole::OWNER, UserRole::DOCTOR, UserRole::ASSISTANT, UserRole::RECEPTIONIST))->group(function () {
@@ -159,11 +147,11 @@ Route::prefix('v1')->group(function () {
         Route::middleware(EnsureUserRole::using(UserRole::OWNER))->group(function () {
             Route::post('clinic/logo', [ClinicBrandingController::class, 'updateLogo']);
             Route::patch('clinic/theme', [ClinicBrandingController::class, 'updateTheme']);
+            Route::put('clinic/working-hours', [ClinicWorkingHoursController::class, 'update']);
             Route::get('staff', [UserController::class, 'index']);
             Route::post('staff', [UserController::class, 'store']);
             Route::put('staff/{user}', [UserController::class, 'update']);
             Route::patch('staff/{user}/toggle-active', [UserController::class, 'toggleActive']);
-            Route::delete('components/{component}', [ComponentController::class, 'destroy']);
             Route::delete('treatment-templates/{treatmentTemplate}', [TreatmentTemplateController::class, 'destroy']);
             Route::delete('treatment-plans/{treatmentPlan}', [TreatmentPlanController::class, 'destroy']);
             Route::delete('invoices/{invoice}', [InvoiceController::class, 'destroy']);

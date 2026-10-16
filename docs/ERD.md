@@ -56,7 +56,6 @@ erDiagram
     TENANTS ||--o{ XRAY_ATTACHMENTS : stores
     TENANTS ||--o{ TOOTH_RECORDS : stores
     TENANTS ||--o{ AUDIT_LOGS : logs
-    TENANTS ||--o{ COMPONENTS : stocks
     TENANTS ||--o{ TREATMENT_TEMPLATES : catalogs
     TENANTS ||--o{ TREATMENT_PLANS : plans
     USERS ||--o{ APPOINTMENTS : "doctor of"
@@ -74,17 +73,12 @@ erDiagram
     SERVICES ||--o{ INVOICE_ITEMS : "priced from"
     PATIENTS ||--o{ TREATMENT_PLANS : plans
     PATIENTS ||--o{ PATIENT_TREATMENTS : receives
-    TREATMENT_TEMPLATES ||--o{ TREATMENT_TEMPLATE_STEPS : defines
-    TREATMENT_TEMPLATE_STEPS ||--o{ TREATMENT_TEMPLATE_COMPONENTS : uses
-    COMPONENTS ||--o{ TREATMENT_TEMPLATE_COMPONENTS : "priced from"
     TREATMENT_PLANS ||--o{ PATIENT_TREATMENTS : groups
     TREATMENT_TEMPLATES ||--o{ PATIENT_TREATMENTS : "version snapshot"
     PATIENT_TREATMENTS ||--o{ PATIENT_TREATMENT_TEETH : "applied to"
     PATIENT_TREATMENTS ||--o{ TREATMENT_SESSIONS : sessions
     PATIENT_TREATMENTS ||--o{ PATIENT_TREATMENTS : retreatment
     APPOINTMENTS ||--o{ TREATMENT_SESSIONS : "may include"
-    TREATMENT_SESSIONS ||--o{ TREATMENT_SESSION_STEPS : logs
-    TREATMENT_SESSIONS ||--o{ PATIENT_TREATMENT_COMPONENTS : consumes
     PATIENT_TREATMENTS ||--o{ INVOICE_ITEMS : "billed as"
 
     TENANTS {
@@ -211,45 +205,16 @@ erDiagram
         jsonb new_values
         timestamp created_at
     }
-    COMPONENTS {
-        uuid id PK
-        uuid tenant_id FK
-        string name_ar
-        string name_en
-        decimal default_price
-        string unit
-        decimal current_quantity
-        decimal minimum_threshold
-        boolean is_active
-    }
     TREATMENT_TEMPLATES {
         uuid id PK
         uuid tenant_id FK
         string name_ar
         string name_en
         string category
+        string scope
         decimal default_price
-        int version
-        boolean is_current
-        uuid root_template_id FK
-        uuid previous_version_id FK
+        int estimated_duration_minutes
         boolean is_active
-    }
-    TREATMENT_TEMPLATE_STEPS {
-        uuid id PK
-        uuid treatment_template_id FK
-        int step_order
-        string name_ar
-        boolean is_optional
-        boolean is_repeatable
-        int default_duration_minutes
-    }
-    TREATMENT_TEMPLATE_COMPONENTS {
-        uuid id PK
-        uuid treatment_template_step_id FK
-        uuid component_id FK
-        decimal quantity
-        decimal unit_price
     }
     TREATMENT_PLANS {
         uuid id PK
@@ -264,7 +229,7 @@ erDiagram
         uuid patient_id FK
         uuid treatment_plan_id FK
         uuid treatment_template_id FK
-        int treatment_template_version
+        string scope
         decimal agreed_price
         string clinical_status
         string financial_status
@@ -285,22 +250,7 @@ erDiagram
         uuid dentist_id FK
         timestamp session_date
         string status
-        boolean stock_applied
-    }
-    TREATMENT_SESSION_STEPS {
-        uuid id PK
-        uuid treatment_session_id FK
-        uuid treatment_template_step_id FK
-        string custom_step_name
-        int occurrence_number
-        string status
-    }
-    PATIENT_TREATMENT_COMPONENTS {
-        uuid id PK
-        uuid treatment_session_id FK
-        uuid component_id FK
-        decimal quantity
-        uuid inventory_item_id FK
+        json tooth_numbers
     }
 ```
 

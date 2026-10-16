@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api\V1;
 
+use App\Enums\InventoryItemListStatus;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\V1\Inventory\StoreInventoryItemRequest;
 use App\Http\Requests\V1\Inventory\UpdateInventoryItemRequest;
@@ -10,6 +11,7 @@ use App\Models\InventoryItem;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 
 class InventoryItemController extends Controller
 {
@@ -19,10 +21,28 @@ class InventoryItemController extends Controller
     {
         $this->authorize('viewAny', InventoryItem::class);
 
-        $query = InventoryItem::query()->where('is_active', true);
+        $request->validate([
+            'status' => ['sometimes', Rule::enum(InventoryItemListStatus::class)],
+        ]);
 
+        $status = $request->enum('status', InventoryItemListStatus::class)
+            ?? InventoryItemListStatus::Active;
+
+        if ($status !== InventoryItemListStatus::Active) {
+            $this->authorize('viewInactive', InventoryItem::class);
+        }
+
+        $query = InventoryItem::query();
+
+        // low_stock always scopes to active items only, regardless of status.
         if ($request->boolean('low_stock')) {
-            $query->lowStock();
+            $query->where('is_active', true)->lowStock();
+        } else {
+            match ($status) {
+                InventoryItemListStatus::Active => $query->where('is_active', true),
+                InventoryItemListStatus::Inactive => $query->where('is_active', false),
+                InventoryItemListStatus::All => null,
+            };
         }
 
         $perPage = max(1, min((int) $request->input('per_page', 15), 100));

@@ -22,7 +22,7 @@ Audience: frontend developers and anyone integrating with the API. Covers archit
 ```
 app/
   Enums/              # Value objects (UserRole, AppointmentStatus, etc.)
-  Exceptions/         # Custom exceptions (InvoiceHasPaymentsException, ServiceProtectedException)
+  Exceptions/         # Custom exceptions (InvoiceHasPaymentsException)
   Http/
     Controllers/
       Admin/          # Admin-only controllers (Tenant, Subscription)
@@ -56,15 +56,11 @@ routes/
 | **patients** | `id`, `tenant_id`, `full_name`, `phone`, `date_of_birth`, `gender`, `medical_history` (jsonb), `notes` |
 | **appointments** | `id`, `tenant_id`, `patient_id`, `doctor_id` (users), `created_by`, `scheduled_at`, `duration_minutes`, `status`, `appointment_type`, `notes` |
 | **tooth_records** | `id`, `tenant_id`, `patient_id`, `appointment_id`, `recorded_by`, `tooth_number` (FDI), `condition`, `treatment_status`, `notes` |
-| **components** | `id`, `tenant_id`, `name_ar`, `name_en`, `default_price`, `unit`, `current_quantity`, `minimum_threshold`, `inventory_item_id`, `is_active` |
-| **treatment_templates** | Versioned catalog: `version`, `is_current`, `root_template_id`, `previous_version_id`. Edits create a new version. |
-| **treatment_template_steps** | Ordered steps (`is_optional`, `is_repeatable`, `default_duration_minutes`) plus per-step components |
+| **treatment_templates** | Catalog: `scope`, `default_price`, `estimated_duration_minutes`, bilingual names; edits update in place. |
 | **treatment_plans** | Optional grouping of patient treatments (`draft`, `active`, `completed`, `cancelled`) |
 | **patient_treatments** | Independent `clinical_status`, `financial_status`, `consent_status`; `agreed_price` snapshot; optional `parent_treatment_id` for retreatment |
 | **patient_treatment_teeth** | Junction: 0, 1, or many FDI teeth per treatment |
 | **treatment_sessions** | Clinical visits (`scheduled`, `completed`, `cancelled`, `no_show`) optionally linked to an appointment |
-| **treatment_session_steps** | Done/skipped occurrences of a template step or a custom step (`occurrence_number`) |
-| **patient_treatment_components** | Materials copied onto a session at complete, then deducted from stock |
 | **services** | `id`, `tenant_id`, `name_ar`, `name_en`, `default_price`, `is_active`, `is_other` |
 | **invoices** | `id`, `tenant_id`, `patient_id`, `appointment_id`, `created_by`, `total_amount`, `status`, soft deletes |
 | **invoice_items** | `id`, `tenant_id`, `invoice_id`, `service_id`, `patient_treatment_id` (nullable), `description`, `price`, `quantity`, soft deletes |
@@ -77,10 +73,10 @@ routes/
 ### Important Relationship Notes
 
 - **`tooth_records` is append-only history**. The `odontogram` endpoint returns `{ records, treatment_status_by_tooth }`. `records` is the *latest* condition per tooth (window function); `treatment_status_by_tooth` is derived from patient treatments (failed > in_progress/on_hold > planned > completed; cancelled ignored). Conditions are never overwritten by treatments.
-- **Treatment tracking is five levels**: Template → optional Plan → Patient Treatment → Session → Session Step. Clinical, financial, consent, and appointment statuses are independent.
-- **Template versions are immutable**. Updating a current template inserts `version+1` with `is_current = true` and leaves existing patient treatments on the old id.
+- **Treatment tracking**: Template → optional Plan → Patient Treatment → Session. Clinical, financial, consent, and appointment statuses are independent.
+- **Templates** are edited in place; patient treatments keep their `treatment_template_id` snapshot.
 - **Billing**: creating a patient treatment snapshots `agreed_price` and opens one invoice line. Payments recompute `financial_status` without changing `clinical_status`.
-- **Stock**: completing a session copies the template-step components onto the session, then deducts quantity from `components` / inventory.
+- **Inventory** is manual via `inventory_items` and `inventory_transactions` (not tied to treatment completion).
 - **`invoice_items.service_id` is non-nullable** and references `services.id`. A fixed "Other" service row exists per tenant for ad-hoc charges.
 - **`users.email` is globally unique** across the entire system, not just per tenant.
 - **`inventory_items` has a unique constraint on `(tenant_id, name)`**.
@@ -307,16 +303,20 @@ Filters: `status`, `patient_id`, `date_from`, `date_to`.
 #### Inventory
 | Method | Path | Auth | Roles |
 |--------|------|------|-------|
-| GET | `/inventory-items` | Yes | doctor, receptionist, owner |
+| GET | `/inventory-items` | Yes | doctor, assistant, receptionist, owner |
 | POST | `/inventory-items` | Yes | owner only |
-| GET | `/inventory-items/{inventoryItem}` | Yes | doctor, receptionist, owner |
+| GET | `/inventory-items/{inventoryItem}` | Yes | doctor, assistant, receptionist, owner |
 | PUT/PATCH | `/inventory-items/{inventoryItem}` | Yes | owner only |
 | DELETE | `/inventory-items/{inventoryItem}` | Yes | owner only (deactivates) |
 | PATCH | `/inventory-items/{inventoryItem}/restore` | Yes | owner only |
-| GET | `/inventory-items/{item}/transactions` | Yes | doctor, receptionist, owner |
-| POST | `/inventory-items/{item}/transactions` | Yes | doctor, receptionist, owner |
+| GET | `/inventory-items/{item}/transactions` | Yes | doctor, assistant, receptionist, owner |
+| POST | `/inventory-items/{item}/transactions` | Yes | owner, doctor, receptionist (assistant: view only) |
 
-Inventory index filtering: `low_stock` (boolean).
+Inventory index query params:
+- `low_stock` (boolean): active items at or below `minimum_threshold` only.
+- `status` (optional): `active` (default), `inactive`, or `all`. Listing inactive or all items is **owner only**; other roles receive 403. Invalid values return 422. When `low_stock=1`, results are always active low-stock items regardless of `status`.
+
+Inventory item fields (create/update): `name`, `unit`, `cost_price` (required on create; cost per one unit), optional `expiry_date` (`Y-m-d`), optional `supplier`, optional `minimum_threshold`. Stock level changes only via transactions.
 
 ### Admin Routes (`/api/admin`)
 

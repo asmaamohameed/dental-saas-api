@@ -11,7 +11,6 @@ use App\Models\Tenant;
 use App\Models\User;
 use App\Support\Tenancy\CurrentTenant;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Support\Facades\Gate;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
 
@@ -147,28 +146,6 @@ class PaymentPolicyTest extends TestCase
         $this->putJson("/api/v1/invoices/{$invoice->id}/payments/{$payment->id}", [
             'amount' => 75,
         ])->assertForbidden();
-    }
-
-    /**
-     * Defense-in-depth check, bypassing route middleware entirely: even if a
-     * non-owner somehow reached PaymentPolicy::update()/delete() directly,
-     * the policy itself must still deny them (it does — both hard-return false).
-     */
-    public function test_policy_itself_denies_update_and_delete_for_non_owners_independent_of_middleware(): void
-    {
-        $receptionist = $this->userWithRole(UserRole::RECEPTIONIST);
-        $doctor = $this->userWithRole(UserRole::DOCTOR);
-        $invoice = $this->invoice();
-        $payment = Payment::factory()->create([
-            'tenant_id' => $this->tenant->id,
-            'invoice_id' => $invoice->id,
-            'received_by' => $receptionist->id,
-        ]);
-
-        $this->assertFalse(Gate::forUser($receptionist)->allows('update', $payment));
-        $this->assertFalse(Gate::forUser($receptionist)->allows('delete', $payment));
-        $this->assertFalse(Gate::forUser($doctor)->allows('update', $payment));
-        $this->assertFalse(Gate::forUser($doctor)->allows('delete', $payment));
     }
 
     public function test_owner_can_delete_a_payment(): void

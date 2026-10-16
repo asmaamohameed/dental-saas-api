@@ -33,10 +33,17 @@ class InventoryItemPolicyTest extends TestCase
         $this->assertTrue($this->policy->before($this->user(UserRole::OWNER), 'delete'));
     }
 
-    public function test_view_any_allows_doctor_and_receptionist_only(): void
+    public function test_view_any_allows_doctor_assistant_and_receptionist(): void
     {
         $this->assertTrue($this->policy->viewAny($this->user(UserRole::DOCTOR)));
+        $this->assertTrue($this->policy->viewAny($this->user(UserRole::ASSISTANT)));
         $this->assertTrue($this->policy->viewAny($this->user(UserRole::RECEPTIONIST)));
+    }
+
+    public function test_view_inactive_is_owner_only(): void
+    {
+        $this->assertTrue($this->policy->before($this->user(UserRole::OWNER), 'viewInactive'));
+        $this->assertFalse($this->policy->viewInactive($this->user(UserRole::DOCTOR)));
     }
 
     public function test_view_denies_cross_tenant_access(): void

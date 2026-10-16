@@ -59,4 +59,10 @@ class InventoryItemPolicy
         // Only the owner may restore items — granted via before().
         return false;
     }
+
+    public function viewInactive(User $user): bool
+    {
+        // Only the owner may list inactive or all items — granted via before().
+        return false;
+    }
 }

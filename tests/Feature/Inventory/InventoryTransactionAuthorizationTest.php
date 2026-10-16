@@ -79,6 +79,21 @@ class InventoryTransactionAuthorizationTest extends TestCase
         }
     }
 
+    public function test_assistant_cannot_record_inventory_transaction(): void
+    {
+        $this->actingAsRole(UserRole::ASSISTANT);
+
+        $this->postJson("/api/v1/inventory-items/{$this->item->id}/transactions", [
+            'inventory_item_id' => $this->item->id,
+            'type' => 'in',
+            'quantity' => '1.00',
+            'reason' => 'restock',
+        ])->assertForbidden();
+
+        $this->item->refresh();
+        $this->assertSame('20.00', $this->item->current_quantity);
+    }
+
     public function test_transaction_rejected_when_type_is_invalid(): void
     {
         $this->actingAsRole(UserRole::DOCTOR);

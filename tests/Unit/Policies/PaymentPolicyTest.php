@@ -2,21 +2,33 @@
 
 namespace Tests\Unit\Policies;
 
+use App\Enums\InvoiceStatus;
 use App\Enums\UserRole;
 use App\Models\Invoice;
+use App\Models\Patient;
 use App\Models\Payment;
+use App\Models\Tenant;
 use App\Models\User;
 use App\Policies\PaymentPolicy;
+use App\Support\Tenancy\CurrentTenant;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Gate;
 use Tests\TestCase;
 
 class PaymentPolicyTest extends TestCase
 {
+    use RefreshDatabase;
+
     private PaymentPolicy $policy;
+
+    private Tenant $tenant;
 
     protected function setUp(): void
     {
         parent::setUp();
         $this->policy = new PaymentPolicy;
+        $this->tenant = Tenant::factory()->create();
+        app(CurrentTenant::class)->set($this->tenant->id);
     }
 
     private function user(UserRole $role, string $tenantId = 'tenant-a'): User
@@ -69,5 +81,27 @@ class PaymentPolicyTest extends TestCase
         $assistant = $this->user(UserRole::ASSISTANT, 'tenant-a');
 
         $this->assertFalse($this->policy->viewAny($assistant, $this->invoice('tenant-a')));
+    }
+
+    public function test_policy_itself_denies_update_and_delete_for_non_owners_independent_of_middleware(): void
+    {
+        $receptionist = User::factory()->create(['tenant_id' => $this->tenant->id, 'role' => UserRole::RECEPTIONIST]);
+        $doctor = User::factory()->create(['tenant_id' => $this->tenant->id, 'role' => UserRole::DOCTOR]);
+        $invoice = Invoice::factory()->create([
+            'tenant_id' => $this->tenant->id,
+            'patient_id' => Patient::factory()->create(['tenant_id' => $this->tenant->id]),
+            'status' => InvoiceStatus::UNPAID,
+            'total_amount' => 200,
+        ]);
+        $payment = Payment::factory()->create([
+            'tenant_id' => $this->tenant->id,
+            'invoice_id' => $invoice->id,
+            'received_by' => $receptionist->id,
+        ]);
+
+        $this->assertFalse(Gate::forUser($receptionist)->allows('update', $payment));
+        $this->assertFalse(Gate::forUser($receptionist)->allows('delete', $payment));
+        $this->assertFalse(Gate::forUser($doctor)->allows('update', $payment));
+        $this->assertFalse(Gate::forUser($doctor)->allows('delete', $payment));
     }
 }

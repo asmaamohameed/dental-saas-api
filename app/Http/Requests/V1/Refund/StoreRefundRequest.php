@@ -44,20 +44,40 @@ class StoreRefundRequest extends FormRequest
     /**
      * @return array{reason_code: string, reason_note: string|null, method?: string}
      */
-    public function validated($key = null, $default = null): mixed
+    public function validated($key = null, $default = null): array
     {
-        $data = parent::validated($key, $default);
-
-        if (! is_array($data)) {
-            return $data;
+        if ($key !== null) {
+            throw new \BadMethodCallException('StoreRefundRequest::validated() does not accept a key.');
         }
 
-        if (($data['reason_code'] ?? null) !== RefundReasonCode::OTHER->value) {
-            $data['reason_note'] = null;
-        } else {
-            $data['reason_note'] = trim((string) ($data['reason_note'] ?? ''));
+        $data = parent::validated();
+
+        $reasonCode = $data['reason_code'] ?? null;
+        if (! is_string($reasonCode)) {
+            throw new \UnexpectedValueException('Validated refund reason_code must be a string.');
         }
 
-        return $data;
+        $reasonNote = null;
+        if ($reasonCode === RefundReasonCode::OTHER->value) {
+            $note = $data['reason_note'] ?? null;
+            $reasonNote = is_string($note) ? trim($note) : null;
+        }
+
+        if (! array_key_exists('method', $data) || $data['method'] === null) {
+            return [
+                'reason_code' => $reasonCode,
+                'reason_note' => $reasonNote,
+            ];
+        }
+
+        if (! is_string($data['method'])) {
+            throw new \UnexpectedValueException('Validated refund method must be a string.');
+        }
+
+        return [
+            'reason_code' => $reasonCode,
+            'reason_note' => $reasonNote,
+            'method' => $data['method'],
+        ];
     }
 }

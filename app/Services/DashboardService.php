@@ -418,9 +418,7 @@ class DashboardService
         foreach (RefundReasonCode::ordered() as $reason) {
             $breakdown[$reason->value] = round(
                 (float) $refunds->filter(
-                    fn (Refund $refund) => ($refund->reason_code instanceof RefundReasonCode
-                        ? $refund->reason_code->value
-                        : $refund->reason_code) === $reason->value
+                    fn (Refund $refund) => $refund->reason_code->value === $reason->value
                 )->sum('amount'),
                 2
             );

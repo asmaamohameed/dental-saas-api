@@ -4,7 +4,6 @@ namespace App\Http\Resources\V1;
 
 use App\Models\Invoice;
 use App\Models\InvoiceItem;
-use App\Models\Patient;
 use App\Models\Refund;
 use App\Models\User;
 use Illuminate\Http\Request;
@@ -21,11 +20,11 @@ class RefundResource extends JsonResource
             'id' => $this->id,
             'invoice_id' => $this->invoice_id,
             'amount' => (float) $this->amount,
-            'reason_code' => $this->reason_code instanceof \BackedEnum ? $this->reason_code->value : $this->reason_code,
+            'reason_code' => $this->reason_code->value,
             'reason_note' => $this->reason_note,
             'method' => $this->method,
             'refunded_by' => $this->refunded_by,
-            'refunded_at' => $this->refunded_at?->toISOString(),
+            'refunded_at' => $this->refunded_at->toISOString(),
             'refunded_by_user' => $this->whenLoaded('refundedBy', function (?User $user) {
                 if (! $user) {
                     return null;
@@ -42,10 +41,10 @@ class RefundResource extends JsonResource
 
                 return [
                     'id' => $invoice->id,
-                    'status' => $invoice->status instanceof \BackedEnum ? $invoice->status->value : $invoice->status,
+                    'status' => $invoice->status->value,
                     'total_amount' => (float) $invoice->total_amount,
                     'patient_id' => $invoice->patient_id,
-                    'patient_name' => $invoice->relationLoaded('patient') && $invoice->patient instanceof Patient
+                    'patient_name' => $invoice->relationLoaded('patient')
                         ? $invoice->patient->full_name
                         : null,
                     'treatment_name' => $treatment?->template?->name_en

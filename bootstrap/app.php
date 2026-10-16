@@ -3,9 +3,9 @@
 use App\Exceptions\InvoiceHasPaymentsException;
 use App\Exceptions\ServiceProtectedException;
 use App\Http\Middleware\ClearPlatformTenantContext;
+use App\Http\Middleware\EnsureClinicPermission;
 use App\Http\Middleware\EnsureTenantAccess;
 use App\Http\Middleware\EnsureUserIsAdmin;
-use App\Http\Middleware\EnsureClinicPermission;
 use App\Http\Middleware\EnsureUserRole;
 use App\Http\Middleware\MeasureRequestTime;
 use App\Http\Middleware\SetLocale;

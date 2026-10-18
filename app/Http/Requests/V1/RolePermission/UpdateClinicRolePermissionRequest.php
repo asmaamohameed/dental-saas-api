@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\V1\RolePermission;
 
+use App\Models\User;
 use App\Support\Roles\ClinicPermissionCatalog;
 use App\Support\Roles\ClinicPermissionGate;
 use Illuminate\Foundation\Http\FormRequest;
@@ -10,7 +11,9 @@ class UpdateClinicRolePermissionRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return true;
+        $user = $this->user();
+
+        return $user instanceof User && $user->isOwner();
     }
 
     public function rules(): array

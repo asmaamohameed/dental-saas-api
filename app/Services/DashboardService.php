@@ -7,8 +7,6 @@ use App\Enums\ExpenseCategory;
 use App\Enums\InvoiceStatus;
 use App\Enums\RefundReasonCode;
 use App\Models\Appointment;
-use App\Models\Component;
-use App\Models\ComponentStockMovement;
 use App\Models\Expense;
 use App\Models\Invoice;
 use App\Models\Payment;
@@ -112,8 +110,6 @@ class DashboardService
         $expensesMtd = Expense::whereBetween('expense_date', [$startMtd->format('Y-m-d'), $endMtd->format('Y-m-d')])->get();
         $getCategorySum = fn (ExpenseCategory $cat) => (float) $expensesMtd->filter(fn ($e) => ($e->category instanceof ExpenseCategory ? $e->category->value : $e->category) === $cat->value)->sum('amount');
 
-        $componentUsageMtd = $this->componentReductionValue($startMtd, $endMtd);
-
         $expensesBreakdownMtd = [
             'electricity' => $getCategorySum(ExpenseCategory::ELECTRICITY),
             'internet' => $getCategorySum(ExpenseCategory::INTERNET),
@@ -121,7 +117,6 @@ class DashboardService
             'water' => $getCategorySum(ExpenseCategory::WATER),
             'salary' => $getCategorySum(ExpenseCategory::SALARY),
             'lab' => $getCategorySum(ExpenseCategory::LAB),
-            'components' => $componentUsageMtd,
             'other' => $getCategorySum(ExpenseCategory::OTHER),
         ];
 
@@ -292,9 +287,8 @@ class DashboardService
         $water = $getSum(ExpenseCategory::WATER);
         $salary = $getSum(ExpenseCategory::SALARY);
         $lab = $getSum(ExpenseCategory::LAB);
-        $components = $this->componentReductionValue($start, $end);
         $other = $getSum(ExpenseCategory::OTHER);
-        $total = $elec + $net + $rent + $water + $salary + $lab + $components + $other;
+        $total = $elec + $net + $rent + $water + $salary + $lab + $other;
 
         return [
             'electricity' => $elec,
@@ -303,55 +297,8 @@ class DashboardService
             'water' => $water,
             'salary' => $salary,
             'lab' => $lab,
-            'components' => $components,
             'other' => $other,
             'total' => $total,
-        ];
-    }
-
-    private function componentReductionValue(Carbon $start, Carbon $end): float
-    {
-        $manualOut = ComponentStockMovement::query()
-            ->with('component')
-            ->where('type', 'out')
-            ->whereBetween('created_at', [$start, $end])
-            ->get()
-            ->sum(function (ComponentStockMovement $movement) {
-                $component = $movement->component;
-                $price = $component instanceof Component
-                    ? (float) ($component->default_price ?? 0)
-                    : 0.0;
-
-                return (int) $movement->quantity * $price;
-            });
-
-        return round($manualOut, 2);
-    }
-
-    public function getComponentStock(): array
-    {
-        $items = Component::query()
-            ->orderByDesc('current_quantity')
-            ->get()
-            ->map(function (Component $component) {
-                $quantity = (float) $component->current_quantity;
-                $unitPrice = (float) $component->default_price;
-
-                return [
-                    'name_ar' => $component->name_ar,
-                    'name_en' => $component->name_en,
-                    'quantity' => $quantity,
-                    'unit_price' => $unitPrice,
-                    'stock_value' => (int) round($quantity * $unitPrice),
-                    'is_low_stock' => (bool) $component->is_low_stock,
-                ];
-            })
-            ->sortByDesc('stock_value')
-            ->values();
-
-        return [
-            'total_stock_value' => (int) $items->sum('stock_value'),
-            'items' => $items->all(),
         ];
     }
 

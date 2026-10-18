@@ -10,6 +10,7 @@ class StoreExpenseRequest extends FormRequest
 {
     public function authorize(): bool
     {
+        // clinic.permission:expense:create on the route is the gate for this action.
         return true;
     }
 

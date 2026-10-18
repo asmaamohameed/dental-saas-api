@@ -22,7 +22,7 @@ Audience: frontend developers and anyone integrating with the API. Covers archit
 ```
 app/
   Enums/              # Value objects (UserRole, AppointmentStatus, etc.)
-  Exceptions/         # Custom exceptions (InvoiceHasPaymentsException, ServiceProtectedException)
+  Exceptions/         # Custom exceptions (InvoiceHasPaymentsException)
   Http/
     Controllers/
       Admin/          # Admin-only controllers (Tenant, Subscription)
@@ -56,15 +56,11 @@ routes/
 | **patients** | `id`, `tenant_id`, `full_name`, `phone`, `date_of_birth`, `gender`, `medical_history` (jsonb), `notes` |
 | **appointments** | `id`, `tenant_id`, `patient_id`, `doctor_id` (users), `created_by`, `scheduled_at`, `duration_minutes`, `status`, `appointment_type`, `notes` |
 | **tooth_records** | `id`, `tenant_id`, `patient_id`, `appointment_id`, `recorded_by`, `tooth_number` (FDI), `condition`, `treatment_status`, `notes` |
-| **components** | `id`, `tenant_id`, `name_ar`, `name_en`, `default_price`, `unit`, `current_quantity`, `minimum_threshold`, `inventory_item_id`, `is_active` |
-| **treatment_templates** | Versioned catalog: `version`, `is_current`, `root_template_id`, `previous_version_id`. Edits create a new version. |
-| **treatment_template_steps** | Ordered steps (`is_optional`, `is_repeatable`, `default_duration_minutes`) plus per-step components |
+| **treatment_templates** | Catalog: `scope`, `default_price`, `estimated_duration_minutes`, bilingual names; edits update in place. |
 | **treatment_plans** | Optional grouping of patient treatments (`draft`, `active`, `completed`, `cancelled`) |
 | **patient_treatments** | Independent `clinical_status`, `financial_status`, `consent_status`; `agreed_price` snapshot; optional `parent_treatment_id` for retreatment |
 | **patient_treatment_teeth** | Junction: 0, 1, or many FDI teeth per treatment |
 | **treatment_sessions** | Clinical visits (`scheduled`, `completed`, `cancelled`, `no_show`) optionally linked to an appointment |
-| **treatment_session_steps** | Done/skipped occurrences of a template step or a custom step (`occurrence_number`) |
-| **patient_treatment_components** | Materials copied onto a session at complete, then deducted from stock |
 | **services** | `id`, `tenant_id`, `name_ar`, `name_en`, `default_price`, `is_active`, `is_other` |
 | **invoices** | `id`, `tenant_id`, `patient_id`, `appointment_id`, `created_by`, `total_amount`, `status`, soft deletes |
 | **invoice_items** | `id`, `tenant_id`, `invoice_id`, `service_id`, `patient_treatment_id` (nullable), `description`, `price`, `quantity`, soft deletes |
@@ -77,10 +73,10 @@ routes/
 ### Important Relationship Notes
 
 - **`tooth_records` is append-only history**. The `odontogram` endpoint returns `{ records, treatment_status_by_tooth }`. `records` is the *latest* condition per tooth (window function); `treatment_status_by_tooth` is derived from patient treatments (failed > in_progress/on_hold > planned > completed; cancelled ignored). Conditions are never overwritten by treatments.
-- **Treatment tracking is five levels**: Template → optional Plan → Patient Treatment → Session → Session Step. Clinical, financial, consent, and appointment statuses are independent.
-- **Template versions are immutable**. Updating a current template inserts `version+1` with `is_current = true` and leaves existing patient treatments on the old id.
+- **Treatment tracking**: Template → optional Plan → Patient Treatment → Session. Clinical, financial, consent, and appointment statuses are independent.
+- **Templates** are edited in place; patient treatments keep their `treatment_template_id` snapshot.
 - **Billing**: creating a patient treatment snapshots `agreed_price` and opens one invoice line. Payments recompute `financial_status` without changing `clinical_status`.
-- **Stock**: completing a session copies the template-step components onto the session, then deducts quantity from `components` / inventory.
+- **Inventory** is manual via `inventory_items` and `inventory_transactions` (not tied to treatment completion).
 - **`invoice_items.service_id` is non-nullable** and references `services.id`. A fixed "Other" service row exists per tenant for ad-hoc charges.
 - **`users.email` is globally unique** across the entire system, not just per tenant.
 - **`inventory_items` has a unique constraint on `(tenant_id, name)`**.
@@ -125,6 +121,35 @@ Enums live in `app/Enums/UserRole.php`:
 - Route-level protection:
   - `auth:sanctum` + `tenant` middleware on all protected tenant routes.
   - `auth:sanctum` + `is_admin` middleware on all admin routes.
+  - `clinic.permission:{key}` (`EnsureClinicPermission`) checks `ClinicPermissionGate`. The signed-in user's role selects `ClinicPermissionCatalog::baseline()`. A saved `clinic_role_permissions` value replaces the baseline for that key only. Keys missing from an older saved row fall back to the baseline in `forUser()` and in the owner editor payload, so no backfill migration is required. The owner always keeps every key. `matrix()` is the platform-admin read-only view.
+
+### Clinic permission keys added for financial and treatment reads
+
+| Key | Owner | Doctor | Assistant | Receptionist | Routes |
+|-----|-------|--------|-----------|--------------|--------|
+| `dashboard:financials` | yes | no | no | yes | All seven `GET /dashboard/*` analytics routes: `financial-analytics`, `income-expense`, `patients`, `cashflow`, `expense-breakdown`, `invoice-status`, `refund-breakdown` |
+| `expense:view` | yes | no | no | yes | `GET /expenses` |
+| `expense:create` | yes | no | no | yes | `POST /expenses` |
+| `treatment:view` | yes | yes | yes | yes | `GET /treatment-templates`, `GET /treatment-templates/{id}` |
+| `patient:view` | yes | yes | yes | yes | `GET /patient-treatments`, `GET /patient-treatments/{id}`, `GET /patients/{patient}/treatment-plans` |
+
+`treatment:view` and `patient:view` already existed. `patient:view` now also gates those treatment reads. There is no treatment-session read route; session create and update stay on their existing role groups. Other treatment and invoice mutation routes are unchanged. `DELETE /expenses/{expense}` stays owner-only. `GET /doctors`, `GET /doctors/availability`, and `GET /clinic/working-hours` are unchanged. `inventory:alerts` and `reports:view` are unchanged.
+
+`PUT /role-permissions/{role}` is owner-only on the route and in `UpdateClinicRolePermissionRequest`. The save uses the signed-in user's tenant, so an owner cannot change another clinic's row. An unknown permission key returns 422.
+
+An owner cannot deactivate their own account with `PATCH /staff/{user}/toggle-active` (422, account stays active). Deactivating a different owner stays 403.
+
+`matrix()` matches `baseline()` for `dashboard:financials`, `expense:view`, `expense:create`, and `treatment:view`.
+
+### Audit actions for permissions and staff
+
+Same `audit_logs` row as clinic working hours. `user_id` is who made the change.
+
+| Action | When | Auditable | `old_values` / `new_values` |
+|--------|------|-----------|------------------------------|
+| `clinic_role_permissions_changed` | `PUT /role-permissions/{role}` | tenant | `role`, `permissions` |
+| `staff_role_changed` | staff update changes `role` | the staff user | `role` |
+| `staff_active_status_changed` | `PATCH /staff/{user}/toggle-active` | the staff user | `is_active` |
 
 ## 4. API Endpoints
 
@@ -224,8 +249,8 @@ The `odontogram` endpoint is not a flat list. It returns:
 #### Treatment templates
 | Method | Path | Auth | Roles |
 |--------|------|------|-------|
-| GET | `/treatment-templates` | Yes | doctor, receptionist, owner |
-| GET | `/treatment-templates/{template}` | Yes | doctor, receptionist, owner |
+| GET | `/treatment-templates` | Yes | `treatment:view` (all roles by default) |
+| GET | `/treatment-templates/{template}` | Yes | `treatment:view` (all roles by default) |
 | GET | `/treatment-templates/{template}/versions` | Yes | doctor, receptionist, owner |
 | POST | `/treatment-templates` | Yes | owner, receptionist |
 | PUT/PATCH | `/treatment-templates/{template}` | Yes | owner, receptionist |
@@ -237,7 +262,7 @@ PUT creates a new version. DELETE deactivates if any patient treatment in the ve
 #### Treatment plans
 | Method | Path | Auth | Roles |
 |--------|------|------|-------|
-| GET | `/patients/{patient}/treatment-plans` | Yes | doctor, receptionist, owner |
+| GET | `/patients/{patient}/treatment-plans` | Yes | `patient:view` (all roles by default) |
 | POST | `/patients/{patient}/treatment-plans` | Yes | owner, receptionist |
 | PUT | `/treatment-plans/{plan}` | Yes | owner, receptionist |
 | DELETE | `/treatment-plans/{plan}` | Yes | owner only |
@@ -245,7 +270,8 @@ PUT creates a new version. DELETE deactivates if any patient treatment in the ve
 #### Patient treatments & sessions
 | Method | Path | Auth | Roles |
 |--------|------|------|-------|
-| GET | `/patient-treatments` | Yes | doctor, receptionist, owner |
+| GET | `/patient-treatments` | Yes | `patient:view` (all roles by default) |
+| GET | `/patient-treatments/{treatment}` | Yes | `patient:view` (all roles by default) |
 | GET | `/patients/{patient}/treatments` | Yes | doctor, receptionist, owner |
 | GET | `/patients/{patient}/next-treatment` | Yes | doctor, receptionist, owner |
 | POST | `/patient-treatments` | Yes | owner, receptionist |
@@ -307,16 +333,21 @@ Filters: `status`, `patient_id`, `date_from`, `date_to`.
 #### Inventory
 | Method | Path | Auth | Roles |
 |--------|------|------|-------|
-| GET | `/inventory-items` | Yes | doctor, receptionist, owner |
+| GET | `/inventory-items` | Yes | doctor, assistant, receptionist, owner |
 | POST | `/inventory-items` | Yes | owner only |
-| GET | `/inventory-items/{inventoryItem}` | Yes | doctor, receptionist, owner |
+| GET | `/inventory-items/{inventoryItem}` | Yes | doctor, assistant, receptionist, owner |
 | PUT/PATCH | `/inventory-items/{inventoryItem}` | Yes | owner only |
 | DELETE | `/inventory-items/{inventoryItem}` | Yes | owner only (deactivates) |
 | PATCH | `/inventory-items/{inventoryItem}/restore` | Yes | owner only |
-| GET | `/inventory-items/{item}/transactions` | Yes | doctor, receptionist, owner |
-| POST | `/inventory-items/{item}/transactions` | Yes | doctor, receptionist, owner |
+| GET | `/inventory-items/{item}/transactions` | Yes | doctor, assistant, receptionist, owner |
+| POST | `/inventory-items/{item}/transactions` | Yes | owner, doctor, receptionist (assistant: view only) |
 
-Inventory index filtering: `low_stock` (boolean).
+Inventory index query params:
+- `low_stock` (boolean): active items at or below `minimum_threshold` only.
+- `expiry` (optional): `expiring`, `expired`, or `alert` (`alert` = expired ∪ expiring soon). Active items with `current_quantity > 0` and a non-null `expiry_date` only; invalid values return 422. When set, results are ordered by `expiry_date` ascending (expired first). Ignores `status` (same as `low_stock`). When both `low_stock=1` and `expiry` are present, both filters apply (AND).
+- `status` (optional): `active` (default), `inactive`, or `all`. Listing inactive or all items is **owner only**; other roles receive 403. Invalid values return 422. When `low_stock=1` or `expiry` is set, results are always scoped to active items regardless of `status`.
+
+Inventory item fields (create/update): `name`, `unit`, `cost_price` (required on create; cost per one unit), optional `expiry_date` (`Y-m-d`), optional `supplier`, optional `minimum_threshold`. Stock level changes only via transactions.
 
 ### Admin Routes (`/api/admin`)
 
@@ -483,7 +514,7 @@ POST /api/v1/inventory-items/{item}/transactions
   - Tooth treatment status: `planned`, `in_progress`, `completed`
   - Inventory transaction type: `in`, `out`
   - Subscription status: `trial`, `active`, `expired`
-  - Audit action: `created`, `updated`, `deleted`, `restored`
+  - Audit action: `created`, `updated`, `deleted`, `restored`, `treatment_tooth_price_changed`, `treatment_template_default_price_changed`, `clinic_working_hours_changed`, `clinic_role_permissions_changed`, `staff_role_changed`, `staff_active_status_changed`
   - Payment method: `cash`, `card`, `transfer`, `other`
 - **Locale precedence**:
   1. Authenticated user's `locale` preference.
@@ -511,6 +542,7 @@ POST /api/v1/inventory-items/{item}/transactions
 
 - Automatic for models using the `Auditable` trait: Patient, Appointment, ToothRecord, Invoice, Payment, XrayAttachment.
 - Not automatic for Service, InventoryItem, InventoryTransaction, Subscription, Tenant (no `Auditable` trait).
+- Explicit actions, same shape as working-hours changes: `clinic_role_permissions_changed`, `staff_role_changed`, `staff_active_status_changed`. The clinic audit screen should label these; unknown actions currently render as the raw action string.
 - Audit log entries are not exposed via a dedicated controller endpoint in the current API. They are available internally.
 
 ### Inventory Specifics
@@ -518,6 +550,8 @@ POST /api/v1/inventory-items/{item}/transactions
 - `InventoryItem` has `is_active`. The index endpoint **only returns active items**.
 - Transactions on inactive items are rejected with a 422 error.
 - `is_low_stock` is computed in the API resource: true when `current_quantity <= minimum_threshold`.
+- Expiry fields use the clinic timezone (`config/clinic.php` → `CLINIC_TIMEZONE`, default `Africa/Cairo`). `is_expired`, `is_expiring_soon`, and `days_to_expiry` are computed on every item with an `expiry_date`. The expiring-soon window is `config/inventory.php` → `INVENTORY_EXPIRY_WARNING_DAYS` (default 30).
+- Permission `inventory:alerts` (defaults: owner and receptionist) controls dashboard inventory alert visibility in the web app only; listing inventory still requires `inventory:view`.
 
 ### Invoice & Payment Business Rules
 

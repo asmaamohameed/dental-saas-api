@@ -28,7 +28,7 @@ class AppointmentValidationTest extends TestCase
         $this->postJson('/api/v1/appointments', [
             'patient_id' => $foreignPatient->id,
             'doctor_id' => $doctor->id,
-            'scheduled_at' => now()->addDay()->toDateTimeString(),
+            'scheduled_at' => $this->scheduledAtWithinClinicHours(),
             'duration_minutes' => 30,
         ])
             ->assertUnprocessable()
@@ -50,7 +50,7 @@ class AppointmentValidationTest extends TestCase
         $this->postJson('/api/v1/appointments', [
             'patient_id' => $patient->id,
             'doctor_id' => $foreignDoctor->id,
-            'scheduled_at' => now()->addDay()->toDateTimeString(),
+            'scheduled_at' => $this->scheduledAtWithinClinicHours(),
             'duration_minutes' => 30,
         ])
             ->assertUnprocessable()
@@ -69,7 +69,7 @@ class AppointmentValidationTest extends TestCase
         $this->postJson('/api/v1/appointments', [
             'patient_id' => $patient->id,
             'doctor_id' => $receptionist->id,
-            'scheduled_at' => now()->addDay()->toDateTimeString(),
+            'scheduled_at' => $this->scheduledAtWithinClinicHours(),
             'duration_minutes' => 30,
         ])
             ->assertUnprocessable()
@@ -88,7 +88,7 @@ class AppointmentValidationTest extends TestCase
         $this->postJson('/api/v1/appointments', [
             'patient_id' => $patient->id,
             'doctor_id' => $doctor->id,
-            'scheduled_at' => now()->addDay()->toDateTimeString(),
+            'scheduled_at' => $this->scheduledAtWithinClinicHours(),
             'duration_minutes' => 30,
             'appointment_type' => AppointmentType::CONSULTATION->value,
         ])
@@ -125,7 +125,7 @@ class AppointmentValidationTest extends TestCase
         $this->postJson('/api/v1/appointments', [
             'patient_id' => $patient->id,
             'doctor_id' => $doctor->id,
-            'scheduled_at' => now()->addDay()->toDateTimeString(),
+            'scheduled_at' => $this->scheduledAtWithinClinicHours(),
             'duration_minutes' => 30,
             'appointment_type' => AppointmentType::CONSULTATION->value,
             'patient_treatment_ids' => [$treatmentId],
@@ -146,7 +146,7 @@ class AppointmentValidationTest extends TestCase
         $this->postJson('/api/v1/appointments', [
             'patient_id' => $patient->id,
             'doctor_id' => $doctor->id,
-            'scheduled_at' => now()->addDay()->toDateTimeString(),
+            'scheduled_at' => $this->scheduledAtWithinClinicHours(),
             'duration_minutes' => 30,
             'fee' => 150.75,
         ])

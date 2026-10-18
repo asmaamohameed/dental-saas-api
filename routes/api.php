@@ -11,7 +11,7 @@ use App\Http\Controllers\Api\V1\Auth\ProfileController;
 use App\Http\Controllers\Api\V1\Auth\ResetPasswordController;
 use App\Http\Controllers\Api\V1\ClinicBrandingController;
 use App\Http\Controllers\Api\V1\ClinicRolePermissionController;
-use App\Http\Controllers\Api\V1\ComponentController;
+use App\Http\Controllers\Api\V1\ClinicWorkingHoursController;
 use App\Http\Controllers\Api\V1\DashboardController;
 use App\Http\Controllers\Api\V1\ExpenseController;
 use App\Http\Controllers\Api\V1\InventoryItemController;
@@ -43,6 +43,8 @@ Route::prefix('v1')->group(function () {
         // Audit Logs (Owner only)
         Route::get('audit-logs', [AuditLogController::class, 'index']);
 
+        Route::get('clinic/working-hours', [ClinicWorkingHoursController::class, 'show']);
+
         // Profile & Auth
         Route::prefix('auth')->group(function () {
             Route::post('logout', LogoutController::class);
@@ -54,7 +56,6 @@ Route::prefix('v1')->group(function () {
 
         // Patients API Resource
         Route::apiResource('patients', PatientController::class);
-        Route::get('/patients/search', [PatientController::class, 'search']);
 
         // Tooth Records
         Route::get('patients/{patient}/tooth-records', [ToothRecordController::class, 'index']);
@@ -62,7 +63,7 @@ Route::prefix('v1')->group(function () {
         Route::get('patients/{patient}/odontogram', [ToothRecordController::class, 'odontogram']);
         Route::get('patients/{patient}/treatments', [PatientTreatmentController::class, 'forPatient']);
         Route::get('patients/{patient}/next-treatment', [PatientTreatmentController::class, 'next']);
-        Route::get('patients/{patient}/treatment-plans', [TreatmentPlanController::class, 'index']);
+        Route::get('patients/{patient}/treatment-plans', [TreatmentPlanController::class, 'index'])->middleware('clinic.permission:patient:view');
         Route::get('patients/{patient}/xray-attachments', [XrayAttachmentController::class, 'index']);
         Route::post('patients/{patient}/xray-attachments', [XrayAttachmentController::class, 'store']);
         Route::delete('patients/{patient}/xray-attachments/{xray}', [XrayAttachmentController::class, 'destroy']);
@@ -75,16 +76,14 @@ Route::prefix('v1')->group(function () {
         // Read-only endpoints (owner, receptionist, doctor)
         Route::get('doctors/availability', [UserController::class, 'doctorAvailability']);
         Route::get('doctors', [UserController::class, 'doctors']);
-        Route::get('components/low-stock', [ComponentController::class, 'lowStock']);
-        Route::post('components/{component}/stock', [ComponentController::class, 'adjustStock']);
-        Route::get('components/{component}/movements', [ComponentController::class, 'movements']);
-        Route::apiResource('components', ComponentController::class)->only(['index', 'show']);
         Route::apiResource('treatment-templates', TreatmentTemplateController::class)
             ->parameters(['treatment-templates' => 'treatmentTemplate'])
-            ->only(['index', 'show']);
+            ->only(['index', 'show'])
+            ->middleware('clinic.permission:treatment:view');
         Route::apiResource('patient-treatments', PatientTreatmentController::class)
             ->parameters(['patient-treatments' => 'patientTreatment'])
-            ->only(['index', 'show']);
+            ->only(['index', 'show'])
+            ->middleware('clinic.permission:patient:view');
         Route::get('patient-treatments/{patientTreatment}/invoice-summary', [PatientTreatmentController::class, 'invoiceSummary']);
 
         Route::middleware(EnsureUserRole::using(UserRole::OWNER, UserRole::DOCTOR))->group(function () {
@@ -110,32 +109,25 @@ Route::prefix('v1')->group(function () {
 
         // Inventory
         Route::apiResource('inventory-items', InventoryItemController::class)->parameters(['inventory-items' => 'inventoryItem']);
-        Route::get('inventory-items/{item}/transactions', [InventoryTransactionController::class, 'index']);
-        Route::post('inventory-items/{item}/transactions', [InventoryTransactionController::class, 'store']);
+        Route::get('inventory-items/{inventoryItem}/transactions', [InventoryTransactionController::class, 'index']);
+        Route::post('inventory-items/{inventoryItem}/transactions', [InventoryTransactionController::class, 'store']);
         Route::patch('inventory-items/{inventoryItem}/restore', [InventoryItemController::class, 'restore']);
-        Route::patch('inventory-items/{inventoryItem}', [InventoryItemController::class, 'update']);
 
         // Dashboard Analytics
-        Route::get('dashboard/financial-analytics', [DashboardController::class, 'financialAnalytics']);
-        Route::get('dashboard/income-expense', [DashboardController::class, 'incomeExpense']);
-        Route::get('dashboard/patients', [DashboardController::class, 'patients']);
-        Route::get('dashboard/cashflow', [DashboardController::class, 'cashflow']);
-        Route::get('dashboard/expense-breakdown', [DashboardController::class, 'expenseBreakdown']);
-        Route::get('dashboard/component-stock', [DashboardController::class, 'componentStock']);
-        Route::get('dashboard/invoice-status', [DashboardController::class, 'invoiceStatus']);
-        Route::get('dashboard/refund-breakdown', [DashboardController::class, 'refundBreakdown']);
-
-        // Expenses
-        Route::get('expenses', [ExpenseController::class, 'index']);
-
-        // Catalog edits stay with the owner and receptionist.
-        Route::middleware(EnsureUserRole::using(UserRole::OWNER, UserRole::RECEPTIONIST))->group(function () {
-            Route::post('components', [ComponentController::class, 'store']);
-            Route::put('components/{component}', [ComponentController::class, 'update']);
-            Route::patch('components/{component}/toggle-active', [ComponentController::class, 'toggleActive']);
+        Route::middleware('clinic.permission:dashboard:financials')->group(function () {
+            Route::get('dashboard/financial-analytics', [DashboardController::class, 'financialAnalytics']);
+            Route::get('dashboard/income-expense', [DashboardController::class, 'incomeExpense']);
+            Route::get('dashboard/patients', [DashboardController::class, 'patients']);
+            Route::get('dashboard/cashflow', [DashboardController::class, 'cashflow']);
+            Route::get('dashboard/expense-breakdown', [DashboardController::class, 'expenseBreakdown']);
+            Route::get('dashboard/invoice-status', [DashboardController::class, 'invoiceStatus']);
+            Route::get('dashboard/refund-breakdown', [DashboardController::class, 'refundBreakdown']);
         });
 
-        // Treatments, invoices, and expense bills: owner, doctor, assistant, receptionist.
+        Route::get('expenses', [ExpenseController::class, 'index'])->middleware('clinic.permission:expense:view');
+        Route::post('expenses', [ExpenseController::class, 'store'])->middleware('clinic.permission:expense:create');
+
+        // Treatments and invoices: owner, doctor, assistant, receptionist.
         Route::middleware(EnsureUserRole::using(UserRole::OWNER, UserRole::DOCTOR, UserRole::ASSISTANT, UserRole::RECEPTIONIST))->group(function () {
             Route::post('treatment-templates', [TreatmentTemplateController::class, 'store'])->middleware('clinic.permission:treatment:create');
             Route::put('treatment-templates/{treatmentTemplate}', [TreatmentTemplateController::class, 'update'])->middleware('clinic.permission:treatment:edit');
@@ -155,7 +147,6 @@ Route::prefix('v1')->group(function () {
             Route::delete('invoices/{invoice}/items/{item}', [InvoiceItemController::class, 'destroy']);
 
             Route::post('invoices/{invoice}/payments', [PaymentController::class, 'store'])->middleware('clinic.permission:payment:create');
-            Route::post('expenses', [ExpenseController::class, 'store']);
         });
 
         Route::middleware('clinic.permission:invoice:refund')->group(function () {
@@ -181,7 +172,7 @@ Route::prefix('v1')->group(function () {
         Route::middleware(EnsureUserRole::using(UserRole::OWNER))->group(function () {
             Route::get('role-permissions', [ClinicRolePermissionController::class, 'index']);
             Route::put('role-permissions/{role}', [ClinicRolePermissionController::class, 'update']);
-            Route::delete('components/{component}', [ComponentController::class, 'destroy']);
+            Route::put('clinic/working-hours', [ClinicWorkingHoursController::class, 'update']);
             Route::delete('treatment-plans/{treatmentPlan}', [TreatmentPlanController::class, 'destroy']);
             Route::delete('expenses/{expense}', [ExpenseController::class, 'destroy']);
         });

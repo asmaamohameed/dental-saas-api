@@ -19,6 +19,9 @@ class InventoryItemFactory extends Factory
             'tenant_id' => Tenant::factory(),
             'name' => fake()->unique()->words(3, true),
             'unit' => fake()->randomElement(['box', 'piece', 'pack', 'bottle', 'tube']),
+            'cost_price' => fake()->randomFloat(2, 1, 500),
+            'expiry_date' => fake()->optional(0.3)->dateTimeBetween('+1 month', '+2 years')?->format('Y-m-d'),
+            'supplier' => fake()->optional(0.5)->company(),
             'minimum_threshold' => 10,
             'is_active' => true,
         ];

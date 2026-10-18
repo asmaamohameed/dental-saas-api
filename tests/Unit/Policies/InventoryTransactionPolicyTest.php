@@ -57,9 +57,13 @@ class InventoryTransactionPolicyTest extends TestCase
 
     public function test_create_requires_doctor_or_receptionist_and_same_tenant(): void
     {
+        $doctor = $this->user(UserRole::DOCTOR, 'tenant-a');
         $receptionist = $this->user(UserRole::RECEPTIONIST, 'tenant-a');
+        $assistant = $this->user(UserRole::ASSISTANT, 'tenant-a');
 
+        $this->assertTrue($this->policy->create($doctor, $this->item('tenant-a')));
         $this->assertTrue($this->policy->create($receptionist, $this->item('tenant-a')));
+        $this->assertFalse($this->policy->create($assistant, $this->item('tenant-a')));
         $this->assertFalse($this->policy->create($receptionist, $this->item('tenant-b')));
     }
 }

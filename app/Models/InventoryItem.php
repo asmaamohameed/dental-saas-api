@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Models\Concerns\BelongsToTenant;
+use App\Support\Inventory\InventoryExpiry;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
@@ -16,6 +17,9 @@ use Illuminate\Support\Carbon;
  * @property string $tenant_id
  * @property string $name
  * @property string $unit
+ * @property string $cost_price
+ * @property Carbon|null $expiry_date
+ * @property string|null $supplier
  * @property string $current_quantity
  * @property string|null $minimum_threshold
  * @property bool $is_active
@@ -30,6 +34,9 @@ class InventoryItem extends Model
     protected $fillable = [
         'name',
         'unit',
+        'cost_price',
+        'expiry_date',
+        'supplier',
         'minimum_threshold',
         'is_active',
     ];
@@ -38,6 +45,8 @@ class InventoryItem extends Model
     {
         return [
             'current_quantity' => 'decimal:2',
+            'cost_price' => 'decimal:2',
+            'expiry_date' => 'date',
             'minimum_threshold' => 'decimal:2',
             'is_active' => 'boolean',
         ];
@@ -49,15 +58,43 @@ class InventoryItem extends Model
         return $this->hasMany(InventoryTransaction::class);
     }
 
-    public function components(): HasMany
-    {
-        return $this->hasMany(Component::class);
-    }
-
     // Scopes
     public function scopeLowStock(Builder $query): Builder
     {
         return $query->whereNotNull('minimum_threshold')
             ->whereColumn('current_quantity', '<=', 'minimum_threshold');
+    }
+
+    public function scopeExpired(Builder $query): Builder
+    {
+        $today = InventoryExpiry::todayDateString();
+
+        return $query->whereNotNull('expiry_date')
+            ->whereDate('expiry_date', '<', $today);
+    }
+
+    public function scopeExpiringSoon(Builder $query): Builder
+    {
+        $today = InventoryExpiry::todayDateString();
+        $end = InventoryExpiry::warningEndDateString();
+
+        return $query->whereNotNull('expiry_date')
+            ->whereDate('expiry_date', '>=', $today)
+            ->whereDate('expiry_date', '<=', $end);
+    }
+
+    public function scopeExpiryAlert(Builder $query): Builder
+    {
+        $today = InventoryExpiry::todayDateString();
+        $end = InventoryExpiry::warningEndDateString();
+
+        return $query->whereNotNull('expiry_date')
+            ->where(function (Builder $inner) use ($today, $end) {
+                $inner->whereDate('expiry_date', '<', $today)
+                    ->orWhere(function (Builder $soon) use ($today, $end) {
+                        $soon->whereDate('expiry_date', '>=', $today)
+                            ->whereDate('expiry_date', '<=', $end);
+                    });
+            });
     }
 }

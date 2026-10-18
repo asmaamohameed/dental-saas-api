@@ -7,7 +7,7 @@ use App\Enums\TreatmentScope;
 use App\Models\TreatmentTemplate;
 use App\Support\TreatmentTemplateName;
 
-class DefaultTreatmentServicesProvisioner
+class DefaultTreatmentTemplatesProvisioner
 {
     /**
      * @return array<string, TreatmentTemplate>

@@ -58,4 +58,10 @@ class InventoryItemPolicy
         return $user->tenant_id === $item->tenant_id
             && $user->clinicCan('inventory:restore', false);
     }
+
+    public function viewInactive(User $user): bool
+    {
+        // Only the owner may list inactive or all items — granted via before().
+        return false;
+    }
 }

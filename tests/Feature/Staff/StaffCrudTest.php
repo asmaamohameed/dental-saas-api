@@ -2,7 +2,9 @@
 
 namespace Tests\Feature\Staff;
 
+use App\Enums\AuditAction;
 use App\Enums\UserRole;
+use App\Models\AuditLog;
 use App\Models\Tenant;
 use App\Models\User;
 use App\Support\Tenancy\CurrentTenant;
@@ -249,6 +251,52 @@ class StaffCrudTest extends TestCase
 
         $response->assertOk()->assertJsonPath('data.is_active', false);
         $this->assertFalse($doctor->fresh()->is_active);
+
+        $log = AuditLog::query()
+            ->where('action', AuditAction::STAFF_ACTIVE_STATUS_CHANGED)
+            ->where('auditable_id', $doctor->id)
+            ->first();
+
+        $this->assertNotNull($log);
+        $this->assertSame($this->owner->id, $log->user_id);
+        $this->assertTrue($log->old_values['is_active']);
+        $this->assertFalse($log->new_values['is_active']);
+    }
+
+    public function test_owner_cannot_deactivate_themselves(): void
+    {
+        Sanctum::actingAs($this->owner, ['*']);
+
+        $this->patchJson("/api/v1/staff/{$this->owner->id}/toggle-active")
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('is_active');
+
+        $this->assertTrue($this->owner->fresh()->is_active);
+        $this->assertDatabaseMissing('audit_logs', [
+            'action' => AuditAction::STAFF_ACTIVE_STATUS_CHANGED->value,
+            'auditable_id' => $this->owner->id,
+        ]);
+    }
+
+    public function test_owner_role_change_is_audited(): void
+    {
+        $doctor = User::factory()->doctor()->for($this->tenant)->create();
+
+        Sanctum::actingAs($this->owner, ['*']);
+
+        $this->putJson("/api/v1/staff/{$doctor->id}", [
+            'role' => UserRole::RECEPTIONIST->value,
+        ])->assertOk()->assertJsonPath('data.role', UserRole::RECEPTIONIST->value);
+
+        $log = AuditLog::query()
+            ->where('action', AuditAction::STAFF_ROLE_CHANGED)
+            ->where('auditable_id', $doctor->id)
+            ->first();
+
+        $this->assertNotNull($log);
+        $this->assertSame($this->owner->id, $log->user_id);
+        $this->assertSame(UserRole::DOCTOR->value, $log->old_values['role']);
+        $this->assertSame(UserRole::RECEPTIONIST->value, $log->new_values['role']);
     }
 
     public function test_owner_cannot_toggle_another_owner_active_status(): void

@@ -2,13 +2,17 @@
 
 namespace App\Services;
 
+use App\Enums\AuditAction;
 use App\Enums\UserRole;
+use App\Models\AuditLog;
 use App\Models\User;
 use App\Support\Roles\ClinicMembershipSync;
 use App\Support\Tenancy\CurrentTenant;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Validation\ValidationException;
 
 class UserService
 {
@@ -95,6 +99,7 @@ class UserService
 
     public function update(User $user, array $data): User
     {
+        $previousRole = $user->role?->value;
         $roleChanged = array_key_exists('role', $data);
 
         if ($user->isOwner()) {
@@ -113,10 +118,21 @@ class UserService
         $user->update($data);
 
         if ($roleChanged) {
-            ClinicMembershipSync::replaceLegacyRole($user->fresh());
+            ClinicMembershipSync::replaceLegacyRole($user->fresh() ?? $user);
         }
 
-        return $user->fresh();
+        $fresh = $user->fresh() ?? $user;
+
+        if ($roleChanged && $previousRole !== $fresh->role?->value) {
+            $this->writeStaffAudit(
+                $fresh,
+                AuditAction::STAFF_ROLE_CHANGED,
+                ['role' => $previousRole],
+                ['role' => $fresh->role?->value],
+            );
+        }
+
+        return $fresh;
     }
 
     /**
@@ -139,8 +155,48 @@ class UserService
 
     public function toggleActive(User $user): User
     {
-        $user->update(['is_active' => ! $user->is_active]);
+        $actor = Auth::user();
 
-        return $user->fresh();
+        if ($actor instanceof User && $actor->id === $user->id && $user->isOwner() && $user->is_active) {
+            throw ValidationException::withMessages([
+                'is_active' => 'The clinic owner cannot deactivate their own account.',
+            ]);
+        }
+
+        $wasActive = $user->is_active;
+        $user->update(['is_active' => ! $wasActive]);
+        $fresh = $user->fresh() ?? $user;
+
+        $this->writeStaffAudit(
+            $fresh,
+            AuditAction::STAFF_ACTIVE_STATUS_CHANGED,
+            ['is_active' => $wasActive],
+            ['is_active' => $fresh->is_active],
+        );
+
+        return $fresh;
+    }
+
+    /**
+     * @param  array<string, mixed>  $oldValues
+     * @param  array<string, mixed>  $newValues
+     */
+    private function writeStaffAudit(User $staff, AuditAction $action, array $oldValues, array $newValues): void
+    {
+        $actor = Auth::user();
+
+        if (! $actor instanceof User) {
+            return;
+        }
+
+        AuditLog::query()->create([
+            'tenant_id' => $staff->tenant_id,
+            'user_id' => $actor->id,
+            'action' => $action,
+            'auditable_type' => $staff->getMorphClass(),
+            'auditable_id' => $staff->id,
+            'old_values' => $oldValues,
+            'new_values' => $newValues,
+        ]);
     }
 }

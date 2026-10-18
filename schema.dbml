@@ -188,26 +188,12 @@ Table inventory_items {
   tenant_id uuid [ref: > tenants.id]
   name varchar
   unit varchar
+  cost_price decimal
+  expiry_date date
+  supplier varchar
   current_quantity decimal
   minimum_threshold decimal
   is_active boolean
-}
-
-Table components {
-  id uuid [pk]
-  tenant_id uuid [ref: > tenants.id]
-  name_ar varchar
-  name_en varchar
-  default_price decimal
-  unit varchar
-  current_quantity decimal
-  minimum_threshold decimal
-  inventory_item_id uuid [ref: > inventory_items.id]
-  is_active boolean
-
-  indexes {
-    (tenant_id, is_active) [name: 'idx_components_tenant_active']
-  }
 }
 
 Table treatment_templates {
@@ -246,16 +232,6 @@ Table treatment_template_steps {
   is_optional boolean
   is_repeatable boolean
   default_duration_minutes int
-}
-
-Table treatment_template_components {
-  id uuid [pk]
-  tenant_id uuid [ref: > tenants.id]
-  treatment_template_step_id uuid [ref: > treatment_template_steps.id]
-  component_id uuid [ref: > components.id]
-  quantity decimal
-  free_quantity decimal
-  unit_price decimal
 }
 
 Table treatment_plans {
@@ -325,7 +301,6 @@ Table treatment_sessions {
   session_date timestamp
   status varchar [note: 'scheduled, completed, cancelled, no_show']
   notes text
-  stock_applied boolean
   created_at timestamp
 
   indexes {
@@ -346,15 +321,3 @@ Table treatment_session_steps {
   notes text
 }
 
-Table patient_treatment_components {
-  id uuid [pk]
-  tenant_id uuid [ref: > tenants.id]
-  treatment_session_id uuid [ref: > treatment_sessions.id]
-  component_id uuid [ref: > components.id]
-  name varchar
-  unit_price decimal
-  quantity decimal
-  free_quantity decimal
-  unit varchar
-  inventory_item_id uuid [ref: > inventory_items.id]
-}

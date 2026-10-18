@@ -24,6 +24,9 @@ class StoreInventoryItemRequest extends FormRequest
                 Rule::unique('inventory_items', 'name')->where('tenant_id', app(CurrentTenant::class)->id()),
             ],
             'unit' => ['required', 'string', 'max:50'],
+            'cost_price' => ['required', 'numeric', 'min:0', 'max:99999999.99'],
+            'expiry_date' => ['nullable', 'date'],
+            'supplier' => ['nullable', 'string', 'max:255'],
             'minimum_threshold' => ['nullable', 'numeric', 'min:0'],
         ];
     }

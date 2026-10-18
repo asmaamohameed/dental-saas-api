@@ -1,7 +1,6 @@
 <?php
 
 use App\Exceptions\InvoiceHasPaymentsException;
-use App\Exceptions\ServiceProtectedException;
 use App\Http\Middleware\ClearPlatformTenantContext;
 use App\Http\Middleware\EnsureClinicPermission;
 use App\Http\Middleware\EnsureTenantAccess;
@@ -105,9 +104,6 @@ return Application::configure(basePath: dirname(__DIR__))
                         $message = 'Resource not found.';
                     }
                 } elseif ($e instanceof InvoiceHasPaymentsException) {
-                    $status = 422;
-                    $message = $e->getMessage();
-                } elseif ($e instanceof ServiceProtectedException) {
                     $status = 422;
                     $message = $e->getMessage();
                 } elseif ($e instanceof QueryException) {

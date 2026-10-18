@@ -10,4 +10,8 @@ enum AuditAction: string
     case RESTORED = 'restored';
     case TREATMENT_TOOTH_PRICE_CHANGED = 'treatment_tooth_price_changed';
     case TREATMENT_TEMPLATE_DEFAULT_PRICE_CHANGED = 'treatment_template_default_price_changed';
+    case CLINIC_WORKING_HOURS_CHANGED = 'clinic_working_hours_changed';
+    case CLINIC_ROLE_PERMISSIONS_CHANGED = 'clinic_role_permissions_changed';
+    case STAFF_ROLE_CHANGED = 'staff_role_changed';
+    case STAFF_ACTIVE_STATUS_CHANGED = 'staff_active_status_changed';
 }

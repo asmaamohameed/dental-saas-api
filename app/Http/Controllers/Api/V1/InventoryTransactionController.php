@@ -18,13 +18,13 @@ class InventoryTransactionController extends Controller
 
     public function __construct(private readonly InventoryTransactionService $transactionService) {}
 
-    public function index(InventoryItem $item, Request $request): JsonResponse
+    public function index(InventoryItem $inventoryItem, Request $request): JsonResponse
     {
-        $this->authorize('viewAny', [InventoryTransaction::class, $item]);
+        $this->authorize('viewAny', [InventoryTransaction::class, $inventoryItem]);
 
         $perPage = max(1, min((int) $request->input('per_page', 15), 100));
 
-        $transactions = $item->transactions()
+        $transactions = $inventoryItem->transactions()
             ->with('performer')
             ->latest('created_at')
             ->paginate($perPage);
@@ -35,10 +35,10 @@ class InventoryTransactionController extends Controller
         );
     }
 
-    public function store(StoreInventoryTransactionRequest $request, InventoryItem $item): JsonResponse
+    public function store(StoreInventoryTransactionRequest $request, InventoryItem $inventoryItem): JsonResponse
     {
         $transaction = $this->transactionService->create(
-            $item,
+            $inventoryItem,
             $request->validated(),
             $request->user()->id
         );

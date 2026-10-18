@@ -55,6 +55,7 @@ class InventoryItemReactivationTest extends TestCase
         $this->postJson('/api/v1/inventory-items', [
             'name' => 'Dental Floss',
             'unit' => 'box',
+            'cost_price' => 3.5,
         ])->assertStatus(422)
             ->assertJsonValidationErrors(['name']);
 
@@ -75,6 +76,7 @@ class InventoryItemReactivationTest extends TestCase
         $this->postJson('/api/v1/inventory-items', [
             'name' => 'Gauze Pads',
             'unit' => 'pack',
+            'cost_price' => 2,
         ])->assertForbidden();
     }
 
@@ -85,6 +87,7 @@ class InventoryItemReactivationTest extends TestCase
         $this->postJson('/api/v1/inventory-items', [
             'name' => 'Gauze Pads',
             'unit' => 'pack',
+            'cost_price' => 2,
         ])->assertForbidden();
     }
 

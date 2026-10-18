@@ -5,6 +5,7 @@ namespace App\Providers;
 use App\Auth\TenantAwareUserProvider;
 use App\Models\PersonalAccessToken;
 use App\Models\User;
+use App\Support\Roles\ClinicPermissionGate;
 use App\Support\Tenancy\CurrentTenant;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Database\Eloquent\Model;
@@ -26,6 +27,7 @@ class AppServiceProvider extends ServiceProvider
     public function register(): void
     {
         $this->app->singleton(CurrentTenant::class);
+        $this->app->scoped(ClinicPermissionGate::class);
     }
 
     /**

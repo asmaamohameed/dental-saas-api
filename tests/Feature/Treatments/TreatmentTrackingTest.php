@@ -9,6 +9,7 @@ use App\Enums\ConsentStatus;
 use App\Enums\FinancialStatus;
 use App\Enums\InvoiceStatus;
 use App\Enums\PatientTreatmentStatus;
+use App\Enums\RefundReasonCode;
 use App\Enums\TreatmentScope;
 use App\Enums\TreatmentSessionStatus;
 use App\Enums\TreatmentToothStatus;
@@ -21,6 +22,7 @@ use App\Models\PatientTreatment;
 use App\Models\Tenant;
 use App\Models\TreatmentTemplate;
 use App\Models\User;
+use App\Services\DefaultTreatmentTemplatesProvisioner;
 use App\Support\Tenancy\CurrentTenant;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Sanctum\Sanctum;
@@ -676,6 +678,58 @@ class TreatmentTrackingTest extends TestCase
             ->assertJsonPath('data.treatment_status_by_tooth.16', 'in_progress');
     }
 
+    public function test_refund_does_not_change_treatment_status_price_or_notes(): void
+    {
+        $treatment = $this->createTreatment(['agreed_price' => 100, 'tooth_numbers' => ['16']]);
+        $invoiceId = $treatment->invoiceItems()->first()->invoice_id;
+        $notes = $treatment->notes;
+        $clinical = $treatment->clinical_status;
+
+        $this->postJson("/api/v1/invoices/{$invoiceId}/payments", [
+            'amount' => 100,
+            'method' => 'cash',
+        ])->assertCreated();
+
+        $treatment->refresh();
+        $this->assertSame(FinancialStatus::PAID, $treatment->financial_status);
+
+        $this->postJson("/api/v1/invoices/{$invoiceId}/refunds", [
+            'reason_code' => RefundReasonCode::DUPLICATE_PAYMENT->value,
+        ])->assertCreated();
+
+        $treatment->refresh();
+        $this->assertSame($clinical, $treatment->clinical_status);
+        $this->assertSame(FinancialStatus::PAID, $treatment->financial_status);
+        $this->assertEquals(100, (float) $treatment->agreed_price);
+        $this->assertSame($notes, $treatment->notes);
+        $this->assertSame(InvoiceStatus::REFUNDED, Invoice::query()->find($invoiceId)->status);
+    }
+
+    public function test_treatment_price_change_does_not_update_a_refunded_invoice(): void
+    {
+        $treatment = $this->createTreatment(['agreed_price' => 100, 'tooth_numbers' => ['16']]);
+        $invoiceId = $treatment->invoiceItems()->first()->invoice_id;
+
+        $this->postJson("/api/v1/invoices/{$invoiceId}/payments", [
+            'amount' => 100,
+            'method' => 'cash',
+        ])->assertCreated();
+
+        $this->postJson("/api/v1/invoices/{$invoiceId}/refunds", [
+            'reason_code' => RefundReasonCode::DUPLICATE_PAYMENT->value,
+        ])->assertCreated();
+
+        $this->patchJson("/api/v1/patient-treatments/{$treatment->id}/teeth", [
+            'teeth' => [['tooth_number' => '16', 'price' => 200]],
+        ])->assertOk();
+
+        $invoice = Invoice::query()->findOrFail($invoiceId);
+        $this->assertSame(InvoiceStatus::REFUNDED, $invoice->status);
+        $this->assertSame('100.00', (string) $invoice->fresh()->total_amount);
+        $this->assertSame('100.00', (string) $invoice->items()->first()->price);
+        $this->assertEquals(200, (float) $treatment->fresh()->teeth()->first()->price);
+    }
+
     public function test_payment_updates_financial_status_without_changing_clinical_status(): void
     {
         $treatment = $this->createTreatment(['agreed_price' => 100]);
@@ -691,6 +745,150 @@ class TreatmentTrackingTest extends TestCase
         $this->assertSame(PatientTreatmentStatus::PLANNED, $treatment->clinical_status);
         $this->assertSame(FinancialStatus::PAID, $treatment->financial_status);
         $this->assertSame(ConsentStatus::NOT_REQUIRED, $treatment->consent_status);
+    }
+
+    public function test_whole_mouth_treatment_is_created_without_teeth_and_bills_the_agreed_price(): void
+    {
+        $template = $this->createTemplate(TreatmentScope::FULL_MOUTH);
+        $patient = Patient::factory()->create(['tenant_id' => $this->tenant->id]);
+
+        $response = $this->postJson('/api/v1/patient-treatments', [
+            'patient_id' => $patient->id,
+            'treatment_template_id' => $template->id,
+            'agreed_price' => 250,
+        ])->assertCreated()
+            ->assertJsonPath('data.scope', 'full_mouth')
+            ->assertJsonPath('data.dentist_id', $this->user->id)
+            ->assertJsonPath('data.agreed_price', 250)
+            ->assertJsonCount(0, 'data.teeth');
+
+        $treatment = PatientTreatment::query()->findOrFail($response->json('data.id'));
+        $this->assertSame(0, $treatment->teeth()->count());
+
+        $item = $treatment->invoiceItems()->first();
+        $this->assertNotNull($item);
+        $this->assertEquals(250.0, (float) $item->price * (int) $item->quantity);
+        $this->assertEquals(250.0, (float) Invoice::query()->findOrFail($item->invoice_id)->total_amount);
+    }
+
+    public function test_whole_mouth_price_can_change_until_completion_and_stays_on_the_invoice(): void
+    {
+        $template = $this->createTemplate(TreatmentScope::FULL_MOUTH);
+        $treatment = $this->createTreatment([
+            'treatment_template_id' => $template->id,
+            'agreed_price' => 250,
+            'tooth_numbers' => [],
+        ]);
+        $invoiceId = $treatment->invoiceItems()->first()->invoice_id;
+
+        $this->putJson("/api/v1/patient-treatments/{$treatment->id}", [
+            'agreed_price' => 180,
+        ])->assertOk();
+
+        $treatment->refresh();
+        $this->assertEquals(180.0, (float) $treatment->agreed_price);
+        $this->assertEquals(180.0, (float) $treatment->invoiceItems()->first()->price);
+        $this->assertEquals(180.0, (float) Invoice::query()->findOrFail($invoiceId)->total_amount);
+
+        $this->postJson("/api/v1/patient-treatments/{$treatment->id}/sessions", [
+            'status' => 'completed',
+        ])->assertCreated();
+
+        $treatment->refresh();
+        $this->assertSame(PatientTreatmentStatus::IN_PROGRESS, $treatment->clinical_status);
+
+        $this->putJson("/api/v1/patient-treatments/{$treatment->id}", [
+            'agreed_price' => 190,
+        ])->assertOk();
+
+        $this->patchJson("/api/v1/patient-treatments/{$treatment->id}/status", [
+            'clinical_status' => 'completed',
+        ])->assertOk();
+
+        $treatment->refresh();
+        $this->assertSame(PatientTreatmentStatus::COMPLETED, $treatment->clinical_status);
+        $this->assertEquals(190.0, (float) $treatment->agreed_price);
+        $this->assertEquals(190.0, (float) Invoice::query()->findOrFail($invoiceId)->total_amount);
+        $this->assertEquals(190.0, (float) $treatment->invoiceItems()->first()->price);
+
+        $this->putJson("/api/v1/patient-treatments/{$treatment->id}", [
+            'agreed_price' => 200,
+        ])->assertUnprocessable()
+            ->assertJsonValidationErrors(['agreed_price']);
+
+        $this->assertEquals(190.0, (float) $treatment->fresh()->agreed_price);
+        $this->assertEquals(190.0, (float) Invoice::query()->findOrFail($invoiceId)->total_amount);
+    }
+
+    public function test_cancelling_a_whole_mouth_treatment_removes_its_unpaid_invoice(): void
+    {
+        $template = $this->createTemplate(TreatmentScope::FULL_MOUTH);
+        $treatment = $this->createTreatment([
+            'treatment_template_id' => $template->id,
+            'agreed_price' => 250,
+            'tooth_numbers' => [],
+        ]);
+        $invoiceId = $treatment->invoiceItems()->first()->invoice_id;
+
+        $this->patchJson("/api/v1/patient-treatments/{$treatment->id}/status", [
+            'clinical_status' => 'cancelled',
+            'cancellation_reason' => 'Patient declined',
+        ])->assertOk();
+
+        $treatment->refresh();
+        $this->assertSame(PatientTreatmentStatus::CANCELLED, $treatment->clinical_status);
+        $this->assertNull(Invoice::query()->find($invoiceId));
+        $trashed = Invoice::withTrashed()->find($invoiceId);
+        $this->assertNotNull($trashed);
+        $this->assertSame(InvoiceStatus::CANCELLED, $trashed->status);
+    }
+
+    public function test_receptionist_cannot_complete_a_whole_mouth_treatment(): void
+    {
+        $template = $this->createTemplate(TreatmentScope::FULL_MOUTH);
+        $treatment = $this->createTreatment([
+            'treatment_template_id' => $template->id,
+            'tooth_numbers' => [],
+        ]);
+
+        $receptionist = User::factory()->create([
+            'tenant_id' => $this->tenant->id,
+            'role' => UserRole::RECEPTIONIST,
+        ]);
+        Sanctum::actingAs($receptionist, ['*']);
+
+        $this->patchJson("/api/v1/patient-treatments/{$treatment->id}/status", [
+            'clinical_status' => 'completed',
+        ])->assertForbidden();
+
+        $this->assertSame(PatientTreatmentStatus::PLANNED, $treatment->fresh()->clinical_status);
+    }
+
+    public function test_changing_a_template_scope_does_not_change_existing_patient_treatments(): void
+    {
+        $treatment = $this->createTreatment(['tooth_numbers' => ['16']]);
+        $template = $treatment->template;
+
+        $this->putJson("/api/v1/treatment-templates/{$template->id}", [
+            'name_ar' => $template->name_ar,
+            'name_en' => $template->name_en,
+            'category' => 'medical',
+            'scope' => 'full_mouth',
+            'default_price' => 250,
+            'estimated_duration_minutes' => 30,
+        ])->assertOk();
+
+        $this->assertSame(TreatmentScope::FULL_MOUTH, $template->fresh()->scope);
+        $this->assertSame(TreatmentScope::TOOTH, $treatment->fresh()->scope);
+        $this->assertSame(1, $treatment->teeth()->count());
+    }
+
+    public function test_default_templates_keep_cleaning_as_full_mouth(): void
+    {
+        $templates = app(DefaultTreatmentTemplatesProvisioner::class)->provision();
+
+        $this->assertSame(TreatmentScope::FULL_MOUTH, $templates['cleaning']->scope);
+        $this->assertSame('Cleaning', $templates['cleaning']->name_en);
     }
 
     /**

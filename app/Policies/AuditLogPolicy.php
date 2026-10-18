@@ -9,12 +9,12 @@ class AuditLogPolicy
 {
     public function viewAny(User $user): bool
     {
-        return $user->isOwner();
+        return $user->clinicCan('auditLog:view', $user->isOwner());
     }
 
     public function view(User $user, AuditLog $auditLog): bool
     {
-        return $user->isOwner()
-            && $user->tenant_id === $auditLog->tenant_id;
+        return $user->tenant_id === $auditLog->tenant_id
+            && $user->clinicCan('auditLog:view', $user->isOwner());
     }
 }

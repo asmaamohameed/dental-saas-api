@@ -251,6 +251,9 @@ class AppointmentLifecycleHardeningTest extends TestCase
             'status' => AppointmentStatus::COMPLETED,
         ]);
 
+        $owner = User::factory()->owner()->create();
+        Sanctum::actingAs($owner);
+
         $this->getJson('/api/v1/dashboard/patients')
             ->assertOk()
             ->assertJsonPath('data.scheduled', 1)

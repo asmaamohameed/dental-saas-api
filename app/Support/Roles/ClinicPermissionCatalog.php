@@ -36,20 +36,25 @@ class ClinicPermissionCatalog
             'invoice:create' => 'Create invoices',
             'invoice:edit' => 'Edit invoices',
             'invoice:delete' => 'Delete invoices',
+            'invoice:refund' => 'Refund invoices',
             'payment:view' => 'View payments',
             'payment:create' => 'Record payments',
             'payment:edit' => 'Edit payments',
             'payment:delete' => 'Delete payments',
+            'expense:view' => 'View expenses',
+            'expense:create' => 'Create expenses',
             'inventory:view' => 'View inventory',
             'inventory:create' => 'Create inventory items',
             'inventory:edit' => 'Edit inventory items',
             'inventory:delete' => 'Delete inventory items',
             'inventory:restore' => 'Restore inventory items',
             'inventory:transact' => 'Record stock movements',
+            'inventory:alerts' => 'View inventory alerts on dashboard',
             'staff:view' => 'View staff',
             'staff:create' => 'Create staff',
             'staff:edit' => 'Edit staff',
             'staff:toggleActive' => 'Activate or deactivate staff',
+            'dashboard:financials' => 'View dashboard financials',
             'reports:view' => 'View reports',
             'auditLog:view' => 'View clinic audit logs',
             'clinic:branding' => 'Update clinic logo and theme',
@@ -78,6 +83,9 @@ class ClinicPermissionCatalog
             'staff:create',
             'staff:edit',
             'staff:toggleActive',
+            'dashboard:financials',
+            'expense:view',
+            'expense:create',
             'reports:view',
             'auditLog:view',
             'clinic:branding',
@@ -110,11 +118,80 @@ class ClinicPermissionCatalog
         }
 
         $assistant = $clinical;
+        $assistant['invoice:refund'] = false;
         $assistant['inventory:transact'] = false;
+        $clinical['inventory:alerts'] = false;
+        $assistant['inventory:alerts'] = false;
 
         return [
             'owner' => $owner,
             'doctor' => $clinical,
+            'assistant' => $assistant,
+            'receptionist' => $receptionist,
+        ];
+    }
+
+    /**
+     * Access the API grants today, before an owner saves a change.
+     * This is the starting value on the clinic permissions screen.
+     *
+     * @return array<string, array<string, bool>>
+     */
+    public static function baseline(): array
+    {
+        $allow = array_fill_keys(array_keys(self::labels()), true);
+
+        $ownerOnly = [
+            'patient:delete',
+            'appointment:delete',
+            'treatment:delete',
+            'invoice:delete',
+            'payment:edit',
+            'payment:delete',
+            'inventory:create',
+            'inventory:edit',
+            'inventory:delete',
+            'inventory:restore',
+            'staff:view',
+            'staff:create',
+            'staff:edit',
+            'staff:toggleActive',
+            'reports:view',
+            'auditLog:view',
+            'clinic:branding',
+        ];
+
+        $doctor = $allow;
+        $assistant = $allow;
+        $receptionist = $allow;
+
+        foreach ($ownerOnly as $key) {
+            $doctor[$key] = false;
+            $assistant[$key] = false;
+            $receptionist[$key] = false;
+        }
+
+        $assistant['invoice:refund'] = false;
+        $assistant['payment:view'] = false;
+        $assistant['inventory:transact'] = false;
+
+        $receptionist['patient:viewMedicalHistory'] = false;
+        $receptionist['toothRecord:view'] = false;
+        $receptionist['toothRecord:create'] = false;
+
+        $doctor['inventory:alerts'] = false;
+        $assistant['inventory:alerts'] = false;
+
+        $doctor['dashboard:financials'] = false;
+        $doctor['expense:view'] = false;
+        $doctor['expense:create'] = false;
+        $assistant['dashboard:financials'] = false;
+        $assistant['expense:view'] = false;
+        $assistant['expense:create'] = false;
+
+        return [
+            'owner' => $allow,
+            'doctor' => $doctor,
             'assistant' => $assistant,
             'receptionist' => $receptionist,
         ];

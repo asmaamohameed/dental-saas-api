@@ -21,10 +21,10 @@ use App\Models\Invoice;
 use App\Models\InvoiceItem;
 use App\Models\PatientTreatment;
 use App\Models\PatientTreatmentTooth;
-use App\Models\Payment;
 use App\Models\TreatmentSession;
 use App\Models\TreatmentTemplate;
 use App\Models\User;
+use App\Support\Billing\InvoiceFinancials;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -561,7 +561,7 @@ class PatientTreatmentService
             'invoice_id' => $primaryInvoice?->id,
             'total_billed' => $totalBilled,
             'total_paid' => $totalPaid,
-            'outstanding' => max(0, $totalBilled - $totalPaid),
+            'outstanding' => $this->allocatedOutstanding($items, $invoices),
             'has_open_invoice' => $openInvoiceExists,
             'financial_status' => $treatment->financial_status,
         ];
@@ -1106,9 +1106,7 @@ class PatientTreatmentService
             }
 
             $invoiceTotal = (float) $invoice->total_amount;
-            $invoicePaid = (float) $invoice->payments->sum(function (Payment $payment) {
-                return (float) $payment->amount + (float) ($payment->deduct_amount ?? 0);
-            });
+            $invoicePaid = InvoiceFinancials::appliedCredits($invoice);
             $treatmentAmount = (float) $invoiceItems->sum(fn ($item) => (float) $item->price * (int) $item->quantity);
 
             if ($invoiceTotal <= 0) {
@@ -1119,5 +1117,32 @@ class PatientTreatmentService
         }
 
         return round($paid, 2);
+    }
+
+    /**
+     * @param  Collection<int, InvoiceItem>  $items
+     * @param  Collection<string, Invoice>  $invoices
+     */
+    private function allocatedOutstanding($items, $invoices): float
+    {
+        $outstanding = 0.0;
+
+        foreach ($items->groupBy('invoice_id') as $invoiceId => $invoiceItems) {
+            /** @var Invoice|null $invoice */
+            $invoice = $invoices->get($invoiceId);
+            if (! $invoice) {
+                continue;
+            }
+
+            $invoiceTotal = (float) $invoice->total_amount;
+            if ($invoiceTotal <= 0) {
+                continue;
+            }
+
+            $treatmentAmount = (float) $invoiceItems->sum(fn ($item) => (float) $item->price * (int) $item->quantity);
+            $outstanding += InvoiceFinancials::remainingAmount($invoice) * ($treatmentAmount / $invoiceTotal);
+        }
+
+        return round(max(0, $outstanding), 2);
     }
 }

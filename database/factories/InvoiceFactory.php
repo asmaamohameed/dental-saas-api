@@ -29,4 +29,9 @@ class InvoiceFactory extends Factory
     {
         return $this->state(fn () => ['status' => InvoiceStatus::PAID]);
     }
+
+    public function refunded(): static
+    {
+        return $this->state(fn () => ['status' => InvoiceStatus::REFUNDED]);
+    }
 }

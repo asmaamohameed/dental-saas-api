@@ -3,6 +3,7 @@
 namespace Tests\Feature\Dashboard;
 
 use App\Enums\ExpenseCategory;
+use App\Enums\UserRole;
 use App\Models\Expense;
 use Tests\TestCase;
 
@@ -17,7 +18,7 @@ class DashboardAnalyticsTest extends TestCase
 
     public function test_financial_analytics_expense_breakdown_excludes_components_category(): void
     {
-        $user = $this->actingAsTenantUser();
+        $user = $this->actingAsTenantUser(role: UserRole::OWNER);
 
         Expense::query()->create([
             'category' => ExpenseCategory::RENT,
@@ -41,7 +42,7 @@ class DashboardAnalyticsTest extends TestCase
 
     public function test_expense_breakdown_totals_sum_expense_categories_only(): void
     {
-        $user = $this->actingAsTenantUser();
+        $user = $this->actingAsTenantUser(role: UserRole::OWNER);
 
         $date = now()->toDateString();
         Expense::query()->create([
@@ -71,7 +72,7 @@ class DashboardAnalyticsTest extends TestCase
 
     public function test_other_dashboard_endpoints_keep_expected_top_level_keys(): void
     {
-        $this->actingAsTenantUser();
+        $this->actingAsTenantUser(role: UserRole::OWNER);
 
         $this->getJson('/api/v1/dashboard/income-expense')
             ->assertOk()

@@ -11,6 +11,7 @@ use App\Models\Invoice;
 use App\Models\InvoiceItem;
 use App\Models\PatientTreatment;
 use App\Services\InvoiceService;
+use App\Support\Billing\InvoiceFinancials;
 use App\Support\Tenancy\CurrentTenant;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\JsonResponse;
@@ -39,6 +40,7 @@ class InvoiceItemController extends Controller
     {
         $item = DB::transaction(function () use ($request, $invoice) {
             $lockedInvoice = Invoice::lockForUpdate()->find($invoice->id);
+            InvoiceFinancials::assertMutable($lockedInvoice);
 
             if ($lockedInvoice->status === InvoiceStatus::PAID) {
                 throw ValidationException::withMessages([
@@ -80,6 +82,7 @@ class InvoiceItemController extends Controller
 
         $updatedItem = DB::transaction(function () use ($request, $invoice, $item) {
             $lockedInvoice = Invoice::lockForUpdate()->find($invoice->id);
+            InvoiceFinancials::assertMutable($lockedInvoice);
 
             if ($lockedInvoice->status === InvoiceStatus::PAID) {
                 throw ValidationException::withMessages([
@@ -128,6 +131,7 @@ class InvoiceItemController extends Controller
 
         DB::transaction(function () use ($invoice, $item) {
             $lockedInvoice = Invoice::lockForUpdate()->find($invoice->id);
+            InvoiceFinancials::assertMutable($lockedInvoice);
 
             if ($lockedInvoice->status === InvoiceStatus::PAID) {
                 throw ValidationException::withMessages([

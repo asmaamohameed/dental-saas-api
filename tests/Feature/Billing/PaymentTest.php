@@ -57,17 +57,7 @@ class PaymentTest extends TestCase
         ])->assertCreated();
     }
 
-    public function test_receptionist_cannot_delete_a_payment(): void
-    {
-        $this->actingAsTenantUser(role: UserRole::RECEPTIONIST);
-        $invoice = Invoice::factory()->create(['total_amount' => 100]);
-        $payment = Payment::factory()->create(['invoice_id' => $invoice->id, 'amount' => 50]);
-
-        $this->deleteJson("/api/v1/invoices/{$invoice->id}/payments/{$payment->id}")
-            ->assertForbidden();
-    }
-
-    public function test_owner_cannot_change_amount_of_a_payment_on_a_fully_paid_invoice(): void
+    public function test_payment_update_and_delete_routes_are_gone(): void
     {
         $this->actingAsTenantUser(role: UserRole::OWNER);
         $invoice = Invoice::factory()->paid()->create(['total_amount' => 100]);
@@ -75,20 +65,11 @@ class PaymentTest extends TestCase
 
         $this->putJson("/api/v1/invoices/{$invoice->id}/payments/{$payment->id}", [
             'amount' => 80,
-        ])->assertUnprocessable();
-
-        $this->assertDatabaseHas('payments', ['id' => $payment->id, 'amount' => 100]);
-    }
-
-    public function test_owner_cannot_delete_a_payment_from_a_fully_paid_invoice(): void
-    {
-        $this->actingAsTenantUser(role: UserRole::OWNER);
-        $invoice = Invoice::factory()->paid()->create(['total_amount' => 100]);
-        $payment = Payment::factory()->create(['invoice_id' => $invoice->id, 'amount' => 100]);
+        ])->assertStatus(405);
 
         $this->deleteJson("/api/v1/invoices/{$invoice->id}/payments/{$payment->id}")
-            ->assertUnprocessable();
+            ->assertStatus(405);
 
-        $this->assertDatabaseHas('payments', ['id' => $payment->id]);
+        $this->assertDatabaseHas('payments', ['id' => $payment->id, 'amount' => 100]);
     }
 }

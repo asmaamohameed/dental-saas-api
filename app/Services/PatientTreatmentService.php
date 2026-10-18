@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Billing\Audit\BillingAuditLogger;
 use App\Enums\AppointmentStatus;
 use App\Enums\AuditAction;
 use App\Enums\ConsentStatus;
@@ -16,12 +17,10 @@ use App\Enums\TreatmentToothStatus;
 use App\Enums\TreatmentType;
 use App\Enums\UserRole;
 use App\Models\Appointment;
-use App\Models\AuditLog;
 use App\Models\Invoice;
 use App\Models\InvoiceItem;
 use App\Models\PatientTreatment;
 use App\Models\PatientTreatmentTooth;
-use App\Models\Payment;
 use App\Models\TreatmentSession;
 use App\Models\TreatmentTemplate;
 use App\Models\User;
@@ -34,7 +33,10 @@ use Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException;
 
 class PatientTreatmentService
 {
-    public function __construct(private readonly InvoiceService $invoiceService) {}
+    public function __construct(
+        private readonly InvoiceService $invoiceService,
+        private readonly BillingAuditLogger $auditLogger,
+    ) {}
 
     public function list(array $filters = [], int $perPage = 15): LengthAwarePaginator
     {
@@ -528,11 +530,11 @@ class PatientTreatmentService
     {
         $items = InvoiceItem::query()
             ->where('patient_treatment_id', $treatment->id)
-            ->with(['invoice.payments'])
+            ->with(['invoice.payments', 'invoice.refunds'])
             ->get();
 
         $invoiceIds = $items->pluck('invoice_id')->unique();
-        $invoices = Invoice::query()->whereIn('id', $invoiceIds)->with('payments')->get()->keyBy('id');
+        $invoices = Invoice::query()->whereIn('id', $invoiceIds)->with(['payments', 'refunds'])->get()->keyBy('id');
 
         $totalBilled = (float) $items->sum(fn ($item) => (float) $item->price * (int) $item->quantity);
         $totalPaid = $this->allocatedPaidAmount($items, $invoices);
@@ -967,21 +969,19 @@ class PatientTreatmentService
 
     private function logToothPriceChange(PatientTreatment $treatment, string $toothNumber, string $oldPrice, string $newPrice, User $user): void
     {
-        AuditLog::query()->create([
-            'tenant_id' => $treatment->tenant_id,
-            'user_id' => $user->id,
-            'action' => AuditAction::TREATMENT_TOOTH_PRICE_CHANGED,
-            'auditable_type' => $treatment->getMorphClass(),
-            'auditable_id' => $treatment->id,
-            'old_values' => [
+        $this->auditLogger->record(
+            $user,
+            $treatment,
+            AuditAction::TREATMENT_TOOTH_PRICE_CHANGED,
+            [
                 'tooth_number' => $toothNumber,
                 'price' => $oldPrice,
             ],
-            'new_values' => [
+            [
                 'tooth_number' => $toothNumber,
                 'price' => $newPrice,
             ],
-        ]);
+        );
     }
 
     private function assertTreatmentBillingLocked(PatientTreatment $treatment): void
@@ -1106,9 +1106,7 @@ class PatientTreatmentService
             }
 
             $invoiceTotal = (float) $invoice->total_amount;
-            $invoicePaid = (float) $invoice->payments->sum(function (Payment $payment) {
-                return (float) $payment->amount + (float) ($payment->deduct_amount ?? 0);
-            });
+            $invoicePaid = $invoice->settledAmount();
             $treatmentAmount = (float) $invoiceItems->sum(fn ($item) => (float) $item->price * (int) $item->quantity);
 
             if ($invoiceTotal <= 0) {

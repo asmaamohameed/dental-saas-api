@@ -185,13 +185,21 @@ class InvoiceControllerTest extends TestCase
         ])->assertOk();
     }
 
-    public function test_receptionist_can_update_items_on_an_unpaid_invoice(): void
+    public function test_receptionist_can_append_a_line_without_deleting_existing_items(): void
     {
         $this->actingAsRole(UserRole::RECEPTIONIST);
         $invoice = Invoice::factory()->create(['status' => InvoiceStatus::UNPAID, 'total_amount' => 100]);
+        $invoice->items()->create([
+            'description' => 'Existing billing line',
+            'price' => 40,
+            'quantity' => 1,
+        ]);
+
         $this->putJson("/api/v1/invoices/{$invoice->id}", [
             'items' => [['price' => 60, 'description' => 'Updated billing line', 'quantity' => 1]],
-        ])->assertOk()->assertJsonPath('data.total_amount', 60);
+        ])->assertOk()->assertJsonPath('data.total_amount', 100);
+
+        $this->assertCount(2, $invoice->fresh()->items);
     }
 
     public function test_update_rejects_changing_appointment_id(): void
@@ -204,14 +212,15 @@ class InvoiceControllerTest extends TestCase
         ])->assertStatus(422)->assertJsonValidationErrors(['appointment_id']);
     }
 
-    public function test_update_rejects_a_fully_paid_invoice(): void
+    public function test_update_allows_a_patient_change_on_a_paid_invoice(): void
     {
         $this->actingAsRole(UserRole::OWNER);
         $invoice = Invoice::factory()->create(['status' => InvoiceStatus::PAID]);
+        $patient = Patient::factory()->create();
 
         $this->putJson("/api/v1/invoices/{$invoice->id}", [
-            'patient_id' => Patient::factory()->create()->id,
-        ])->assertStatus(422)->assertJsonValidationErrors(['invoice']);
+            'patient_id' => $patient->id,
+        ])->assertOk()->assertJsonPath('data.patient_id', $patient->id);
     }
 
     // ---------- destroy ----------

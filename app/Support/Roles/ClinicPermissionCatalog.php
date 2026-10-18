@@ -40,6 +40,7 @@ class ClinicPermissionCatalog
             'payment:create' => 'Record payments',
             'payment:edit' => 'Edit payments',
             'payment:delete' => 'Delete payments',
+            'payment:refund' => 'Refund a payment',
             'inventory:view' => 'View inventory',
             'inventory:create' => 'Create inventory items',
             'inventory:edit' => 'Edit inventory items',
@@ -57,11 +58,26 @@ class ClinicPermissionCatalog
     }
 
     /**
+     * Dead toggles. Kept false in matrix() so nothing grants them, and omitted from the permissions UI.
+     *
+     * @return list<string>
+     */
+    public static function hiddenFromUi(): array
+    {
+        return [
+            'payment:edit',
+            'payment:delete',
+        ];
+    }
+
+    /**
      * @return array<string, array<string, bool>>
      */
     public static function matrix(): array
     {
         $owner = array_fill_keys(array_keys(self::labels()), true);
+        $owner['payment:edit'] = false;
+        $owner['payment:delete'] = false;
 
         $clinical = $owner;
         foreach ([
@@ -94,6 +110,7 @@ class ClinicPermissionCatalog
             'invoice:delete',
             'payment:edit',
             'payment:delete',
+            'payment:refund',
             'inventory:create',
             'inventory:edit',
             'inventory:delete',
@@ -111,6 +128,7 @@ class ClinicPermissionCatalog
 
         $assistant = $clinical;
         $assistant['inventory:transact'] = false;
+        $assistant['payment:refund'] = false;
 
         return [
             'owner' => $owner,

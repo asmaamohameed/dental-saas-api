@@ -6,6 +6,7 @@ use App\Enums\InvoiceStatus;
 use App\Exceptions\InvoiceHasPaymentsException;
 use App\Models\Appointment;
 use App\Models\Invoice;
+use App\Models\InvoiceItem;
 use App\Models\Patient;
 use App\Models\Payment;
 use App\Models\Tenant;
@@ -62,13 +63,14 @@ class InvoiceServiceTest extends TestCase
 
     // ---------- update() ----------
 
-    public function test_update_rejects_a_fully_paid_invoice(): void
+    public function test_update_allows_a_patient_change_on_a_paid_invoice(): void
     {
         $invoice = Invoice::factory()->create(['status' => InvoiceStatus::PAID]);
+        $patient = $this->makePatient();
 
-        $this->expectException(ValidationException::class);
+        $updated = $this->service->update($invoice, ['patient_id' => $patient->id]);
 
-        $this->service->update($invoice, ['patient_id' => $this->makePatient()->id]);
+        $this->assertSame($patient->id, $updated->patient_id);
     }
 
     public function test_update_rejects_changing_appointment_id(): void
@@ -117,26 +119,47 @@ class InvoiceServiceTest extends TestCase
         $this->assertSame($patient->id, $updated->patient_id);
     }
 
-    public function test_update_rejects_new_total_lower_than_existing_payments(): void
+    public function test_update_below_payments_sets_refund_due_instead_of_rejecting(): void
     {
         $invoice = Invoice::factory()->create(['status' => InvoiceStatus::UNPAID, 'total_amount' => 500]);
-        Payment::factory()->create(['invoice_id' => $invoice->id, 'amount' => 300]);
-        $this->expectException(ValidationException::class);
-
-        $this->service->update($invoice, [
-            'items' => [['price' => 50, 'description' => 'Reduced billing line', 'quantity' => 1]],
+        $item = InvoiceItem::factory()->create([
+            'invoice_id' => $invoice->id,
+            'description' => 'Original line',
+            'price' => 500,
+            'quantity' => 1,
         ]);
+        Payment::factory()->create(['invoice_id' => $invoice->id, 'amount' => 300]);
+
+        $updated = $this->service->update($invoice, [
+            'items' => [[
+                'id' => $item->id,
+                'price' => 50,
+                'description' => 'Reduced billing line',
+                'quantity' => 1,
+            ]],
+        ]);
+
+        $this->assertEquals(50, $updated->total_amount);
+        $this->assertSame('250.00', $updated->fresh()->balance()['refund_due']);
+        $this->assertSame(0, $updated->refunds()->count());
     }
 
-    public function test_update_replaces_items_and_recalculates_total(): void
+    public function test_update_appends_items_without_deleting_existing_lines(): void
     {
         $invoice = Invoice::factory()->create(['status' => InvoiceStatus::UNPAID, 'total_amount' => 100]);
+        InvoiceItem::factory()->create([
+            'invoice_id' => $invoice->id,
+            'description' => 'Existing line',
+            'price' => 40,
+            'quantity' => 1,
+        ]);
+
         $updated = $this->service->update($invoice, [
             'items' => [['price' => 75, 'description' => 'Updated billing line', 'quantity' => 2]],
         ]);
 
-        $this->assertEquals(150, $updated->total_amount);
-        $this->assertCount(1, $updated->items);
+        $this->assertEquals(190, $updated->total_amount);
+        $this->assertCount(2, $updated->items);
     }
 
     // ---------- delete() ----------
@@ -163,13 +186,13 @@ class InvoiceServiceTest extends TestCase
 
     // ---------- recalculateStatus() ----------
 
-    public function test_recalculate_status_sets_unpaid_when_zero_total_and_zero_paid(): void
+    public function test_recalculate_status_sets_paid_when_zero_total_and_zero_paid(): void
     {
         $invoice = Invoice::factory()->create(['total_amount' => 0, 'status' => InvoiceStatus::PARTIAL]);
 
         $this->service->recalculateStatus($invoice);
 
-        $this->assertSame(InvoiceStatus::UNPAID, $invoice->fresh()->status);
+        $this->assertSame(InvoiceStatus::PAID, $invoice->fresh()->status);
     }
 
     public function test_recalculate_status_sets_partial_when_partially_paid(): void

@@ -20,6 +20,7 @@ use App\Http\Controllers\Api\V1\InvoiceItemController;
 use App\Http\Controllers\Api\V1\PatientController;
 use App\Http\Controllers\Api\V1\PatientTreatmentController;
 use App\Http\Controllers\Api\V1\PaymentController;
+use App\Http\Controllers\Api\V1\RefundController;
 use App\Http\Controllers\Api\V1\ToothRecordController;
 use App\Http\Controllers\Api\V1\TreatmentPlanController;
 use App\Http\Controllers\Api\V1\TreatmentTemplateController;
@@ -102,6 +103,7 @@ Route::prefix('v1')->group(function () {
 
         Route::get('invoices/{invoice}/payments', [PaymentController::class, 'index']);
         Route::get('invoices/{invoice}/payments/{payment}', [PaymentController::class, 'show']);
+        Route::get('refunds', [RefundController::class, 'index']);
 
         // Inventory
         Route::apiResource('inventory-items', InventoryItemController::class)->parameters(['inventory-items' => 'inventoryItem']);
@@ -132,18 +134,20 @@ Route::prefix('v1')->group(function () {
             Route::put('patient-treatments/{patientTreatment}', [PatientTreatmentController::class, 'update']);
 
             Route::post('invoices', [InvoiceController::class, 'store']);
-            Route::post('invoices/from-treatment/{patientTreatment}', [InvoiceController::class, 'storeFromTreatment']);
             Route::put('invoices/{invoice}', [InvoiceController::class, 'update']);
 
             Route::post('invoices/{invoice}/items', [InvoiceItemController::class, 'store']);
             Route::put('invoices/{invoice}/items/{item}', [InvoiceItemController::class, 'update']);
             Route::delete('invoices/{invoice}/items/{item}', [InvoiceItemController::class, 'destroy']);
+            Route::post('invoice-items/{item}/void', [InvoiceItemController::class, 'voidItem']);
+            Route::post('invoice-items/{item}/reprice-done', [InvoiceItemController::class, 'repriceDone']);
 
             Route::post('invoices/{invoice}/payments', [PaymentController::class, 'store']);
+            Route::post('invoices/{invoice}/refunds', [RefundController::class, 'store']);
             Route::post('expenses', [ExpenseController::class, 'store']);
         });
 
-        // Owner-only sensitive actions (delete invoice, delete payment, edit payment, etc.)
+        // Owner-only sensitive actions (delete invoice, clinic settings, staff).
         Route::middleware(EnsureUserRole::using(UserRole::OWNER))->group(function () {
             Route::post('clinic/logo', [ClinicBrandingController::class, 'updateLogo']);
             Route::patch('clinic/theme', [ClinicBrandingController::class, 'updateTheme']);
@@ -155,8 +159,6 @@ Route::prefix('v1')->group(function () {
             Route::delete('treatment-templates/{treatmentTemplate}', [TreatmentTemplateController::class, 'destroy']);
             Route::delete('treatment-plans/{treatmentPlan}', [TreatmentPlanController::class, 'destroy']);
             Route::delete('invoices/{invoice}', [InvoiceController::class, 'destroy']);
-            Route::put('invoices/{invoice}/payments/{payment}', [PaymentController::class, 'update']);
-            Route::delete('invoices/{invoice}/payments/{payment}', [PaymentController::class, 'destroy']);
             Route::delete('expenses/{expense}', [ExpenseController::class, 'destroy']);
         });
     });

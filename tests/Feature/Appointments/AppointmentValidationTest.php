@@ -9,6 +9,7 @@ use App\Models\Patient;
 use App\Models\Tenant;
 use App\Models\User;
 use App\Support\Tenancy\CurrentTenant;
+use Illuminate\Support\Carbon;
 use Tests\TestCase;
 
 class AppointmentValidationTest extends TestCase
@@ -152,6 +153,34 @@ class AppointmentValidationTest extends TestCase
         ])
             ->assertUnprocessable()
             ->assertJsonValidationErrors(['fee']);
+    }
+
+    public function test_cannot_book_a_doctor_on_a_day_outside_their_working_days(): void
+    {
+        $tenant = Tenant::factory()->create();
+        app(CurrentTenant::class)->set($tenant->id);
+        $patient = Patient::factory()->create();
+        $doctor = User::factory()->doctor()->create([
+            'working_days' => ['saturday', 'monday'],
+        ]);
+
+        $this->actingAsTenantUser($tenant, UserRole::RECEPTIONIST);
+
+        $sunday = Carbon::now('Africa/Cairo')->next(Carbon::SUNDAY)->setTime(10, 0);
+
+        $this->postJson('/api/v1/appointments', [
+            'patient_id' => $patient->id,
+            'doctor_id' => $doctor->id,
+            'scheduled_at' => $sunday->utc()->toIso8601String(),
+            'duration_minutes' => 30,
+        ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('scheduled_at');
+
+        $this->assertDatabaseMissing('appointments', [
+            'doctor_id' => $doctor->id,
+            'patient_id' => $patient->id,
+        ]);
     }
 
     public function test_cannot_reassign_an_appointment_to_a_doctor_from_another_tenant(): void

@@ -46,6 +46,24 @@ class PaymentPolicy
             ]);
     }
 
+    /**
+     * Owner is allowed via before(). Doctor is allowed here. Assistant and receptionist are not.
+     */
+    public function refund(User $user, Invoice $invoice): bool
+    {
+        return $user->tenant_id === $invoice->tenant_id
+            && $user->hasAnyClinicRole([
+                UserRole::DOCTOR,
+            ]);
+    }
+
+    public function viewAnyRefund(User $user): bool
+    {
+        return $user->hasAnyClinicRole([
+            UserRole::DOCTOR,
+        ]);
+    }
+
     public function update(User $user, Payment $payment): bool
     {
         // Only the owner may edit a payment — granted via before().

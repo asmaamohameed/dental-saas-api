@@ -8,4 +8,5 @@ enum InvoiceStatus: string
     case PARTIAL = 'partial';
     case PAID = 'paid';
     case CANCELLED = 'cancelled';
+    case REFUNDED = 'refunded';
 }

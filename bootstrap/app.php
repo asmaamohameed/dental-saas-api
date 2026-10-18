@@ -1,5 +1,6 @@
 <?php
 
+use App\Billing\Domain\Exceptions\BillingDomainException;
 use App\Exceptions\InvoiceHasPaymentsException;
 use App\Http\Middleware\ClearPlatformTenantContext;
 use App\Http\Middleware\EnsureTenantAccess;
@@ -101,7 +102,7 @@ return Application::configure(basePath: dirname(__DIR__))
                     if ($status === 404 && $e->getPrevious() instanceof ModelNotFoundException) {
                         $message = 'Resource not found.';
                     }
-                } elseif ($e instanceof InvoiceHasPaymentsException) {
+                } elseif ($e instanceof InvoiceHasPaymentsException || $e instanceof BillingDomainException) {
                     $status = 422;
                     $message = $e->getMessage();
                 } elseif ($e instanceof QueryException) {

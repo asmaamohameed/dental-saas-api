@@ -21,6 +21,7 @@ class UpdateInvoiceRequest extends FormRequest
         return [
             'patient_id' => ['sometimes', 'required', 'uuid', Rule::exists('patients', 'id')->where('tenant_id', app(CurrentTenant::class)->id())],
             'items' => ['sometimes', 'required', 'array', 'min:1'],
+            'items.*.id' => ['sometimes', 'uuid', Rule::exists('invoice_items', 'id')->where('tenant_id', app(CurrentTenant::class)->id())],
             'items.*.patient_treatment_id' => ['nullable', 'uuid', Rule::exists('patient_treatments', 'id')->where('tenant_id', app(CurrentTenant::class)->id())],
             'items.*.description' => ['nullable', 'string', 'max:500'],
             'items.*.price' => ['nullable', 'numeric', 'min:0'],
@@ -41,8 +42,8 @@ class UpdateInvoiceRequest extends FormRequest
                 );
             }
 
-            if ($invoice && $invoice->status === InvoiceStatus::PAID) {
-                $validator->errors()->add('invoice', 'Fully paid invoices cannot be updated.');
+            if ($invoice && in_array($invoice->status, [InvoiceStatus::CANCELLED, InvoiceStatus::REFUNDED], true)) {
+                $validator->errors()->add('invoice', 'Cancelled or refunded invoices cannot be changed.');
             }
 
             if (

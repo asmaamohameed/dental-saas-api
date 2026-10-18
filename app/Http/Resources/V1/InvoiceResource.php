@@ -23,9 +23,11 @@ class InvoiceResource extends JsonResource
             'appointment_id' => $this->appointment_id,
             'created_by' => $this->created_by,
             'total_amount' => (float) $this->total_amount,
-            'remaining_amount' => (float) $this->remaining_amount,
-            'paid_amount' => $this->paidAmount(),
-            'deducted_amount' => $this->deductedAmount(),
+            'remaining_amount' => max(0, (float) $this->remaining_amount),
+            'paid_amount' => max(0, $this->paidAmount()),
+            'net_paid' => max(0, $this->netPaid()),
+            'deducted_amount' => max(0, $this->deductedAmount()),
+            'refunded_amount' => max(0, $this->refundedAmount()),
             'status' => $this->status,
             'patient' => $this->whenLoaded('patient', function (Patient $patient) {
                 return [
@@ -49,6 +51,7 @@ class InvoiceResource extends JsonResource
             }),
             'items' => InvoiceItemResource::collection($this->whenLoaded('items')),
             'payments' => PaymentResource::collection($this->whenLoaded('payments')),
+            'refunds' => RefundResource::collection($this->whenLoaded('refunds')),
             'created_at' => $this->created_at?->toISOString(),
             'updated_at' => $this->updated_at?->toISOString(),
         ];

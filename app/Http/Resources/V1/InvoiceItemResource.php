@@ -21,6 +21,7 @@ class InvoiceItemResource extends JsonResource
             'price' => $this->price,
             'quantity' => $this->quantity,
             'subtotal' => $this->subtotal,
+            'refunded_amount' => max(0, $this->refundedAmount()),
             'patient_treatment' => $this->whenLoaded(
                 'patientTreatment',
                 fn () => $this->patientTreatment

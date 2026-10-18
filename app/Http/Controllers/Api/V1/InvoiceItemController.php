@@ -2,26 +2,44 @@
 
 namespace App\Http\Controllers\Api\V1;
 
-use App\Enums\InvoiceStatus;
+use App\Billing\Actions\DeletePlannedItem;
+use App\Billing\Actions\RecomputeInvoiceTotal;
+use App\Billing\Actions\RepriceDoneItem;
+use App\Billing\Actions\VoidInvoiceItem;
+use App\Billing\Domain\Exceptions\CannotMutateDoneItem;
+use App\Billing\Domain\Exceptions\CannotMutateVoidedItem;
+use App\Billing\Domain\Exceptions\InvoiceClosedException;
+use App\Billing\Domain\InvoiceItemState;
+use App\Billing\Domain\InvoiceItemStateResolver;
+use App\Billing\Queries\InvoiceItemFactsReader;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\V1\Invoice\StoreInvoiceItemRequest;
 use App\Http\Requests\V1\Invoice\UpdateInvoiceItemRequest;
+use App\Http\Requests\V1\InvoiceItem\RepriceDoneItemRequest;
+use App\Http\Requests\V1\InvoiceItem\VoidInvoiceItemRequest;
 use App\Http\Resources\V1\InvoiceItemResource;
 use App\Models\Invoice;
 use App\Models\InvoiceItem;
 use App\Models\PatientTreatment;
-use App\Services\InvoiceService;
+use App\Models\User;
 use App\Support\Tenancy\CurrentTenant;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Validation\ValidationException;
 
 class InvoiceItemController extends Controller
 {
     use AuthorizesRequests;
 
-    public function __construct(private readonly InvoiceService $invoiceService) {}
+    public function __construct(
+        private readonly RecomputeInvoiceTotal $recomputeInvoiceTotal,
+        private readonly DeletePlannedItem $deletePlannedItem,
+        private readonly VoidInvoiceItem $voidInvoiceItem,
+        private readonly RepriceDoneItem $repriceDoneItem,
+        private readonly InvoiceItemFactsReader $factsReader,
+        private readonly InvoiceItemStateResolver $stateResolver,
+    ) {}
 
     public function index(Invoice $invoice): JsonResponse
     {
@@ -38,13 +56,8 @@ class InvoiceItemController extends Controller
     public function store(StoreInvoiceItemRequest $request, Invoice $invoice): JsonResponse
     {
         $item = DB::transaction(function () use ($request, $invoice) {
-            $lockedInvoice = Invoice::lockForUpdate()->find($invoice->id);
-
-            if ($lockedInvoice->status === InvoiceStatus::PAID) {
-                throw ValidationException::withMessages([
-                    'invoice' => 'Cannot add items to a fully paid invoice.',
-                ]);
-            }
+            $lockedInvoice = Invoice::query()->lockForUpdate()->findOrFail($invoice->id);
+            InvoiceClosedException::throwIf($lockedInvoice->status);
 
             $validated = $request->validated();
             if (! empty($validated['patient_treatment_id'])) {
@@ -56,11 +69,7 @@ class InvoiceItemController extends Controller
             }
 
             $item = $lockedInvoice->items()->create($validated);
-
-            $newTotal = $lockedInvoice->items()->selectRaw('SUM(price * quantity) as total')->value('total') ?? 0;
-            $lockedInvoice->update(['total_amount' => $newTotal]);
-
-            $this->invoiceService->recalculateStatus($lockedInvoice);
+            $this->recomputeInvoiceTotal->handle($lockedInvoice);
 
             return $item;
         });
@@ -79,13 +88,9 @@ class InvoiceItemController extends Controller
         }
 
         $updatedItem = DB::transaction(function () use ($request, $invoice, $item) {
-            $lockedInvoice = Invoice::lockForUpdate()->find($invoice->id);
-
-            if ($lockedInvoice->status === InvoiceStatus::PAID) {
-                throw ValidationException::withMessages([
-                    'invoice' => 'Cannot modify items of a fully paid invoice.',
-                ]);
-            }
+            $lockedInvoice = Invoice::query()->lockForUpdate()->findOrFail($invoice->id);
+            InvoiceClosedException::throwIf($lockedInvoice->status);
+            $this->assertLineCanBeEdited($item);
 
             $validated = $request->validated();
 
@@ -96,18 +101,7 @@ class InvoiceItemController extends Controller
             }
 
             $item->update($validated);
-
-            $newTotal = $lockedInvoice->items()->selectRaw('SUM(price * quantity) as total')->value('total') ?? 0;
-            $totalPayments = $lockedInvoice->payments()->sum('amount');
-
-            if (bccomp((string) $newTotal, (string) $totalPayments, 2) === -1) {
-                throw ValidationException::withMessages([
-                    'quantity' => 'New total cannot be less than paid amount.',
-                ]);
-            }
-
-            $lockedInvoice->update(['total_amount' => $newTotal]);
-            $this->invoiceService->recalculateStatus($lockedInvoice);
+            $this->recomputeInvoiceTotal->handle($lockedInvoice);
 
             return $item;
         });
@@ -118,7 +112,7 @@ class InvoiceItemController extends Controller
         );
     }
 
-    public function destroy(Invoice $invoice, InvoiceItem $item): JsonResponse
+    public function destroy(Request $request, Invoice $invoice, InvoiceItem $item): JsonResponse
     {
         if ($item->invoice_id !== $invoice->id) {
             return $this->errorResponse('Item does not belong to this invoice.', 404);
@@ -126,36 +120,78 @@ class InvoiceItemController extends Controller
 
         $this->authorize('delete', $item);
 
-        DB::transaction(function () use ($invoice, $item) {
-            $lockedInvoice = Invoice::lockForUpdate()->find($invoice->id);
+        $actor = $request->user();
+        if (! $actor instanceof User) {
+            abort(401);
+        }
 
-            if ($lockedInvoice->status === InvoiceStatus::PAID) {
-                throw ValidationException::withMessages([
-                    'invoice' => 'Cannot delete items from a fully paid invoice.',
-                ]);
-            }
-
-            if ($lockedInvoice->items()->count() <= 1) {
-                throw ValidationException::withMessages([
-                    'item' => 'Invoice must contain at least one item.',
-                ]);
-            }
-
-            $item->delete();
-
-            $newTotal = $lockedInvoice->items()->selectRaw('SUM(price * quantity) as total')->value('total') ?? 0;
-            $totalPayments = $lockedInvoice->payments()->sum('amount');
-
-            if (bccomp((string) $newTotal, (string) $totalPayments, 2) === -1) {
-                throw ValidationException::withMessages([
-                    'item' => 'New total cannot be less than paid amount.',
-                ]);
-            }
-
-            $lockedInvoice->update(['total_amount' => $newTotal]);
-            $this->invoiceService->recalculateStatus($lockedInvoice);
+        DB::transaction(function () use ($invoice, $item, $actor) {
+            $lockedInvoice = Invoice::query()->lockForUpdate()->findOrFail($invoice->id);
+            $this->deletePlannedItem->handle($lockedInvoice, $item, $actor);
         });
 
         return $this->successResponse(null, 'Invoice item deleted successfully.');
+    }
+
+    public function voidItem(VoidInvoiceItemRequest $request, InvoiceItem $item): JsonResponse
+    {
+        $actor = $request->user();
+        if (! $actor instanceof User) {
+            abort(401);
+        }
+
+        $updated = DB::transaction(function () use ($request, $item, $actor) {
+            $lockedInvoice = Invoice::query()->lockForUpdate()->findOrFail($item->invoice_id);
+
+            return $this->voidInvoiceItem->handle(
+                $lockedInvoice,
+                $item,
+                $actor,
+                (string) $request->validated('reason'),
+            );
+        });
+
+        return $this->successResponse(
+            new InvoiceItemResource($updated->load(['patientTreatment.template'])),
+            'Invoice item voided successfully.'
+        );
+    }
+
+    public function repriceDone(RepriceDoneItemRequest $request, InvoiceItem $item): JsonResponse
+    {
+        $actor = $request->user();
+        if (! $actor instanceof User) {
+            abort(401);
+        }
+
+        $updated = DB::transaction(function () use ($request, $item, $actor) {
+            $lockedInvoice = Invoice::query()->lockForUpdate()->findOrFail($item->invoice_id);
+
+            return $this->repriceDoneItem->handle(
+                $lockedInvoice,
+                $item,
+                $actor,
+                (string) $request->validated('price'),
+                (string) $request->validated('reason'),
+            );
+        });
+
+        return $this->successResponse(
+            new InvoiceItemResource($updated->load(['patientTreatment.template'])),
+            'Completed line repriced successfully.'
+        );
+    }
+
+    private function assertLineCanBeEdited(InvoiceItem $item): void
+    {
+        $state = $this->stateResolver->resolve($this->factsReader->read($item));
+
+        if ($state === InvoiceItemState::DONE) {
+            throw CannotMutateDoneItem::locked();
+        }
+
+        if ($state === InvoiceItemState::VOIDED) {
+            throw CannotMutateVoidedItem::locked();
+        }
     }
 }

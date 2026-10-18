@@ -3,6 +3,7 @@
 namespace Tests\Feature\Http\Controllers;
 
 use App\Enums\InvoiceStatus;
+use App\Enums\PaymentType;
 use App\Enums\UserRole;
 use App\Models\Invoice;
 use App\Models\InvoiceItem;
@@ -83,16 +84,18 @@ class InvoiceItemControllerTest extends TestCase
         $this->assertEquals(160, $invoice->fresh()->total_amount);
     }
 
-    public function test_cannot_add_an_item_to_a_fully_paid_invoice(): void
+    public function test_can_add_an_item_to_a_paid_zero_fee_invoice(): void
     {
         $this->actingAsRole(UserRole::RECEPTIONIST);
-        $invoice = Invoice::factory()->create(['status' => InvoiceStatus::PAID]);
+        $invoice = Invoice::factory()->create(['status' => InvoiceStatus::PAID, 'total_amount' => 0]);
 
         $this->postJson("/api/v1/invoices/{$invoice->id}/items", $this->manualItemPayload())
-            ->assertStatus(403);
+            ->assertCreated();
+
+        $this->assertEquals(80, $invoice->fresh()->total_amount);
     }
 
-    public function test_update_rejects_a_new_total_lower_than_payments_already_received(): void
+    public function test_update_below_payments_sets_refund_due_and_does_not_create_a_refund(): void
     {
         $this->actingAsRole(UserRole::OWNER);
         $invoice = Invoice::factory()->create(['status' => InvoiceStatus::PARTIAL, 'total_amount' => 1000]);
@@ -106,7 +109,12 @@ class InvoiceItemControllerTest extends TestCase
 
         $this->putJson("/api/v1/invoices/{$invoice->id}/items/{$item->id}", [
             'quantity' => 1,
-        ])->assertStatus(422)->assertJsonValidationErrors(['quantity']);
+        ])->assertOk();
+
+        $fresh = $invoice->fresh();
+        $this->assertEquals(100, $fresh->total_amount);
+        $this->assertSame('200.00', $fresh->balance()['refund_due']);
+        $this->assertSame(0, Payment::query()->where('type', PaymentType::Refund->value)->count());
     }
 
     public function test_update_returns_404_when_item_does_not_belong_to_the_invoice(): void
@@ -121,15 +129,21 @@ class InvoiceItemControllerTest extends TestCase
         ])->assertStatus(404);
     }
 
-    public function test_destroy_rejects_deleting_the_last_remaining_item(): void
+    public function test_destroy_can_remove_the_only_planned_line(): void
     {
         $this->actingAsRole(UserRole::RECEPTIONIST);
         $invoice = Invoice::factory()->create(['status' => InvoiceStatus::UNPAID]);
-        $item = InvoiceItem::factory()->create(['invoice_id' => $invoice->id]);
+        $item = InvoiceItem::factory()->create([
+            'invoice_id' => $invoice->id,
+            'description' => 'Only line',
+            'price' => 40,
+            'quantity' => 1,
+        ]);
 
-        $this->deleteJson("/api/v1/invoices/{$invoice->id}/items/{$item->id}")
-            ->assertStatus(422)
-            ->assertJsonValidationErrors(['item']);
+        $this->deleteJson("/api/v1/invoices/{$invoice->id}/items/{$item->id}")->assertOk();
+
+        $this->assertSoftDeleted('invoice_items', ['id' => $item->id]);
+        $this->assertEquals(0, $invoice->fresh()->total_amount);
     }
 
     public function test_destroy_removes_an_item_and_recalculates_total_when_another_item_remains(): void

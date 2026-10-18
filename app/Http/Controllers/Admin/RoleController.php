@@ -59,6 +59,10 @@ class RoleController extends Controller
         $catalog = [];
 
         foreach ($labels as $key => $label) {
+            if (in_array($key, ClinicPermissionCatalog::hiddenFromUi(), true)) {
+                continue;
+            }
+
             $granted = [];
 
             foreach ($matrix as $role => $permissions) {

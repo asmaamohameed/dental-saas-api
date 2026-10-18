@@ -54,20 +54,19 @@ class InvoiceUpdateTest extends TestCase
         $this->assertSame($newPatient->id, $invoice->patient_id);
     }
 
-    public function test_updating_any_field_on_a_paid_invoice_is_blocked(): void
+    public function test_updating_the_patient_on_a_paid_invoice_is_allowed(): void
     {
         $this->actingAsRole(UserRole::OWNER);
 
         $invoice = Invoice::factory()->paid()->create(['tenant_id' => $this->tenant->id]);
-        $originalPatientId = $invoice->patient_id;
         $newPatient = Patient::factory()->create(['tenant_id' => $this->tenant->id]);
 
         $this->putJson("/api/v1/invoices/{$invoice->id}", [
             'patient_id' => $newPatient->id,
-        ])->assertStatus(422)->assertJsonValidationErrors(['invoice']);
+        ])->assertOk()->assertJsonPath('data.patient_id', $newPatient->id);
 
         $invoice->refresh();
-        $this->assertSame($originalPatientId, $invoice->patient_id);
+        $this->assertSame($newPatient->id, $invoice->patient_id);
     }
 
     public function test_updating_patient_id_on_a_partial_invoice_with_no_actual_payment_is_still_blocked(): void

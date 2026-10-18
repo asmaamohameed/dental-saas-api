@@ -109,9 +109,7 @@ class PaymentPolicyTest extends TestCase
         $this->getJson("/api/v1/invoices/{$invoice->id}/payments/{$payment->id}")->assertNotFound();
     }
 
-    // --- update / delete: owner-only, enforced today by route middleware ---
-
-    public function test_owner_can_update_a_payment(): void
+    public function test_payment_update_and_delete_routes_are_gone(): void
     {
         $user = $this->userWithRole(UserRole::OWNER);
         $invoice = $this->invoice();
@@ -126,41 +124,11 @@ class PaymentPolicyTest extends TestCase
 
         $this->putJson("/api/v1/invoices/{$invoice->id}/payments/{$payment->id}", [
             'amount' => 75,
-        ])->assertOk();
-    }
+        ])->assertStatus(405);
 
-    public function test_receptionist_cannot_reach_the_update_payment_route(): void
-    {
-        // Blocked by EnsureUserRole::using(OWNER) middleware before the
-        // PaymentPolicy is even consulted.
-        $user = $this->userWithRole(UserRole::RECEPTIONIST);
-        $invoice = $this->invoice();
-        $payment = Payment::factory()->create([
-            'tenant_id' => $this->tenant->id,
-            'invoice_id' => $invoice->id,
-            'received_by' => $user->id,
-        ]);
+        $this->deleteJson("/api/v1/invoices/{$invoice->id}/payments/{$payment->id}")
+            ->assertStatus(405);
 
-        Sanctum::actingAs($user, ['*']);
-
-        $this->putJson("/api/v1/invoices/{$invoice->id}/payments/{$payment->id}", [
-            'amount' => 75,
-        ])->assertForbidden();
-    }
-
-    public function test_owner_can_delete_a_payment(): void
-    {
-        $user = $this->userWithRole(UserRole::OWNER);
-        $invoice = $this->invoice();
-        $payment = Payment::factory()->create([
-            'tenant_id' => $this->tenant->id,
-            'invoice_id' => $invoice->id,
-            'amount' => 50,
-            'received_by' => $user->id,
-        ]);
-
-        Sanctum::actingAs($user, ['*']);
-
-        $this->deleteJson("/api/v1/invoices/{$invoice->id}/payments/{$payment->id}")->assertOk();
+        $this->assertDatabaseHas('payments', ['id' => $payment->id, 'amount' => 50]);
     }
 }

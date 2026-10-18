@@ -97,13 +97,24 @@ class InvoiceItemPolicyTest extends TestCase
         $this->postJson("/api/v1/invoices/{$invoice->id}/items", $this->manualItemPayload())->assertCreated();
     }
 
-    public function test_nobody_can_add_item_to_a_paid_invoice_not_even_the_owner(): void
+    public function test_owner_can_add_item_to_a_paid_invoice(): void
     {
         $user = $this->userWithRole(UserRole::OWNER);
         Sanctum::actingAs($user, ['*']);
         $invoice = $this->invoiceWithStatus(InvoiceStatus::PAID);
 
-        $this->postJson("/api/v1/invoices/{$invoice->id}/items", $this->manualItemPayload())->assertForbidden();
+        $this->postJson("/api/v1/invoices/{$invoice->id}/items", $this->manualItemPayload())->assertCreated();
+    }
+
+    public function test_owner_cannot_add_item_to_a_cancelled_or_refunded_invoice(): void
+    {
+        $user = $this->userWithRole(UserRole::OWNER);
+        Sanctum::actingAs($user, ['*']);
+
+        foreach ([InvoiceStatus::CANCELLED, InvoiceStatus::REFUNDED] as $status) {
+            $invoice = $this->invoiceWithStatus($status);
+            $this->postJson("/api/v1/invoices/{$invoice->id}/items", $this->manualItemPayload())->assertForbidden();
+        }
     }
 
     public function test_doctor_cannot_add_invoice_items(): void

@@ -100,7 +100,17 @@ class PlatformAdminAccessTest extends TestCase
         $this->getJson('/admin/roles/doctor')
             ->assertOk()
             ->assertJsonPath('data.role.permissions.staff:create', false)
-            ->assertJsonPath('data.role.permissions.patient:view', true);
+            ->assertJsonPath('data.role.permissions.patient:view', true)
+            ->assertJsonPath('data.role.permissions.payment:refund', true);
+
+        $catalogKeys = collect($this->getJson('/admin/roles')->json('data.catalog'))->pluck('key');
+        $this->assertTrue($catalogKeys->contains('payment:refund'));
+        $this->assertFalse($catalogKeys->contains('payment:edit'));
+        $this->assertFalse($catalogKeys->contains('payment:delete'));
+        $this->assertFalse($this->getJson('/admin/roles/owner')->json('data.role.permissions.payment:edit'));
+        $this->assertFalse($this->getJson('/admin/roles/owner')->json('data.role.permissions.payment:delete'));
+        $this->assertTrue($this->getJson('/admin/roles/owner')->json('data.role.permissions.payment:refund'));
+        $this->assertFalse($this->getJson('/admin/roles/receptionist')->json('data.role.permissions.payment:refund'));
 
         $this->postJson('/admin/roles', ['name' => 'superuser'])->assertStatus(405);
         $this->putJson('/admin/roles/owner', ['permissions' => []])->assertStatus(405);

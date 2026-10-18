@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Enums\AppointmentStatus;
 use App\Enums\ExpenseCategory;
 use App\Enums\InvoiceStatus;
+use App\Enums\PaymentType;
 use App\Models\Appointment;
 use App\Models\Expense;
 use App\Models\Invoice;
@@ -75,19 +76,22 @@ class DashboardService
 
         // 1. KPIs
         $totalInvoicedMtd = (float) Invoice::whereBetween('created_at', [$startMtd, $endMtd])->sum('total_amount');
-        $totalCollectedMtd = (float) Payment::whereBetween('created_at', [$startMtd, $endMtd])->sum('amount');
+        $totalCollectedMtd = $this->cashCollected($startMtd, $endMtd);
+        $totalRefundedMtd = $this->refundedCash($startMtd, $endMtd);
         $totalExpensesMtd = (float) Expense::whereBetween('expense_date', [$startMtd->format('Y-m-d'), $endMtd->format('Y-m-d')])->sum('amount');
         $netProfitMtd = $totalCollectedMtd - $totalExpensesMtd;
         $collectionRateMtd = $totalInvoicedMtd > 0 ? round(($totalCollectedMtd / $totalInvoicedMtd) * 100, 1) : 0.0;
 
-        $totalAllInvoiced = (float) Invoice::sum('total_amount');
-        $totalAllPayments = (float) Payment::sum('amount');
-        $outstandingAllTime = max(0.0, $totalAllInvoiced - $totalAllPayments);
+        $outstandingAllTime = $this->outstandingBalance();
 
-        $overdueAmount = (float) Invoice::whereIn('status', [InvoiceStatus::UNPAID->value, InvoiceStatus::PARTIAL->value])
+        $overdueAmount = (float) Invoice::query()
+            ->whereIn('status', [InvoiceStatus::UNPAID->value, InvoiceStatus::PARTIAL->value])
             ->where('created_at', '<', $now->copy()->startOfDay())
+            ->withSum('payments as paid_amount', 'amount')
+            ->withSum('payments as deducted_amount', 'deduct_amount')
+            ->withSum('refunds as refunded_amount', 'amount')
             ->get()
-            ->sum('remaining_amount');
+            ->sum(fn (Invoice $invoice) => (float) $invoice->remaining_amount);
 
         // 2. Invoices summary MTD
         $invoicesMtd = Invoice::whereBetween('created_at', [$startMtd, $endMtd])->get();
@@ -96,6 +100,7 @@ class DashboardService
             'paid_invoices' => $invoicesMtd->filter(fn ($i) => $i->status->value === InvoiceStatus::PAID->value)->count(),
             'partially_paid_invoices' => $invoicesMtd->filter(fn ($i) => $i->status->value === InvoiceStatus::PARTIAL->value)->count(),
             'unpaid_invoices' => $invoicesMtd->filter(fn ($i) => $i->status->value === InvoiceStatus::UNPAID->value)->count(),
+            'refunded_invoices' => $invoicesMtd->filter(fn ($i) => $i->status->value === InvoiceStatus::REFUNDED->value)->count(),
         ];
 
         // 3. Expenses breakdown MTD
@@ -122,7 +127,7 @@ class DashboardService
             $mEnd = $now->copy()->subMonths($i)->endOfMonth();
 
             $categories[] = $mStart->format('M');
-            $incomeData[] = (float) Payment::whereBetween('created_at', [$mStart, $mEnd])->sum('amount');
+            $incomeData[] = $this->cashCollected($mStart, $mEnd);
             $expenseData[] = (float) Expense::whereBetween('expense_date', [$mStart->format('Y-m-d'), $mEnd->format('Y-m-d')])->sum('amount');
         }
 
@@ -135,6 +140,7 @@ class DashboardService
             'kpis' => [
                 'total_invoiced_mtd' => $totalInvoicedMtd,
                 'total_collected_mtd' => $totalCollectedMtd,
+                'total_refunded_mtd' => $totalRefundedMtd,
                 'total_expenses_mtd' => $totalExpensesMtd,
                 'net_profit_mtd' => $netProfitMtd,
                 'collection_rate_mtd' => $collectionRateMtd,
@@ -157,8 +163,8 @@ class DashboardService
     {
         [$start, $end, $prevStart, $prevEnd] = $this->parseDateRange($range);
 
-        $totalIncome = (float) Payment::whereBetween('created_at', [$start, $end])->sum('amount');
-        $prevIncome = (float) Payment::whereBetween('created_at', [$prevStart, $prevEnd])->sum('amount');
+        $totalIncome = $this->cashCollected($start, $end);
+        $prevIncome = $this->cashCollected($prevStart, $prevEnd);
         $incomeChangePct = $this->percentChange($totalIncome, $prevIncome);
 
         $totalExpenses = (float) Expense::whereBetween('expense_date', [$start->format('Y-m-d'), $end->format('Y-m-d')])->sum('amount');
@@ -171,7 +177,7 @@ class DashboardService
             $mStart = $curr->copy()->startOfMonth();
             $mEnd = $curr->copy()->endOfMonth();
 
-            $inc = (float) Payment::whereBetween('created_at', [$mStart, $mEnd])->sum('amount');
+            $inc = $this->cashCollected($mStart, $mEnd);
             $exp = (float) Expense::whereBetween('expense_date', [$mStart->format('Y-m-d'), $mEnd->format('Y-m-d')])->sum('amount');
 
             $series[] = [
@@ -185,6 +191,7 @@ class DashboardService
 
         return [
             'total_income' => $totalIncome,
+            'total_refunded' => $this->refundedCash($start, $end),
             'income_change_pct' => $incomeChangePct,
             'total_expenses' => $totalExpenses,
             'expense_change_pct' => $expenseChangePct,
@@ -213,8 +220,8 @@ class DashboardService
     {
         [$start, $end, $prevStart, $prevEnd] = $this->parseDateRange($range);
 
-        $total = (float) Payment::whereBetween('created_at', [$start, $end])->sum('amount');
-        $prevTotal = (float) Payment::whereBetween('created_at', [$prevStart, $prevEnd])->sum('amount');
+        $total = $this->cashCollected($start, $end);
+        $prevTotal = $this->cashCollected($prevStart, $prevEnd);
         $changePct = $this->percentChange($total, $prevTotal);
 
         $points = [];
@@ -224,7 +231,7 @@ class DashboardService
             while ($curr->lte($end)) {
                 $dayStart = $curr->copy()->startOfDay();
                 $dayEnd = $curr->copy()->endOfDay();
-                $amt = (float) Payment::whereBetween('created_at', [$dayStart, $dayEnd])->sum('amount');
+                $amt = $this->cashCollected($dayStart, $dayEnd);
 
                 $points[] = [
                     'date' => $curr->format('Y-m-d'),
@@ -237,7 +244,7 @@ class DashboardService
             while ($curr->lte($end)) {
                 $mStart = $curr->copy()->startOfMonth();
                 $mEnd = $curr->copy()->endOfMonth();
-                $amt = (float) Payment::whereBetween('created_at', [$mStart, $mEnd])->sum('amount');
+                $amt = $this->cashCollected($mStart, $mEnd);
 
                 $points[] = [
                     'date' => $curr->format('Y-m-d'),
@@ -294,13 +301,47 @@ class DashboardService
         $paid = $getAmount(InvoiceStatus::PAID);
         $partial = $getAmount(InvoiceStatus::PARTIAL);
         $unpaid = $getAmount(InvoiceStatus::UNPAID);
+        $refunded = $getAmount(InvoiceStatus::REFUNDED);
         $total = (float) $invoices->sum(fn ($i) => (float) $i->total_amount);
 
         return [
-            'paid' => round($paid, 2),
-            'partial' => round($partial, 2),
-            'unpaid' => round($unpaid, 2),
-            'total' => round($total, 2),
+            'paid' => round(max(0, $paid), 2),
+            'partial' => round(max(0, $partial), 2),
+            'unpaid' => round(max(0, $unpaid), 2),
+            'refunded' => round(max(0, $refunded), 2),
+            'total' => round(max(0, $total), 2),
         ];
+    }
+
+    /**
+     * Cash received minus cash refunded. Write-offs (amount 0, deduct_amount > 0) are not cash.
+     */
+    private function cashCollected(Carbon $start, Carbon $end): float
+    {
+        $received = (float) Payment::query()
+            ->where('type', PaymentType::Payment->value)
+            ->whereBetween('created_at', [$start, $end])
+            ->sum('amount');
+
+        return round(max(0, $received - $this->refundedCash($start, $end)), 2);
+    }
+
+    private function refundedCash(Carbon $start, Carbon $end): float
+    {
+        return round(max(0, (float) Payment::query()
+            ->where('type', PaymentType::Refund->value)
+            ->whereBetween('created_at', [$start, $end])
+            ->sum('amount')), 2);
+    }
+
+    private function outstandingBalance(): float
+    {
+        return round(max(0, (float) Invoice::query()
+            ->whereIn('status', [InvoiceStatus::UNPAID->value, InvoiceStatus::PARTIAL->value])
+            ->withSum('payments as paid_amount', 'amount')
+            ->withSum('payments as deducted_amount', 'deduct_amount')
+            ->withSum('refunds as refunded_amount', 'amount')
+            ->get()
+            ->sum(fn (Invoice $invoice) => (float) $invoice->remaining_amount)), 2);
     }
 }

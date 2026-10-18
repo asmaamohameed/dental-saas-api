@@ -6,6 +6,7 @@ use App\Enums\AppointmentType;
 use App\Enums\UserRole;
 use App\Http\Requests\V1\Appointment\Concerns\ValidatesAppointmentService;
 use App\Http\Requests\V1\Appointment\Concerns\ValidatesAppointmentTreatmentLinks;
+use App\Http\Requests\V1\Appointment\Concerns\ValidatesDoctorWorkingDay;
 use App\Models\User;
 use App\Rules\AppointmentDoctorAvailable;
 use App\Rules\AppointmentPatientAvailable;
@@ -16,7 +17,7 @@ use Illuminate\Validation\Rule;
 
 class StoreAppointmentRequest extends FormRequest
 {
-    use ValidatesAppointmentService, ValidatesAppointmentTreatmentLinks;
+    use ValidatesAppointmentService, ValidatesAppointmentTreatmentLinks, ValidatesDoctorWorkingDay;
 
     public function authorize(): bool
     {
@@ -75,6 +76,10 @@ class StoreAppointmentRequest extends FormRequest
 
             $scheduledAt = Carbon::parse($this->input('scheduled_at'));
             $durationMinutes = (int) $this->input('duration_minutes');
+
+            if (! $this->rejectUnlessDoctorWorksOn($validator, $scheduledAt, (string) $this->input('doctor_id'))) {
+                return;
+            }
 
             $doctorRule = new AppointmentDoctorAvailable(
                 tenantId: $this->user()->tenant_id,

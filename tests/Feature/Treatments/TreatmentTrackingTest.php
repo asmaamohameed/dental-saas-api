@@ -9,6 +9,7 @@ use App\Enums\ConsentStatus;
 use App\Enums\FinancialStatus;
 use App\Enums\InvoiceStatus;
 use App\Enums\PatientTreatmentStatus;
+use App\Enums\PaymentType;
 use App\Enums\TreatmentScope;
 use App\Enums\TreatmentSessionStatus;
 use App\Enums\TreatmentToothStatus;
@@ -18,6 +19,7 @@ use App\Models\AuditLog;
 use App\Models\Invoice;
 use App\Models\Patient;
 use App\Models\PatientTreatment;
+use App\Models\Payment;
 use App\Models\Tenant;
 use App\Models\TreatmentTemplate;
 use App\Models\User;
@@ -544,7 +546,7 @@ class TreatmentTrackingTest extends TestCase
         $this->assertSame('250.00', (string) $invoice->fresh()->total_amount);
     }
 
-    public function test_invoice_sync_blocked_when_partial_payments_exceed_new_total(): void
+    public function test_invoice_sync_below_payments_sets_refund_due_without_a_refund_row(): void
     {
         $treatment = $this->createTreatment(['agreed_price' => 200, 'tooth_numbers' => ['16']]);
         $invoiceId = $treatment->invoiceItems()->first()->invoice_id;
@@ -556,7 +558,13 @@ class TreatmentTrackingTest extends TestCase
 
         $this->patchJson("/api/v1/patient-treatments/{$treatment->id}/teeth", [
             'teeth' => [['tooth_number' => '16', 'price' => 50]],
-        ])->assertUnprocessable();
+        ])->assertOk();
+
+        $invoice = Invoice::query()->findOrFail($invoiceId);
+        $this->assertSame('50.00', (string) $invoice->total_amount);
+        $this->assertSame('100.00', $invoice->balance()['refund_due']);
+        $this->assertSame(InvoiceStatus::PAID, $invoice->status);
+        $this->assertSame(0, Payment::query()->where('invoice_id', $invoiceId)->where('type', PaymentType::Refund->value)->count());
     }
 
     public function test_invoice_sync_allowed_on_partial_when_total_still_covers_payments(): void
@@ -576,7 +584,7 @@ class TreatmentTrackingTest extends TestCase
         $this->assertSame(InvoiceStatus::PARTIAL, Invoice::query()->find($invoiceId)->status);
     }
 
-    public function test_invoice_sync_blocked_when_invoice_is_paid(): void
+    public function test_invoice_sync_on_a_paid_invoice_updates_the_planned_line(): void
     {
         $treatment = $this->createTreatment(['agreed_price' => 100, 'tooth_numbers' => ['16']]);
         $invoiceId = $treatment->invoiceItems()->first()->invoice_id;
@@ -588,7 +596,11 @@ class TreatmentTrackingTest extends TestCase
 
         $this->patchJson("/api/v1/patient-treatments/{$treatment->id}/teeth", [
             'teeth' => [['tooth_number' => '16', 'price' => 200]],
-        ])->assertUnprocessable();
+        ])->assertOk();
+
+        $invoice = Invoice::query()->findOrFail($invoiceId);
+        $this->assertSame('200.00', (string) $invoice->total_amount);
+        $this->assertSame(InvoiceStatus::PARTIAL, $invoice->status);
     }
 
     public function test_cancelling_requires_a_reason_and_does_not_change_financial_status_when_unpaid(): void

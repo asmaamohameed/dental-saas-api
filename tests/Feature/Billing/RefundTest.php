@@ -100,6 +100,28 @@ class RefundTest extends TestCase
         $this->assertDatabaseCount('refunds', 1);
     }
 
+    public function test_refund_api_rejects_when_a_refund_row_exists_but_invoice_is_still_paid(): void
+    {
+        $this->actingAsTenantUser(role: UserRole::OWNER);
+        $invoice = Invoice::factory()->create(['total_amount' => 100, 'status' => InvoiceStatus::PAID]);
+        Payment::factory()->create(['invoice_id' => $invoice->id, 'amount' => 100]);
+
+        Refund::factory()->create([
+            'invoice_id' => $invoice->id,
+            'amount' => 100,
+        ]);
+
+        $this->assertSame(InvoiceStatus::PAID, $invoice->fresh()->status);
+
+        $this->postJson("/api/v1/invoices/{$invoice->id}/refunds", [
+            'reason_code' => RefundReasonCode::DUPLICATE_PAYMENT->value,
+        ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['invoice']);
+
+        $this->assertDatabaseCount('refunds', 1);
+    }
+
     public function test_missing_reason_is_rejected(): void
     {
         $this->actingAsTenantUser(role: UserRole::OWNER);

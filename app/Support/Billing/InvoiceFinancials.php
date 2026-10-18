@@ -5,7 +5,6 @@ namespace App\Support\Billing;
 use App\Enums\InvoiceStatus;
 use App\Models\Invoice;
 use App\Models\Payment;
-use App\Models\Refund;
 use Illuminate\Validation\ValidationException;
 
 /**
@@ -50,10 +49,8 @@ final class InvoiceFinancials
 
     public static function refundedAmount(Invoice $invoice): float
     {
-        if ($invoice->relationLoaded('refund')) {
-            return $invoice->refund instanceof Refund
-                ? round((float) $invoice->refund->amount, 2)
-                : 0.0;
+        if ($invoice->relationLoaded('refunds')) {
+            return round((float) $invoice->refunds->sum('amount'), 2);
         }
 
         $attributes = $invoice->getAttributes();
@@ -61,7 +58,7 @@ final class InvoiceFinancials
             return round((float) $attributes['refunded_amount'], 2);
         }
 
-        return round((float) $invoice->refund()->sum('amount'), 2);
+        return round((float) $invoice->refunds()->sum('amount'), 2);
     }
 
     public static function isClosed(Invoice $invoice): bool

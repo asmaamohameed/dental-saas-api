@@ -26,7 +26,7 @@ class InvoiceService
         'items.patientTreatment.teeth',
         'items.patientTreatment.sessions.dentist',
         'payments',
-        'refund.refundedBy',
+        'refunds.refundedBy',
     ];
 
     public function list(array $filters = [], int $perPage = 15): LengthAwarePaginator
@@ -470,7 +470,7 @@ class InvoiceService
 
     public function getPatientSummary(string $patientId): array
     {
-        $invoices = Invoice::where('patient_id', $patientId)->with(['payments', 'refund'])->get();
+        $invoices = Invoice::where('patient_id', $patientId)->with(['payments', 'refunds'])->get();
         $invoiceIds = $invoices->pluck('id');
 
         $totalBilled = $invoices->sum('total_amount');

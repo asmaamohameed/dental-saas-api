@@ -5,6 +5,7 @@ namespace App\Http\Resources\V1;
 use App\Models\Appointment;
 use App\Models\Invoice;
 use App\Models\Patient;
+use App\Models\Refund;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
@@ -50,10 +51,13 @@ class InvoiceResource extends JsonResource
             }),
             'items' => InvoiceItemResource::collection($this->whenLoaded('items')),
             'payments' => PaymentResource::collection($this->whenLoaded('payments')),
-            'refund' => $this->whenLoaded('refund', fn () => $this->refund
-                ? new RefundResource($this->refund)
-                : null
-            ),
+            'refund' => $this->whenLoaded('refunds', function () {
+                $latest = $this->refunds
+                    ->sortBy([['refunded_at', 'desc'], ['id', 'desc']])
+                    ->first();
+
+                return $latest ? new RefundResource($latest) : null;
+            }),
             'created_at' => $this->created_at?->toISOString(),
             'updated_at' => $this->updated_at?->toISOString(),
         ];

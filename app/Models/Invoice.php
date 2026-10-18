@@ -13,7 +13,6 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 /**
@@ -30,7 +29,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
  * @property-read User|null $creator
  * @property-read Collection<int, InvoiceItem> $items
  * @property-read Collection<int, Payment> $payments
- * @property-read Refund|null $refund
+ * @property-read Collection<int, Refund> $refunds
  */
 class Invoice extends Model
 {
@@ -89,11 +88,11 @@ class Invoice extends Model
     }
 
     /**
-     * @return HasOne<Refund, $this>
+     * @return HasMany<Refund, $this>
      */
-    public function refund(): HasOne
+    public function refunds(): HasMany
     {
-        return $this->hasOne(Refund::class);
+        return $this->hasMany(Refund::class);
     }
 
     // Computed Attributes

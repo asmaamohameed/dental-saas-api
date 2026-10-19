@@ -17,6 +17,7 @@ use Illuminate\Support\Carbon;
  * @property string $id
  * @property string $tenant_id
  * @property string $patient_id
+ * @property string|null $treatment_plan_id
  * @property string|null $doctor_id
  * @property string|null $booked_doctor_id
  * @property string|null $created_by
@@ -33,6 +34,7 @@ use Illuminate\Support\Carbon;
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  * @property-read Patient|null $patient
+ * @property-read TreatmentPlan|null $treatmentPlan
  * @property-read User|null $doctor
  * @property-read User|null $creator
  */
@@ -66,6 +68,7 @@ class Appointment extends Model
 
     protected $fillable = [
         'patient_id',
+        'treatment_plan_id',
         'doctor_id',
         'booked_doctor_id',
         'created_by',
@@ -101,6 +104,14 @@ class Appointment extends Model
     public function patient(): BelongsTo
     {
         return $this->belongsTo(Patient::class);
+    }
+
+    /**
+     * @return BelongsTo<TreatmentPlan, $this>
+     */
+    public function treatmentPlan(): BelongsTo
+    {
+        return $this->belongsTo(TreatmentPlan::class);
     }
 
     public function service(): BelongsTo

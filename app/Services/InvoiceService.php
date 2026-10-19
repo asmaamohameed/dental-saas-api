@@ -165,14 +165,13 @@ class InvoiceService
                     continue;
                 }
 
-                if ($invoice->status === InvoiceStatus::PAID) {
+                if (
+                    $invoice->status === InvoiceStatus::PAID
+                    && bccomp((string) $invoice->total_amount, '0', 2) === 1
+                ) {
                     throw ValidationException::withMessages([
                         'invoice' => 'Cannot change treatment pricing while its invoice is fully paid.',
                     ]);
-                }
-
-                if (InvoiceFinancials::isLocked($invoice)) {
-                    continue;
                 }
 
                 if (! in_array($invoice->status, [InvoiceStatus::UNPAID, InvoiceStatus::PARTIAL], true)) {
@@ -400,7 +399,7 @@ class InvoiceService
 
     public function recalculateStatus(Invoice $invoice): void
     {
-        $invoice->load('payments');
+        $invoice->load(['payments', 'refunds']);
 
         if (InvoiceFinancials::isClosed($invoice)) {
             return;

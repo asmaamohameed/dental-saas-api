@@ -27,9 +27,8 @@ class InvoiceFinancialsLedgerSixATest extends TestCase
 
         $fresh = $invoice->fresh(['payments', 'refunds']);
 
-        // 6b: InvoiceFinancials::remainingAmount() will align with balance()['remaining'].
         $this->assertSame(150.0, (float) $fresh->balance()['remaining']);
-        $this->assertSame(100.0, InvoiceFinancials::remainingAmount($fresh));
+        $this->assertSame(150.0, InvoiceFinancials::remainingAmount($fresh));
     }
 
     public function test_net_paid_with_no_refund_equals_gross_paid(): void

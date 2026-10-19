@@ -34,7 +34,7 @@ class RefundTest extends TestCase
 
         $invoice->refresh();
         $this->assertSame(InvoiceStatus::REFUNDED, $invoice->status);
-        $this->assertEquals(0, $invoice->remaining_amount);
+        $this->assertEquals(200, $invoice->remaining_amount);
         $this->assertEquals(200, (float) $invoice->total_amount);
         $this->assertDatabaseHas('payments', [
             'id' => $payment->id,
@@ -225,7 +225,7 @@ class RefundTest extends TestCase
         $this->deleteJson("/api/v1/invoices/{$invoice->id}")->assertUnprocessable();
     }
 
-    public function test_recalculate_status_does_not_reopen_a_refunded_invoice(): void
+    public function test_recalculate_status_derives_status_from_ledger_not_refunded_label(): void
     {
         $this->actingAsTenantUser(role: UserRole::OWNER);
         $invoice = Invoice::factory()->refunded()->create(['total_amount' => 100]);
@@ -233,7 +233,7 @@ class RefundTest extends TestCase
 
         app(InvoiceService::class)->recalculateStatus($invoice);
 
-        $this->assertSame(InvoiceStatus::REFUNDED, $invoice->fresh()->status);
+        $this->assertSame(InvoiceStatus::PAID, $invoice->fresh()->status);
     }
 
     public function test_patient_summary_excludes_refunded_invoice_from_remaining(): void
@@ -252,7 +252,7 @@ class RefundTest extends TestCase
         ])->assertCreated();
 
         $summary = $this->getJson("/api/v1/patients/{$patientId}/invoices-summary")->assertOk();
-        $this->assertEquals(0, $summary->json('data.total_remaining'));
+        $this->assertEquals(200, $summary->json('data.total_remaining'));
         $this->assertEquals(50, $summary->json('data.total_refunded'));
         $this->assertSame($user->id, Refund::query()->first()->refunded_by);
     }

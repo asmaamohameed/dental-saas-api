@@ -39,53 +39,45 @@ final class InvoiceFinancials
         return (float) self::snapshot($invoice)->refundDue;
     }
 
+    public static function settledAmount(Invoice $invoice): float
+    {
+        return (float) self::snapshot($invoice)->settled;
+    }
+
+    /**
+     * Settled amount applied to the invoice (net paid cash + deductions).
+     */
     public static function appliedCredits(Invoice $invoice): float
     {
-        // TEMP shim until 6b: legacy uses gross cash + deduct, not settled (net + deduct).
-        return round(self::paidAmount($invoice) + self::deductedAmount($invoice), 2);
+        return self::settledAmount($invoice);
     }
 
     public static function isClosed(Invoice $invoice): bool
     {
-        return in_array($invoice->status, [InvoiceStatus::REFUNDED, InvoiceStatus::CANCELLED], true);
-    }
-
-    public static function isLocked(Invoice $invoice): bool
-    {
-        return $invoice->status === InvoiceStatus::REFUNDED;
+        return $invoice->status === InvoiceStatus::CANCELLED;
     }
 
     public static function remainingAmount(Invoice $invoice): float
     {
-        if (self::isClosed($invoice)) {
+        if ($invoice->status === InvoiceStatus::CANCELLED) {
             return 0.0;
         }
 
-        // TEMP shim until 6b: ignores refunds in remaining; ledger uses snapshot remaining.
-        return max(0.0, round((float) $invoice->total_amount - self::appliedCredits($invoice), 2));
+        return (float) self::snapshot($invoice)->remaining;
     }
 
     public static function deriveOpenStatus(Invoice $invoice): InvoiceStatus
     {
-        // TEMP shim until 6b: legacy status from gross+deduct applied credits, not InvoiceBalance::status().
-        $applied = self::appliedCredits($invoice);
-        $total = (float) $invoice->total_amount;
-
-        return match (true) {
-            $applied >= $total && $total > 0 => InvoiceStatus::PAID,
-            $applied > 0 => InvoiceStatus::PARTIAL,
-            default => InvoiceStatus::UNPAID,
-        };
+        return self::snapshot($invoice)->status();
     }
 
     public static function isRefundable(Invoice $invoice): bool
     {
-        if (self::isClosed($invoice)) {
+        if ($invoice->status === InvoiceStatus::CANCELLED) {
             return false;
         }
 
-        // TEMP shim until 6b: refundable when gross paid > 0; 6b will use netPaid.
-        return bccomp((string) self::paidAmount($invoice), '0', 2) === 1;
+        return bccomp((string) self::netPaid($invoice), '0', 2) === 1;
     }
 
     public static function defaultRefundMethod(Invoice $invoice): string
@@ -105,9 +97,9 @@ final class InvoiceFinancials
 
     public static function assertMutable(Invoice $invoice): void
     {
-        if (self::isLocked($invoice)) {
+        if ($invoice->status === InvoiceStatus::CANCELLED) {
             throw ValidationException::withMessages([
-                'invoice' => 'A refunded invoice cannot be modified.',
+                'invoice' => 'A cancelled invoice cannot be modified.',
             ]);
         }
     }

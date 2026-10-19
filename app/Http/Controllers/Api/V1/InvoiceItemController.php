@@ -111,9 +111,10 @@ class InvoiceItemController extends Controller
             $item->update($validated);
 
             $billableTotal = $this->invoiceItemStateSql->totalsForInvoice((string) $lockedInvoice->id)['total'];
-            $totalPayments = $lockedInvoice->payments()->sum('amount');
+            $lockedInvoice->load(['payments', 'refunds']);
+            $settled = (string) InvoiceFinancials::settledAmount($lockedInvoice);
 
-            if (bccomp($billableTotal, (string) $totalPayments, 2) === -1) {
+            if (bccomp($billableTotal, $settled, 2) === -1) {
                 throw ValidationException::withMessages([
                     'quantity' => 'New total cannot be less than paid amount.',
                 ]);
@@ -157,9 +158,10 @@ class InvoiceItemController extends Controller
             $item->delete();
 
             $billableTotal = $this->invoiceItemStateSql->totalsForInvoice((string) $lockedInvoice->id)['total'];
-            $totalPayments = $lockedInvoice->payments()->sum('amount');
+            $lockedInvoice->load(['payments', 'refunds']);
+            $settled = (string) InvoiceFinancials::settledAmount($lockedInvoice);
 
-            if (bccomp($billableTotal, (string) $totalPayments, 2) === -1) {
+            if (bccomp($billableTotal, $settled, 2) === -1) {
                 throw ValidationException::withMessages([
                     'item' => 'New total cannot be less than paid amount.',
                 ]);

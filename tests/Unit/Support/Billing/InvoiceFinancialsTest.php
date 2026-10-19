@@ -5,23 +5,40 @@ namespace Tests\Unit\Support\Billing;
 use App\Enums\InvoiceStatus;
 use App\Models\Invoice;
 use App\Models\Payment;
+use App\Models\Refund;
 use App\Support\Billing\InvoiceFinancials;
 use Tests\TestCase;
 
 class InvoiceFinancialsTest extends TestCase
 {
-    public function test_remaining_is_zero_for_a_refunded_invoice_even_when_partially_paid(): void
+    public function test_remaining_uses_ledger_even_when_status_is_refunded(): void
     {
         $this->actingAsTenantUser();
         $invoice = Invoice::factory()->refunded()->create(['total_amount' => 200]);
         Payment::factory()->create(['invoice_id' => $invoice->id, 'amount' => 50]);
 
-        $this->assertSame(0.0, InvoiceFinancials::remainingAmount($invoice->fresh()));
-        $this->assertFalse(InvoiceFinancials::isRefundable($invoice->fresh()));
-        $this->assertTrue(InvoiceFinancials::isLocked($invoice->fresh()));
+        $fresh = $invoice->fresh(['payments', 'refunds']);
+
+        $this->assertSame(150.0, InvoiceFinancials::remainingAmount($fresh));
+        $this->assertTrue(InvoiceFinancials::isRefundable($fresh));
     }
 
-    public function test_refundable_uses_cash_paid_not_deductions(): void
+    public function test_cancelled_invoice_has_zero_remaining_and_is_not_refundable(): void
+    {
+        $this->actingAsTenantUser();
+        $invoice = Invoice::factory()->create([
+            'total_amount' => 200,
+            'status' => InvoiceStatus::CANCELLED,
+        ]);
+        Payment::factory()->create(['invoice_id' => $invoice->id, 'amount' => 50]);
+
+        $fresh = $invoice->fresh(['payments', 'refunds']);
+
+        $this->assertSame(0.0, InvoiceFinancials::remainingAmount($fresh));
+        $this->assertFalse(InvoiceFinancials::isRefundable($fresh));
+    }
+
+    public function test_refundable_uses_net_paid_not_deductions(): void
     {
         $this->actingAsTenantUser();
         $invoice = Invoice::factory()->create(['total_amount' => 200, 'status' => InvoiceStatus::PARTIAL]);
@@ -36,7 +53,7 @@ class InvoiceFinancialsTest extends TestCase
         $this->assertFalse(InvoiceFinancials::isRefundable($fresh));
     }
 
-    public function test_derive_open_status_from_applied_credits(): void
+    public function test_derive_open_status_from_settled_amount(): void
     {
         $this->actingAsTenantUser();
         $invoice = Invoice::factory()->create(['total_amount' => 100, 'status' => InvoiceStatus::UNPAID]);
@@ -47,5 +64,17 @@ class InvoiceFinancialsTest extends TestCase
 
         Payment::factory()->create(['invoice_id' => $invoice->id, 'amount' => 60]);
         $this->assertSame(InvoiceStatus::PAID, InvoiceFinancials::deriveOpenStatus($invoice->fresh(['payments'])));
+    }
+
+    public function test_derive_open_status_reflects_partial_refund(): void
+    {
+        $this->actingAsTenantUser();
+        $invoice = Invoice::factory()->create(['total_amount' => 200, 'status' => InvoiceStatus::PAID]);
+        Payment::factory()->create(['invoice_id' => $invoice->id, 'amount' => 100]);
+        Refund::factory()->create(['invoice_id' => $invoice->id, 'amount' => 40]);
+
+        $fresh = $invoice->fresh(['payments', 'refunds']);
+
+        $this->assertSame(InvoiceStatus::PARTIAL, InvoiceFinancials::deriveOpenStatus($fresh));
     }
 }

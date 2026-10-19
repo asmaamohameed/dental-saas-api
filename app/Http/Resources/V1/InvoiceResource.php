@@ -6,6 +6,7 @@ use App\Models\Appointment;
 use App\Models\Invoice;
 use App\Models\Patient;
 use App\Models\User;
+use App\Support\Billing\InvoiceFinancials;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -16,6 +17,8 @@ class InvoiceResource extends JsonResource
 {
     public function toArray(Request $request): array
     {
+        $refundDue = InvoiceFinancials::refundDue($this->resource);
+
         return [
             'id' => $this->id,
             'tenant_id' => $this->tenant_id,
@@ -25,8 +28,11 @@ class InvoiceResource extends JsonResource
             'total_amount' => (float) $this->total_amount,
             'remaining_amount' => (float) $this->remaining_amount,
             'paid_amount' => $this->paidAmount(),
+            'net_paid_amount' => InvoiceFinancials::netPaid($this->resource),
             'deducted_amount' => $this->deductedAmount(),
             'refunded_amount' => $this->refundedAmount(),
+            'refund_due' => $refundDue,
+            'has_refund_due' => bccomp((string) $refundDue, '0', 2) === 1,
             'status' => $this->status,
             'patient' => $this->whenLoaded('patient', function (Patient $patient) {
                 return [

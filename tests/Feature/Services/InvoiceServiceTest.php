@@ -163,13 +163,13 @@ class InvoiceServiceTest extends TestCase
 
     // ---------- recalculateStatus() ----------
 
-    public function test_recalculate_status_sets_unpaid_when_zero_total_and_zero_paid(): void
+    public function test_recalculate_status_sets_paid_when_zero_total_and_zero_paid(): void
     {
         $invoice = Invoice::factory()->create(['total_amount' => 0, 'status' => InvoiceStatus::PARTIAL]);
 
         $this->service->recalculateStatus($invoice);
 
-        $this->assertSame(InvoiceStatus::UNPAID, $invoice->fresh()->status);
+        $this->assertSame(InvoiceStatus::PAID, $invoice->fresh()->status);
     }
 
     public function test_recalculate_status_sets_partial_when_partially_paid(): void

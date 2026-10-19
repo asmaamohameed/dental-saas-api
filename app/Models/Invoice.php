@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Billing\Domain\InvoiceBalance;
+use App\Billing\Queries\InvoiceItemStateSql;
 use App\Enums\InvoiceStatus;
 use App\Models\Concerns\Auditable;
 use App\Models\Concerns\BelongsToTenant;
@@ -20,12 +22,14 @@ use Illuminate\Database\Eloquent\SoftDeletes;
  * @property string $tenant_id
  * @property string $patient_id
  * @property string|null $appointment_id
+ * @property string|null $treatment_plan_id
  * @property string|null $created_by
  * @property string $total_amount
  * @property float $remaining_amount
  * @property InvoiceStatus $status
  * @property-read Patient $patient
  * @property-read Appointment|null $appointment
+ * @property-read TreatmentPlan|null $treatmentPlan
  * @property-read User|null $creator
  * @property-read Collection<int, InvoiceItem> $items
  * @property-read Collection<int, Payment> $payments
@@ -35,9 +39,14 @@ class Invoice extends Model
 {
     use Auditable, BelongsToTenant, HasFactory, HasUuids, SoftDeletes;
 
+    private ?InvoiceBalance $balanceCache = null;
+
+    private ?InvoiceBalance $itemBalanceCache = null;
+
     protected $fillable = [
         'patient_id',
         'appointment_id',
+        'treatment_plan_id',
         'created_by',
         'total_amount',
         'status',
@@ -64,6 +73,14 @@ class Invoice extends Model
     public function appointment(): BelongsTo
     {
         return $this->belongsTo(Appointment::class);
+    }
+
+    /**
+     * @return BelongsTo<TreatmentPlan, $this>
+     */
+    public function treatmentPlan(): BelongsTo
+    {
+        return $this->belongsTo(TreatmentPlan::class);
     }
 
     public function creator(): BelongsTo
@@ -95,6 +112,61 @@ class Invoice extends Model
         return $this->hasMany(Refund::class);
     }
 
+    public function forgetBalance(): void
+    {
+        $this->balanceCache = null;
+        $this->itemBalanceCache = null;
+        $this->unsetRelation('payments');
+        $this->unsetRelation('refunds');
+
+        $attributes = $this->getAttributes();
+        unset($attributes['paid_amount'], $attributes['deducted_amount'], $attributes['refunded_amount']);
+        $this->setRawAttributes($attributes, true);
+    }
+
+    public function refresh(): static
+    {
+        parent::refresh();
+        $this->balanceCache = null;
+        $this->itemBalanceCache = null;
+
+        return $this;
+    }
+
+    /**
+     * @return array{
+     *     gross_paid: string,
+     *     refunded: string,
+     *     deducted: string,
+     *     net_paid: string,
+     *     settled: string,
+     *     total: string,
+     *     remaining: string,
+     *     refund_due: string,
+     *     has_refund_due: bool,
+     *     performed_total?: string,
+     *     due_performed?: string
+     * }
+     */
+    public function balance(bool $withItemDerived = false): array
+    {
+        return $this->invoiceBalance($withItemDerived)->toArray();
+    }
+
+    public function invoiceBalance(bool $withItemDerived = false): InvoiceBalance
+    {
+        if ($withItemDerived) {
+            return $this->itemBalanceCache ??= $this->buildBalance(true);
+        }
+
+        return $this->balanceCache ??= $this->buildBalance(false);
+    }
+
+    public function settledAmount(): float
+    {
+        return (float) $this->balance()['settled'];
+    }
+
     // Computed Attributes
     public function getRemainingAmountAttribute(): float
     {
@@ -119,6 +191,56 @@ class Invoice extends Model
     public function refundedAmount(): float
     {
         return InvoiceFinancials::refundedAmount($this);
+    }
+
+    private function buildBalance(bool $withItemDerived): InvoiceBalance
+    {
+        $total = $this->money($this->total_amount);
+        $performedTotal = null;
+
+        if ($withItemDerived) {
+            $derived = (new InvoiceItemStateSql)->totalsForInvoice((string) $this->id);
+            $total = $derived['total'];
+            $performedTotal = $derived['performed_total'];
+        }
+
+        return InvoiceBalance::fromRawSums(
+            $this->aggregate('payments', 'paid_amount', 'amount'),
+            $this->aggregate('refunds', 'refunded_amount', 'amount'),
+            $this->aggregate('payments', 'deducted_amount', 'deduct_amount'),
+            $total,
+            $performedTotal,
+        );
+    }
+
+    private function aggregate(string $relation, string $attribute, string $column): string
+    {
+        if ($this->relationLoaded($relation)) {
+            $sum = '0.00';
+
+            foreach ($this->getRelation($relation) as $row) {
+                $sum = bcadd($sum, $this->money($row->{$column} ?? 0), 2);
+            }
+
+            return $sum;
+        }
+
+        if (array_key_exists($attribute, $this->attributes)) {
+            return $this->money($this->attributes[$attribute]);
+        }
+
+        $query = $relation === 'refunds' ? $this->refunds() : $this->payments();
+
+        return $this->money($query->sum($column));
+    }
+
+    private function money(mixed $value): string
+    {
+        if ($value === null || $value === '') {
+            return '0.00';
+        }
+
+        return bcadd((string) $value, '0', 2);
     }
 
     // Scopes

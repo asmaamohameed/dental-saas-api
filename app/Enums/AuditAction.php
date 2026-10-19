@@ -14,4 +14,7 @@ enum AuditAction: string
     case CLINIC_ROLE_PERMISSIONS_CHANGED = 'clinic_role_permissions_changed';
     case STAFF_ROLE_CHANGED = 'staff_role_changed';
     case STAFF_ACTIVE_STATUS_CHANGED = 'staff_active_status_changed';
+    case INVOICE_ITEM_VOIDED = 'invoice_item_voided';
+    case INVOICE_ITEM_DONE_REPRICED = 'invoice_item_done_repriced';
+    case INVOICE_ITEM_PLANNED_DELETED = 'invoice_item_planned_deleted';
 }

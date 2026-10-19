@@ -1,5 +1,6 @@
 <?php
 
+use App\Billing\Domain\Exceptions\BillingDomainException;
 use App\Exceptions\InvoiceHasPaymentsException;
 use App\Http\Middleware\ClearPlatformTenantContext;
 use App\Http\Middleware\EnsureClinicPermission;
@@ -104,6 +105,9 @@ return Application::configure(basePath: dirname(__DIR__))
                         $message = 'Resource not found.';
                     }
                 } elseif ($e instanceof InvoiceHasPaymentsException) {
+                    $status = 422;
+                    $message = $e->getMessage();
+                } elseif ($e instanceof BillingDomainException) {
                     $status = 422;
                     $message = $e->getMessage();
                 } elseif ($e instanceof QueryException) {

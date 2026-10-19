@@ -145,6 +145,8 @@ Route::prefix('v1')->group(function () {
             Route::post('invoices/{invoice}/items', [InvoiceItemController::class, 'store']);
             Route::put('invoices/{invoice}/items/{item}', [InvoiceItemController::class, 'update']);
             Route::delete('invoices/{invoice}/items/{item}', [InvoiceItemController::class, 'destroy']);
+            Route::post('invoice-items/{item}/void', [InvoiceItemController::class, 'voidItem']);
+            Route::post('invoice-items/{item}/reprice-done', [InvoiceItemController::class, 'repriceDone']);
 
             Route::post('invoices/{invoice}/payments', [PaymentController::class, 'store'])->middleware('clinic.permission:payment:create');
         });

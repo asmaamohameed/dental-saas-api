@@ -3,6 +3,7 @@
 namespace App\Http\Requests\V1\Refund;
 
 use App\Enums\RefundReasonCode;
+use App\Models\Invoice;
 use App\Models\Refund;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -17,10 +18,21 @@ class StoreRefundRequest extends FormRequest
 
     public function rules(): array
     {
+        /** @var Invoice $invoice */
+        $invoice = $this->route('invoice');
+
         return [
+            'amount' => ['required', 'numeric', 'decimal:0,2', 'min:0.01'],
             'reason_code' => ['required', 'string', Rule::enum(RefundReasonCode::class)],
             'reason_note' => ['nullable', 'string', 'max:'.RefundReasonCode::NOTE_MAX_LENGTH],
             'method' => ['nullable', 'string', 'in:cash,card,transfer,other'],
+            'invoice_item_id' => [
+                'nullable',
+                'uuid',
+                Rule::exists('invoice_items', 'id')
+                    ->where('invoice_id', $invoice->id)
+                    ->whereNull('deleted_at'),
+            ],
         ];
     }
 
@@ -42,7 +54,13 @@ class StoreRefundRequest extends FormRequest
     }
 
     /**
-     * @return array{reason_code: string, reason_note: string|null, method?: string}
+     * @return array{
+     *     amount: string,
+     *     reason_code: string,
+     *     reason_note: string|null,
+     *     method?: string,
+     *     invoice_item_id?: string
+     * }
      */
     public function validated($key = null, $default = null): array
     {
@@ -51,6 +69,11 @@ class StoreRefundRequest extends FormRequest
         }
 
         $data = parent::validated();
+
+        $amount = $data['amount'] ?? null;
+        if (! is_numeric($amount)) {
+            throw new \UnexpectedValueException('Validated refund amount must be numeric.');
+        }
 
         $reasonCode = $data['reason_code'] ?? null;
         if (! is_string($reasonCode)) {
@@ -63,21 +86,26 @@ class StoreRefundRequest extends FormRequest
             $reasonNote = is_string($note) ? trim($note) : null;
         }
 
+        $payload = [
+            'amount' => bcadd((string) $amount, '0', 2),
+            'reason_code' => $reasonCode,
+            'reason_note' => $reasonNote,
+        ];
+
+        if (isset($data['invoice_item_id']) && is_string($data['invoice_item_id'])) {
+            $payload['invoice_item_id'] = $data['invoice_item_id'];
+        }
+
         if (! array_key_exists('method', $data) || $data['method'] === null) {
-            return [
-                'reason_code' => $reasonCode,
-                'reason_note' => $reasonNote,
-            ];
+            return $payload;
         }
 
         if (! is_string($data['method'])) {
             throw new \UnexpectedValueException('Validated refund method must be a string.');
         }
 
-        return [
-            'reason_code' => $reasonCode,
-            'reason_note' => $reasonNote,
-            'method' => $data['method'],
-        ];
+        $payload['method'] = $data['method'];
+
+        return $payload;
     }
 }

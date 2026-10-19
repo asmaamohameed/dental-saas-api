@@ -64,11 +64,19 @@ class PaymentService
         return DB::transaction(function () use ($invoice, $payment, $data) {
             $lockedInvoice = Invoice::lockForUpdate()->find($invoice->id);
             InvoiceFinancials::assertMutable($lockedInvoice);
+            $lockedInvoice->load(['payments', 'refunds']);
+
+            $payment = $lockedInvoice->payments->firstWhere('id', $payment->id) ?? $payment;
 
             $changesAmount = array_key_exists('amount', $data);
+            $hasRefunds = bccomp(InvoiceFinancials::refundedSum($lockedInvoice), '0', 2) === 1;
 
             if ($changesAmount || array_key_exists('deduct_amount', $data) || $lockedInvoice->status === InvoiceStatus::PAID) {
-                if ($lockedInvoice->status === InvoiceStatus::PAID && ($changesAmount || array_key_exists('deduct_amount', $data))) {
+                if (
+                    $lockedInvoice->status === InvoiceStatus::PAID
+                    && ($changesAmount || array_key_exists('deduct_amount', $data))
+                    && ! $hasRefunds
+                ) {
                     throw ValidationException::withMessages([
                         'amount' => 'Cannot change the amount of a payment on a fully paid invoice. Record a reversal instead.',
                     ]);
@@ -76,21 +84,41 @@ class PaymentService
             }
 
             if ($changesAmount || array_key_exists('deduct_amount', $data)) {
-                $otherPayments = $lockedInvoice->payments()->where('id', '!=', $payment->id)->get();
-                $otherApplied = (string) $otherPayments->sum(function (Payment $other) {
-                    return (float) $other->amount + (float) ($other->deduct_amount ?? 0);
-                });
+                $refundedTotal = InvoiceFinancials::refundedSum($lockedInvoice);
+                $otherGross = '0.00';
+                $otherApplied = '0.00';
 
-                $maxAllowed = bcsub((string) $lockedInvoice->total_amount, $otherApplied, 2);
-                $newAmount = (string) ($data['amount'] ?? $payment->amount);
-                $newDeduct = (string) ($data['deduct_amount'] ?? $payment->deduct_amount ?? 0);
+                foreach ($lockedInvoice->payments as $other) {
+                    if ($other->id === $payment->id) {
+                        continue;
+                    }
+
+                    $otherGross = bcadd($otherGross, bcadd((string) $other->amount, '0', 2), 2);
+                    $otherApplied = bcadd(
+                        $otherApplied,
+                        bcadd((string) $other->amount, bcadd((string) ($other->deduct_amount ?? 0), '0', 2), 2),
+                        2
+                    );
+                }
+
+                $newAmount = bcadd((string) ($data['amount'] ?? $payment->amount), '0', 2);
+                $newDeduct = bcadd((string) ($data['deduct_amount'] ?? $payment->deduct_amount ?? 0), '0', 2);
                 $newApplied = bcadd($newAmount, $newDeduct, 2);
+                $newGross = bcadd($otherGross, $newAmount, 2);
+
+                $maxAllowed = bcsub(bcadd((string) $lockedInvoice->total_amount, '0', 2), $otherApplied, 2);
 
                 if (bccomp($newApplied, $maxAllowed, 2) === 1) {
                     throw ValidationException::withMessages([
                         'amount' => "Updated payment plus deduct ({$newApplied}) exceeds max allowable balance ({$maxAllowed}).",
                     ]);
                 }
+
+                InvoiceFinancials::assertGrossPaidSupportsRefunds($newGross, $refundedTotal);
+                InvoiceFinancials::assertGrossPaidWithinInvoiceTotal(
+                    $newGross,
+                    bcadd((string) $lockedInvoice->total_amount, '0', 2),
+                );
             }
 
             $payment->update($data);
@@ -106,12 +134,30 @@ class PaymentService
         return DB::transaction(function () use ($invoice, $payment) {
             $lockedInvoice = Invoice::lockForUpdate()->find($invoice->id);
             InvoiceFinancials::assertMutable($lockedInvoice);
+            $lockedInvoice->load(['payments', 'refunds']);
 
-            if ($lockedInvoice->status === InvoiceStatus::PAID) {
+            $hasRefunds = bccomp(InvoiceFinancials::refundedSum($lockedInvoice), '0', 2) === 1;
+
+            if ($lockedInvoice->status === InvoiceStatus::PAID && ! $hasRefunds) {
                 throw ValidationException::withMessages([
                     'invoice' => 'Cannot delete a payment from a fully paid invoice. Record a reversal instead.',
                 ]);
             }
+
+            $payment = $lockedInvoice->payments->firstWhere('id', $payment->id) ?? $payment;
+
+            $refundedTotal = InvoiceFinancials::refundedSum($lockedInvoice);
+            $grossAfter = bcsub(
+                InvoiceFinancials::grossPaidSum($lockedInvoice),
+                bcadd((string) $payment->amount, '0', 2),
+                2,
+            );
+
+            InvoiceFinancials::assertGrossPaidSupportsRefunds($grossAfter, $refundedTotal);
+            InvoiceFinancials::assertGrossPaidWithinInvoiceTotal(
+                $grossAfter,
+                bcadd((string) $lockedInvoice->total_amount, '0', 2),
+            );
 
             $deleted = (bool) $payment->delete();
 

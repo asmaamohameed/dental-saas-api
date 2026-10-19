@@ -2,6 +2,7 @@
 
 namespace App\Support\Billing;
 
+use App\Billing\Domain\Exceptions\RefundsExceedRecordedCashException;
 use App\Billing\Domain\InvoiceBalance;
 use App\Enums\InvoiceStatus;
 use App\Models\Invoice;
@@ -100,6 +101,41 @@ final class InvoiceFinancials
         if ($invoice->status === InvoiceStatus::CANCELLED) {
             throw ValidationException::withMessages([
                 'invoice' => 'A cancelled invoice cannot be modified.',
+            ]);
+        }
+    }
+
+    public static function grossPaidSum(Invoice $invoice): string
+    {
+        return self::aggregate($invoice, 'payments', 'paid_amount', 'amount');
+    }
+
+    public static function refundedSum(Invoice $invoice): string
+    {
+        return self::aggregate($invoice, 'refunds', 'refunded_amount', 'amount');
+    }
+
+    /**
+     * @throws RefundsExceedRecordedCashException
+     */
+    public static function assertGrossPaidSupportsRefunds(string $grossPaidAfter, string $refundedTotal): void
+    {
+        $grossPaidAfter = self::money($grossPaidAfter);
+        $refundedTotal = self::money($refundedTotal);
+
+        if (bccomp($grossPaidAfter, $refundedTotal, 2) === -1) {
+            throw RefundsExceedRecordedCashException::forGrossBelowRefunded($refundedTotal, $grossPaidAfter);
+        }
+    }
+
+    public static function assertGrossPaidWithinInvoiceTotal(string $grossPaidAfter, string $invoiceTotal): void
+    {
+        $grossPaidAfter = self::money($grossPaidAfter);
+        $invoiceTotal = self::money($invoiceTotal);
+
+        if (bccomp($grossPaidAfter, $invoiceTotal, 2) === 1) {
+            throw ValidationException::withMessages([
+                'amount' => "Recorded payments ({$grossPaidAfter}) cannot exceed the invoice total ({$invoiceTotal}).",
             ]);
         }
     }

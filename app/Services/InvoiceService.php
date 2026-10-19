@@ -2,6 +2,8 @@
 
 namespace App\Services;
 
+use App\Billing\Actions\RecomputeInvoiceTotal;
+use App\Billing\Queries\InvoiceItemStateSql;
 use App\Enums\FinancialStatus;
 use App\Enums\InvoiceStatus;
 use App\Exceptions\InvoiceHasPaymentsException;
@@ -88,6 +90,8 @@ class InvoiceService
                 $invoice->items()->create($resolvedItem);
             }
 
+            app(RecomputeInvoiceTotal::class)->handle($invoice);
+
             $this->recomputeFinancialStatusesForInvoice($invoice);
 
             return $invoice->load(array_merge(self::INVOICE_RELATIONS, ['payments.receiver']));
@@ -129,6 +133,8 @@ class InvoiceService
                 'price' => $price,
                 'quantity' => 1,
             ]);
+
+            app(RecomputeInvoiceTotal::class)->handle($invoice);
 
             $this->recomputeFinancialStatus($treatment);
 
@@ -180,20 +186,16 @@ class InvoiceService
                     ]);
                 }
 
-                $newTotal = (float) $invoice->items()->get()->sum(
-                    fn (InvoiceItem $row) => (float) $row->price * (int) $row->quantity
-                );
-
+                $billableTotal = app(InvoiceItemStateSql::class)->totalsForInvoice((string) $invoice->id)['total'];
                 $totalPayments = InvoiceFinancials::appliedCredits($invoice);
 
-                if (bccomp((string) $newTotal, (string) $totalPayments, 2) === -1) {
+                if (bccomp($billableTotal, (string) $totalPayments, 2) === -1) {
                     throw ValidationException::withMessages([
                         'invoice' => 'Updated treatment total would be less than payments already applied to this invoice.',
                     ]);
                 }
 
-                $invoice->update(['total_amount' => $newTotal]);
-                $this->recalculateStatus($invoice);
+                app(RecomputeInvoiceTotal::class)->handle($invoice);
             }
 
             $this->recomputeFinancialStatus($treatment);
@@ -266,7 +268,10 @@ class InvoiceService
                 ]);
             }
 
+            $itemsReplaced = false;
+
             if (isset($data['items'])) {
+                $itemsReplaced = true;
                 $itemsData = $data['items'];
                 unset($data['items']);
 
@@ -312,12 +317,14 @@ class InvoiceService
                     $lockedInvoice->items()->create($resolvedItem);
                 }
 
-                $data['total_amount'] = $totalAmount;
+                $lockedInvoice = app(RecomputeInvoiceTotal::class)->handle($lockedInvoice);
             }
 
             $lockedInvoice->update($data);
 
-            $this->recalculateStatus($lockedInvoice);
+            if (! $itemsReplaced) {
+                $this->recalculateStatus($lockedInvoice);
+            }
 
             return $lockedInvoice->load(self::INVOICE_RELATIONS);
         });
@@ -385,9 +392,7 @@ class InvoiceService
                 continue;
             }
 
-            $newTotal = (float) $remainingItems->sum(fn ($item) => (float) $item->price * (int) $item->quantity);
-            $invoice->update(['total_amount' => $newTotal]);
-            $this->recalculateStatus($invoice);
+            app(RecomputeInvoiceTotal::class)->handle($invoice);
         }
 
         $this->recomputeFinancialStatus($treatment);

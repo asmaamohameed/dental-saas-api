@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers\Api\V1;
 
+use App\Billing\Actions\RecomputeInvoiceTotal;
+use App\Billing\Queries\InvoiceItemStateSql;
 use App\Enums\InvoiceStatus;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\V1\Invoice\StoreInvoiceItemRequest;
@@ -10,7 +12,6 @@ use App\Http\Resources\V1\InvoiceItemResource;
 use App\Models\Invoice;
 use App\Models\InvoiceItem;
 use App\Models\PatientTreatment;
-use App\Services\InvoiceService;
 use App\Support\Billing\InvoiceFinancials;
 use App\Support\Tenancy\CurrentTenant;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
@@ -22,7 +23,10 @@ class InvoiceItemController extends Controller
 {
     use AuthorizesRequests;
 
-    public function __construct(private readonly InvoiceService $invoiceService) {}
+    public function __construct(
+        private readonly RecomputeInvoiceTotal $recomputeInvoiceTotal,
+        private readonly InvoiceItemStateSql $invoiceItemStateSql,
+    ) {}
 
     public function index(Invoice $invoice): JsonResponse
     {
@@ -59,10 +63,7 @@ class InvoiceItemController extends Controller
 
             $item = $lockedInvoice->items()->create($validated);
 
-            $newTotal = $lockedInvoice->items()->selectRaw('SUM(price * quantity) as total')->value('total') ?? 0;
-            $lockedInvoice->update(['total_amount' => $newTotal]);
-
-            $this->invoiceService->recalculateStatus($lockedInvoice);
+            $this->recomputeInvoiceTotal->handle($lockedInvoice);
 
             return $item;
         });
@@ -79,6 +80,8 @@ class InvoiceItemController extends Controller
         if ($item->invoice_id !== $invoice->id) {
             return $this->errorResponse('Item does not belong to this invoice.', 404);
         }
+
+        // TODO(billing-6b): block PUT changes on DONE lines; use reprice-done instead.
 
         $updatedItem = DB::transaction(function () use ($request, $invoice, $item) {
             $lockedInvoice = Invoice::lockForUpdate()->find($invoice->id);
@@ -100,17 +103,16 @@ class InvoiceItemController extends Controller
 
             $item->update($validated);
 
-            $newTotal = $lockedInvoice->items()->selectRaw('SUM(price * quantity) as total')->value('total') ?? 0;
+            $billableTotal = $this->invoiceItemStateSql->totalsForInvoice((string) $lockedInvoice->id)['total'];
             $totalPayments = $lockedInvoice->payments()->sum('amount');
 
-            if (bccomp((string) $newTotal, (string) $totalPayments, 2) === -1) {
+            if (bccomp($billableTotal, (string) $totalPayments, 2) === -1) {
                 throw ValidationException::withMessages([
                     'quantity' => 'New total cannot be less than paid amount.',
                 ]);
             }
 
-            $lockedInvoice->update(['total_amount' => $newTotal]);
-            $this->invoiceService->recalculateStatus($lockedInvoice);
+            $this->recomputeInvoiceTotal->handle($lockedInvoice);
 
             return $item;
         });
@@ -147,17 +149,16 @@ class InvoiceItemController extends Controller
 
             $item->delete();
 
-            $newTotal = $lockedInvoice->items()->selectRaw('SUM(price * quantity) as total')->value('total') ?? 0;
+            $billableTotal = $this->invoiceItemStateSql->totalsForInvoice((string) $lockedInvoice->id)['total'];
             $totalPayments = $lockedInvoice->payments()->sum('amount');
 
-            if (bccomp((string) $newTotal, (string) $totalPayments, 2) === -1) {
+            if (bccomp($billableTotal, (string) $totalPayments, 2) === -1) {
                 throw ValidationException::withMessages([
                     'item' => 'New total cannot be less than paid amount.',
                 ]);
             }
 
-            $lockedInvoice->update(['total_amount' => $newTotal]);
-            $this->invoiceService->recalculateStatus($lockedInvoice);
+            $this->recomputeInvoiceTotal->handle($lockedInvoice);
         });
 
         return $this->successResponse(null, 'Invoice item deleted successfully.');

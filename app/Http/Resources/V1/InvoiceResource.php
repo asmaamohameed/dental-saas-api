@@ -5,7 +5,6 @@ namespace App\Http\Resources\V1;
 use App\Models\Appointment;
 use App\Models\Invoice;
 use App\Models\Patient;
-use App\Models\Refund;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;

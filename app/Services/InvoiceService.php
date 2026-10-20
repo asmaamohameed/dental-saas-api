@@ -204,43 +204,6 @@ class InvoiceService
         });
     }
 
-    public function createFromTreatment(PatientTreatment $treatment, string $userId): Invoice
-    {
-        return DB::transaction(function () use ($treatment, $userId) {
-            $openInvoiceExists = Invoice::query()
-                ->where('patient_id', $treatment->patient_id)
-                ->whereIn('status', [InvoiceStatus::UNPAID, InvoiceStatus::PARTIAL])
-                ->whereHas('items', fn ($q) => $q->where('patient_treatment_id', $treatment->id))
-                ->exists();
-
-            if ($openInvoiceExists) {
-                throw ValidationException::withMessages([
-                    'patient_treatment_id' => 'An unpaid invoice already exists for this treatment.',
-                ]);
-            }
-
-            $alreadyBilled = InvoiceItem::query()
-                ->where('patient_treatment_id', $treatment->id)
-                ->exists();
-
-            if ($alreadyBilled) {
-                throw ValidationException::withMessages([
-                    'patient_treatment_id' => 'This treatment has already been billed.',
-                ]);
-            }
-
-            $invoice = $this->createInitialInvoiceForTreatment($treatment, $userId);
-
-            if (! $invoice) {
-                throw ValidationException::withMessages([
-                    'patient_treatment_id' => 'Unable to create an invoice for this treatment.',
-                ]);
-            }
-
-            return $invoice;
-        });
-    }
-
     public function update(Invoice $invoice, array $data): Invoice
     {
         return DB::transaction(function () use ($invoice, $data) {

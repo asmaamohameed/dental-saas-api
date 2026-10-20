@@ -3178,41 +3178,6 @@
                             }
                         }
                     }
-                },
-                {
-                    "name": "POST /api/v1/invoices/from-treatment/{{patient_treatment_id}}",
-                    "request": {
-                        "method": "POST",
-                        "header": [
-                            {
-                                "key": "Accept",
-                                "value": "application/json"
-                            }
-                        ],
-                        "url": {
-                            "raw": "{{base_url}}/api/v1/invoices/from-treatment/{{patient_treatment_id}}",
-                            "host": [
-                                "{{base_url}}"
-                            ],
-                            "path": [
-                                "api",
-                                "v1",
-                                "invoices",
-                                "from-treatment",
-                                "{{patient_treatment_id}}"
-                            ]
-                        },
-                        "auth": {
-                            "type": "bearer",
-                            "bearer": [
-                                {
-                                    "key": "token",
-                                    "value": "{{token}}",
-                                    "type": "string"
-                                }
-                            ]
-                        }
-                    }
                 }
             ]
         },

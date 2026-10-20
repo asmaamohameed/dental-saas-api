@@ -139,7 +139,6 @@ Route::prefix('v1')->group(function () {
             Route::put('patient-treatments/{patientTreatment}', [PatientTreatmentController::class, 'update']);
 
             Route::post('invoices', [InvoiceController::class, 'store'])->middleware('clinic.permission:invoice:create');
-            Route::post('invoices/from-treatment/{patientTreatment}', [InvoiceController::class, 'storeFromTreatment'])->middleware('clinic.permission:invoice:create');
             Route::put('invoices/{invoice}', [InvoiceController::class, 'update'])->middleware('clinic.permission:invoice:edit');
 
             Route::post('invoices/{invoice}/items', [InvoiceItemController::class, 'store']);

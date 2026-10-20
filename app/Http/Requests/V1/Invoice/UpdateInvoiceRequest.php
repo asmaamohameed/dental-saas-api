@@ -51,7 +51,10 @@ class UpdateInvoiceRequest extends FormRequest
             }
 
             if ($invoice && $invoice->status === InvoiceStatus::PAID) {
-                $validator->errors()->add('invoice', 'Fully paid invoices cannot be updated.');
+                $scalarKeys = array_diff(array_keys($this->all()), ['items']);
+                if ($scalarKeys !== []) {
+                    $validator->errors()->add('invoice', 'Fully paid invoices cannot be updated.');
+                }
             }
 
             if (

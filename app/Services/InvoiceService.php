@@ -248,7 +248,10 @@ class InvoiceService
 
             InvoiceFinancials::assertMutable($lockedInvoice);
 
-            if ($lockedInvoice->status === InvoiceStatus::PAID) {
+            $scalarData = $data;
+            unset($scalarData['items']);
+
+            if ($lockedInvoice->status === InvoiceStatus::PAID && $scalarData !== []) {
                 throw ValidationException::withMessages([
                     'invoice' => 'Fully paid invoices cannot be updated.',
                 ]);

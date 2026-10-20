@@ -30,7 +30,7 @@ class InvoicePolicy
             return false;
         }
 
-        if (in_array($invoice->status, [InvoiceStatus::PAID, InvoiceStatus::REFUNDED, InvoiceStatus::CANCELLED], true)) {
+        if (in_array($invoice->status, [InvoiceStatus::REFUNDED, InvoiceStatus::CANCELLED], true)) {
             return false;
         }
 

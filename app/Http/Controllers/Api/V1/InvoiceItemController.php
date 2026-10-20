@@ -10,7 +10,6 @@ use App\Billing\Domain\InvoiceItemState;
 use App\Billing\Domain\InvoiceItemStateResolver;
 use App\Billing\Queries\InvoiceItemFactsReader;
 use App\Billing\Queries\InvoiceItemStateSql;
-use App\Enums\InvoiceStatus;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\V1\Invoice\StoreInvoiceItemRequest;
 use App\Http\Requests\V1\Invoice\UpdateInvoiceItemRequest;
@@ -60,12 +59,6 @@ class InvoiceItemController extends Controller
             $lockedInvoice = Invoice::lockForUpdate()->find($invoice->id);
             InvoiceFinancials::assertMutable($lockedInvoice);
 
-            if ($lockedInvoice->status === InvoiceStatus::PAID) {
-                throw ValidationException::withMessages([
-                    'invoice' => 'Cannot add items to a fully paid invoice.',
-                ]);
-            }
-
             $validated = $request->validated();
             if (! empty($validated['patient_treatment_id'])) {
                 $treatment = PatientTreatment::with('template')
@@ -100,12 +93,6 @@ class InvoiceItemController extends Controller
         $updatedItem = DB::transaction(function () use ($request, $invoice, $item) {
             $lockedInvoice = Invoice::lockForUpdate()->find($invoice->id);
             InvoiceFinancials::assertMutable($lockedInvoice);
-
-            if ($lockedInvoice->status === InvoiceStatus::PAID) {
-                throw ValidationException::withMessages([
-                    'invoice' => 'Cannot modify items of a fully paid invoice.',
-                ]);
-            }
 
             $state = $this->invoiceItemStateResolver->resolve($this->invoiceItemFactsReader->read($item));
 
@@ -154,12 +141,6 @@ class InvoiceItemController extends Controller
         DB::transaction(function () use ($invoice, $item, $actor) {
             $lockedInvoice = Invoice::lockForUpdate()->find($invoice->id);
             InvoiceFinancials::assertMutable($lockedInvoice);
-
-            if ($lockedInvoice->status === InvoiceStatus::PAID) {
-                throw ValidationException::withMessages([
-                    'invoice' => 'Cannot delete items from a fully paid invoice.',
-                ]);
-            }
 
             if ($lockedInvoice->items()->count() <= 1) {
                 throw ValidationException::withMessages([

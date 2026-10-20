@@ -6,7 +6,9 @@ use App\Enums\InvoiceStatus;
 use App\Enums\UserRole;
 use App\Models\Appointment;
 use App\Models\Invoice;
+use App\Models\InvoiceItem;
 use App\Models\Patient;
+use App\Models\Payment;
 use App\Models\Tenant;
 use App\Models\User;
 use App\Support\Tenancy\CurrentTenant;
@@ -52,6 +54,35 @@ class InvoiceUpdateTest extends TestCase
 
         $invoice->refresh();
         $this->assertSame($newPatient->id, $invoice->patient_id);
+    }
+
+    public function test_owner_can_update_items_only_on_a_paid_invoice(): void
+    {
+        $this->actingAsRole(UserRole::OWNER);
+
+        $invoice = Invoice::factory()->paid()->create(['tenant_id' => $this->tenant->id, 'total_amount' => 50]);
+        $item = InvoiceItem::factory()->create([
+            'invoice_id' => $invoice->id,
+            'description' => 'Existing paid line',
+            'price' => 50,
+            'quantity' => 1,
+        ]);
+        Payment::factory()->create(['invoice_id' => $invoice->id, 'amount' => 50]);
+
+        $this->putJson("/api/v1/invoices/{$invoice->id}", [
+            'items' => [[
+                'id' => $item->id,
+                'price' => 50,
+                'description' => 'Existing paid line',
+                'quantity' => 1,
+            ], [
+                'price' => 20,
+                'description' => 'New planned charge',
+                'quantity' => 1,
+            ]],
+        ])->assertOk();
+
+        $this->assertSame(InvoiceStatus::PARTIAL, $invoice->fresh()->status);
     }
 
     public function test_updating_any_field_on_a_paid_invoice_is_blocked(): void

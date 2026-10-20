@@ -95,13 +95,15 @@ class InvoiceItemControllerTest extends TestCase
         $this->assertEquals(160, $invoice->fresh()->total_amount);
     }
 
-    public function test_cannot_add_an_item_to_a_fully_paid_invoice(): void
+    public function test_owner_can_add_an_item_to_a_fully_paid_invoice(): void
     {
-        $this->actingAsRole(UserRole::RECEPTIONIST);
-        $invoice = Invoice::factory()->create(['status' => InvoiceStatus::PAID]);
+        $this->actingAsRole(UserRole::OWNER);
+        $invoice = Invoice::factory()->create(['status' => InvoiceStatus::PAID, 'total_amount' => 50]);
+        InvoiceItem::factory()->create(['invoice_id' => $invoice->id, 'price' => 50, 'quantity' => 1]);
+        Payment::factory()->create(['invoice_id' => $invoice->id, 'amount' => 50]);
 
         $this->postJson("/api/v1/invoices/{$invoice->id}/items", $this->manualItemPayload())
-            ->assertStatus(403);
+            ->assertCreated();
     }
 
     public function test_update_rejects_a_new_total_lower_than_payments_already_received(): void

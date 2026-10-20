@@ -6,6 +6,7 @@ use App\Enums\AppointmentType;
 use App\Enums\UserRole;
 use App\Http\Requests\V1\Appointment\Concerns\ValidatesAppointmentService;
 use App\Http\Requests\V1\Appointment\Concerns\ValidatesAppointmentTreatmentLinks;
+use App\Http\Requests\V1\Appointment\Concerns\ValidatesDoctorWorkingDay;
 use App\Models\User;
 use App\Rules\AppointmentDoctorAvailable;
 use App\Rules\AppointmentPatientAvailable;
@@ -16,7 +17,7 @@ use Illuminate\Validation\Rule;
 
 class UpdateAppointmentRequest extends FormRequest
 {
-    use ValidatesAppointmentService, ValidatesAppointmentTreatmentLinks;
+    use ValidatesAppointmentService, ValidatesAppointmentTreatmentLinks, ValidatesDoctorWorkingDay;
 
     public function authorize(): bool
     {
@@ -87,6 +88,10 @@ class UpdateAppointmentRequest extends FormRequest
                 $doctorId = $this->input('doctor_id', $appointment->doctor_id);
                 $patientId = $this->input('patient_id', $appointment->patient_id);
                 $duration = (int) $this->input('duration_minutes', $appointment->duration_minutes);
+
+                if (! $this->rejectUnlessDoctorWorksOn($validator, $newScheduledAt, (string) $doctorId)) {
+                    return;
+                }
 
                 $doctorRule = new AppointmentDoctorAvailable(
                     tenantId: $this->user()->tenant_id,

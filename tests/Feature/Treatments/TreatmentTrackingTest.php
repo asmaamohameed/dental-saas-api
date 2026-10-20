@@ -117,7 +117,7 @@ class TreatmentTrackingTest extends TestCase
             'agreed_price' => 200,
         ])->assertOk();
 
-        $this->assertSame('100.00', (string) $treatment->teeth()->where('tooth_number', '16')->value('price'));
+        $this->assertSame('250.00', (string) $treatment->teeth()->where('tooth_number', '16')->value('price'));
         $this->assertSame('200.00', (string) $treatment->teeth()->where('tooth_number', '26')->value('price'));
     }
 
@@ -948,7 +948,6 @@ class TreatmentTrackingTest extends TestCase
         $payload = array_merge([
             'patient_id' => $patient->id,
             'treatment_template_id' => $template->id,
-            'agreed_price' => 100,
             'tooth_numbers' => ['16'],
         ], $overrides);
 

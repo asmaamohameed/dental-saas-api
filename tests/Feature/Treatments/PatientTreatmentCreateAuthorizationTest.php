@@ -332,6 +332,72 @@ class PatientTreatmentCreateAuthorizationTest extends TestCase
             ->assertJsonValidationErrors(['appointment_id']);
     }
 
+    public function test_receptionist_cannot_create_with_custom_agreed_price_without_permission(): void
+    {
+        $receptionist = User::factory()->create(['tenant_id' => $this->tenant->id, 'role' => UserRole::RECEPTIONIST]);
+        $doctor = User::factory()->create(['tenant_id' => $this->tenant->id, 'role' => UserRole::DOCTOR]);
+        Sanctum::actingAs($receptionist, ['*']);
+
+        $patient = Patient::factory()->create(['tenant_id' => $this->tenant->id]);
+        $template = $this->clinicalTemplate(['default_price' => 100]);
+        $appointment = Appointment::factory()->create([
+            'tenant_id' => $this->tenant->id,
+            'patient_id' => $patient->id,
+            'doctor_id' => $doctor->id,
+        ]);
+
+        $this->postJson('/api/v1/patient-treatments', [
+            'patient_id' => $patient->id,
+            'treatment_template_id' => $template->id,
+            'appointment_id' => $appointment->id,
+            'tooth_numbers' => ['16'],
+            'agreed_price' => 150,
+        ])->assertForbidden();
+    }
+
+    public function test_receptionist_can_create_when_agreed_price_matches_template_default(): void
+    {
+        $receptionist = User::factory()->create(['tenant_id' => $this->tenant->id, 'role' => UserRole::RECEPTIONIST]);
+        $doctor = User::factory()->create(['tenant_id' => $this->tenant->id, 'role' => UserRole::DOCTOR]);
+        Sanctum::actingAs($receptionist, ['*']);
+
+        $patient = Patient::factory()->create(['tenant_id' => $this->tenant->id]);
+        $template = $this->clinicalTemplate(['default_price' => 100]);
+        $appointment = Appointment::factory()->create([
+            'tenant_id' => $this->tenant->id,
+            'patient_id' => $patient->id,
+            'doctor_id' => $doctor->id,
+        ]);
+
+        $this->postJson('/api/v1/patient-treatments', [
+            'patient_id' => $patient->id,
+            'treatment_template_id' => $template->id,
+            'appointment_id' => $appointment->id,
+            'tooth_numbers' => ['16'],
+            'agreed_price' => 100,
+        ])
+            ->assertCreated()
+            ->assertJsonPath('data.agreed_price', 100);
+    }
+
+    public function test_doctor_can_create_with_custom_agreed_price(): void
+    {
+        $doctor = User::factory()->create(['tenant_id' => $this->tenant->id, 'role' => UserRole::DOCTOR]);
+        Sanctum::actingAs($doctor, ['*']);
+
+        $patient = Patient::factory()->create(['tenant_id' => $this->tenant->id]);
+        $template = $this->clinicalTemplate(['default_price' => 100]);
+
+        $this->postJson('/api/v1/patient-treatments', [
+            'patient_id' => $patient->id,
+            'treatment_template_id' => $template->id,
+            'tooth_numbers' => ['16'],
+            'agreed_price' => 150,
+        ])
+            ->assertCreated()
+            ->assertJsonPath('data.agreed_price', 150);
+    }
+
     public function test_agreed_price_defaults_to_template_default_price(): void
     {
         $doctor = User::factory()->create(['tenant_id' => $this->tenant->id, 'role' => UserRole::DOCTOR]);

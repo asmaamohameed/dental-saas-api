@@ -79,6 +79,14 @@ class PatientTreatmentService
             $toothNumbers = $this->normalizeToothNumbers($data['tooth_numbers'] ?? []);
             $this->assertScopeToothRules($scope, $toothNumbers);
 
+            if (array_key_exists('agreed_price', $data) && $data['agreed_price'] !== null) {
+                $defaultFormatted = number_format((float) $template->default_price, 2, '.', '');
+                $requestedFormatted = number_format((float) $data['agreed_price'], 2, '.', '');
+                if ($requestedFormatted !== $defaultFormatted && ! Gate::forUser($actor)->allows('canChangePrice')) {
+                    throw new AccessDeniedHttpException('You are not allowed to change treatment prices.');
+                }
+            }
+
             $unitPrice = array_key_exists('agreed_price', $data) && $data['agreed_price'] !== null
                 ? $data['agreed_price']
                 : $template->default_price;

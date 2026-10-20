@@ -10,15 +10,18 @@ use App\Enums\TreatmentScope;
 use App\Enums\TreatmentToothStatus;
 use App\Enums\TreatmentType;
 use App\Enums\UserRole;
+use App\Models\Appointment;
 use App\Models\Invoice;
 use App\Models\Patient;
 use App\Models\PatientTreatment;
 use App\Models\PatientTreatmentTooth;
 use App\Models\Tenant;
 use App\Models\TreatmentTemplate;
+use App\Models\User;
 use App\Support\Roles\ClinicPermissionCatalog;
 use App\Support\Tenancy\CurrentTenant;
 use Illuminate\Support\Facades\Gate;
+use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
 
 class TreatmentChangePricePermissionTest extends TestCase
@@ -75,6 +78,46 @@ class TreatmentChangePricePermissionTest extends TestCase
             'description' => 'Manual charge line',
             'quantity' => 1,
         ])->assertCreated();
+    }
+
+    public function test_receptionist_with_change_price_permission_can_create_treatment_with_custom_agreed_price(): void
+    {
+        $this->actingAsTenantUser($this->tenant, UserRole::OWNER);
+        $permissions = ClinicPermissionCatalog::baseline()['receptionist'];
+        $permissions['treatment:change_price'] = true;
+
+        $this->putJson('/api/v1/role-permissions/receptionist', [
+            'permissions' => $permissions,
+        ])->assertOk();
+
+        $doctor = User::factory()->create(['tenant_id' => $this->tenant->id, 'role' => UserRole::DOCTOR]);
+        $receptionist = User::factory()->create(['tenant_id' => $this->tenant->id, 'role' => UserRole::RECEPTIONIST]);
+        $patient = Patient::factory()->create(['tenant_id' => $this->tenant->id]);
+        $template = TreatmentTemplate::query()->create([
+            'name_ar' => 'علاج',
+            'name_en' => 'Treatment',
+            'category' => 'medical',
+            'scope' => TreatmentScope::TOOTH,
+            'default_price' => 100,
+            'estimated_duration_minutes' => 30,
+            'is_active' => true,
+        ]);
+        $appointment = Appointment::factory()->create([
+            'tenant_id' => $this->tenant->id,
+            'patient_id' => $patient->id,
+            'doctor_id' => $doctor->id,
+        ]);
+
+        Sanctum::actingAs($receptionist, ['*']);
+        $this->postJson('/api/v1/patient-treatments', [
+            'patient_id' => $patient->id,
+            'treatment_template_id' => $template->id,
+            'appointment_id' => $appointment->id,
+            'tooth_numbers' => ['16'],
+            'agreed_price' => 150,
+        ])
+            ->assertCreated()
+            ->assertJsonPath('data.agreed_price', 150);
     }
 
     public function test_assistant_cannot_patch_tooth_price_without_permission(): void

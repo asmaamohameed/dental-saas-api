@@ -172,9 +172,12 @@ class InvoiceService
         });
     }
 
-    public function createInitialInvoiceForTreatment(PatientTreatment $treatment, string $userId): ?Invoice
-    {
-        return DB::transaction(function () use ($treatment, $userId) {
+    public function createInitialInvoiceForTreatment(
+        PatientTreatment $treatment,
+        string $userId,
+        ?string $contextAppointmentId = null,
+    ): ?Invoice {
+        return DB::transaction(function () use ($treatment, $userId, $contextAppointmentId) {
             $treatment->load(['template', 'patient']);
 
             $alreadyExists = InvoiceItem::query()
@@ -187,14 +190,26 @@ class InvoiceService
 
             $price = $treatment->total_price;
             $label = $this->treatmentInvoiceDescription($treatment);
+            $planId = $treatment->treatment_plan_id;
 
-            $invoice = Invoice::create([
-                'patient_id' => $treatment->patient_id,
-                'appointment_id' => null,
-                'created_by' => $userId,
-                'total_amount' => $price,
-                'status' => InvoiceStatus::UNPAID,
-            ]);
+            $invoice = null;
+            if ($planId !== null) {
+                $invoice = Invoice::query()
+                    ->where('treatment_plan_id', $planId)
+                    ->lockForUpdate()
+                    ->first();
+            }
+
+            if ($invoice === null) {
+                $invoice = Invoice::create([
+                    'patient_id' => $treatment->patient_id,
+                    'appointment_id' => null,
+                    'treatment_plan_id' => $planId,
+                    'created_by' => $userId,
+                    'total_amount' => $price,
+                    'status' => InvoiceStatus::UNPAID,
+                ]);
+            }
 
             $invoice->items()->create([
                 'patient_treatment_id' => $treatment->id,
@@ -204,6 +219,13 @@ class InvoiceService
             ]);
 
             app(RecomputeInvoiceTotal::class)->handle($invoice);
+
+            if ($planId !== null) {
+                $appointmentId = $this->resolvePlanSourceAppointmentId($treatment, $contextAppointmentId);
+                if ($appointmentId !== null) {
+                    $this->mergeVisitFeeLineIntoPlanInvoice($invoice, $appointmentId);
+                }
+            }
 
             $this->recomputeFinancialStatus($treatment);
 
@@ -443,5 +465,67 @@ class InvoiceService
         }
 
         return $name.' ('.implode(', ', $teeth).')';
+    }
+
+    private function resolvePlanSourceAppointmentId(
+        PatientTreatment $treatment,
+        ?string $contextAppointmentId,
+    ): ?string {
+        if ($contextAppointmentId !== null && $contextAppointmentId !== '') {
+            return $contextAppointmentId;
+        }
+
+        if ($treatment->treatment_plan_id === null) {
+            return null;
+        }
+
+        $appointmentId = Appointment::query()
+            ->where('patient_id', $treatment->patient_id)
+            ->where('treatment_plan_id', $treatment->treatment_plan_id)
+            ->value('id');
+
+        return $appointmentId !== null ? (string) $appointmentId : null;
+    }
+
+    private function mergeVisitFeeLineIntoPlanInvoice(Invoice $planInvoice, string $appointmentId): void
+    {
+        /** @var InvoiceItem|null $visitItem */
+        $visitItem = InvoiceItem::query()
+            ->where('appointment_id', $appointmentId)
+            ->whereNull('voided_at')
+            ->lockForUpdate()
+            ->first();
+
+        if ($visitItem === null) {
+            return;
+        }
+
+        if ((string) $visitItem->invoice_id === (string) $planInvoice->id) {
+            return;
+        }
+
+        /** @var Invoice|null $visitInvoice */
+        $visitInvoice = Invoice::query()->lockForUpdate()->find($visitItem->invoice_id);
+        if ($visitInvoice === null) {
+            return;
+        }
+
+        if ($visitInvoice->payments()->exists()) {
+            return;
+        }
+
+        $visitItem->update(['invoice_id' => $planInvoice->id]);
+
+        app(RecomputeInvoiceTotal::class)->handle($planInvoice->fresh());
+        app(RecomputeInvoiceTotal::class)->handle($visitInvoice->fresh());
+
+        $visitInvoice->refresh();
+
+        if ($visitInvoice->items()->exists() || $visitInvoice->payments()->exists()) {
+            return;
+        }
+
+        $visitInvoice->update(['status' => InvoiceStatus::CANCELLED->value]);
+        $visitInvoice->delete();
     }
 }

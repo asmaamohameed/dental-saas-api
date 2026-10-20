@@ -163,6 +163,166 @@ class AppointmentVisitFeeInvoiceTest extends TestCase
         $this->assertNotSame($planInvoice->id, $visitInvoice->id);
     }
 
+    public function test_first_plan_treatment_from_checked_in_visit_merges_visit_line_into_plan_invoice(): void
+    {
+        $this->actingAsTenantUser(role: UserRole::RECEPTIONIST);
+        $appointment = $this->visitAppointment(['fee' => 200]);
+
+        $this->patchJson("/api/v1/appointments/{$appointment->id}/status", [
+            'status' => 'checked_in',
+        ])->assertOk();
+
+        $visitInvoiceId = Invoice::query()->where('appointment_id', $appointment->id)->value('id');
+        $this->assertNotNull($visitInvoiceId);
+
+        $plan = TreatmentPlan::query()->create([
+            'patient_id' => $appointment->patient_id,
+            'title' => 'Visit plan',
+            'status' => TreatmentPlanStatus::ACTIVE,
+        ]);
+        $appointment->update(['treatment_plan_id' => $plan->id]);
+
+        $template = $this->clinicalTemplate();
+
+        $this->postJson('/api/v1/patient-treatments', [
+            'patient_id' => $appointment->patient_id,
+            'treatment_template_id' => $template->id,
+            'treatment_plan_id' => $plan->id,
+            'appointment_id' => $appointment->id,
+            'tooth_numbers' => ['16'],
+        ])->assertCreated();
+
+        $this->assertSame(1, Invoice::query()->count());
+        $planInvoice = Invoice::query()->firstOrFail();
+        $this->assertSame($plan->id, $planInvoice->treatment_plan_id);
+        $this->assertSoftDeleted('invoices', ['id' => $visitInvoiceId]);
+        $this->assertSame('320.00', (string) $planInvoice->fresh()->total_amount);
+        $this->assertSame(
+            2,
+            InvoiceItem::query()->where('invoice_id', $planInvoice->id)->whereNull('deleted_at')->count()
+        );
+    }
+
+    public function test_paid_visit_invoice_stays_separate_when_plan_treatment_is_created(): void
+    {
+        $this->actingAsTenantUser(role: UserRole::RECEPTIONIST);
+        $appointment = $this->visitAppointment(['fee' => 150]);
+
+        $this->patchJson("/api/v1/appointments/{$appointment->id}/status", [
+            'status' => 'checked_in',
+        ])->assertOk();
+
+        $visitInvoice = Invoice::query()->where('appointment_id', $appointment->id)->firstOrFail();
+        Payment::factory()->create(['invoice_id' => $visitInvoice->id, 'amount' => 50]);
+
+        $plan = TreatmentPlan::query()->create([
+            'patient_id' => $appointment->patient_id,
+            'title' => 'Plan',
+            'status' => TreatmentPlanStatus::ACTIVE,
+        ]);
+
+        $this->postJson('/api/v1/patient-treatments', [
+            'patient_id' => $appointment->patient_id,
+            'treatment_template_id' => $this->clinicalTemplate()->id,
+            'treatment_plan_id' => $plan->id,
+            'appointment_id' => $appointment->id,
+            'tooth_numbers' => ['16'],
+        ])->assertCreated();
+
+        $this->assertSame(2, Invoice::query()->count());
+        $this->assertDatabaseHas('invoice_items', [
+            'appointment_id' => $appointment->id,
+            'invoice_id' => $visitInvoice->id,
+            'deleted_at' => null,
+        ]);
+    }
+
+    public function test_visit_invoice_for_other_appointment_is_untouched_when_plan_starts_from_different_visit(): void
+    {
+        $this->actingAsTenantUser(role: UserRole::RECEPTIONIST);
+        $otherAppointment = $this->visitAppointment(['fee' => 90]);
+        $this->patchJson("/api/v1/appointments/{$otherAppointment->id}/status", [
+            'status' => 'checked_in',
+        ])->assertOk();
+        $otherVisitInvoiceId = Invoice::query()->where('appointment_id', $otherAppointment->id)->value('id');
+
+        $planAppointment = $this->visitAppointment(['fee' => 110]);
+        $this->patchJson("/api/v1/appointments/{$planAppointment->id}/status", [
+            'status' => 'checked_in',
+        ])->assertOk();
+
+        $plan = TreatmentPlan::query()->create([
+            'patient_id' => $planAppointment->patient_id,
+            'title' => 'Plan',
+            'status' => TreatmentPlanStatus::ACTIVE,
+        ]);
+
+        $this->postJson('/api/v1/patient-treatments', [
+            'patient_id' => $planAppointment->patient_id,
+            'treatment_template_id' => $this->clinicalTemplate()->id,
+            'treatment_plan_id' => $plan->id,
+            'appointment_id' => $planAppointment->id,
+            'tooth_numbers' => ['21'],
+        ])->assertCreated();
+
+        $this->assertDatabaseHas('invoices', ['id' => $otherVisitInvoiceId, 'deleted_at' => null]);
+        $this->assertSame(
+            $otherVisitInvoiceId,
+            InvoiceItem::query()->where('appointment_id', $otherAppointment->id)->value('invoice_id')
+        );
+    }
+
+    public function test_cancel_after_merge_removes_only_visit_line_from_plan_invoice(): void
+    {
+        $this->actingAsTenantUser(role: UserRole::RECEPTIONIST);
+        $appointment = $this->visitAppointment(['fee' => 80]);
+
+        $this->patchJson("/api/v1/appointments/{$appointment->id}/status", [
+            'status' => 'checked_in',
+        ])->assertOk();
+
+        $plan = TreatmentPlan::query()->create([
+            'patient_id' => $appointment->patient_id,
+            'title' => 'Plan',
+            'status' => TreatmentPlanStatus::ACTIVE,
+        ]);
+
+        $this->postJson('/api/v1/patient-treatments', [
+            'patient_id' => $appointment->patient_id,
+            'treatment_template_id' => $this->clinicalTemplate(['default_price' => 120])->id,
+            'treatment_plan_id' => $plan->id,
+            'appointment_id' => $appointment->id,
+            'tooth_numbers' => ['16'],
+        ])->assertCreated();
+
+        $planInvoice = Invoice::query()->where('treatment_plan_id', $plan->id)->firstOrFail();
+        $visitItemId = InvoiceItem::query()->where('appointment_id', $appointment->id)->value('id');
+
+        $this->patchJson("/api/v1/appointments/{$appointment->id}/status", [
+            'status' => 'cancelled',
+        ])->assertOk();
+
+        $this->assertSoftDeleted('invoice_items', ['id' => $visitItemId]);
+        $this->assertDatabaseHas('invoices', ['id' => $planInvoice->id, 'deleted_at' => null]);
+        $this->assertSame(
+            1,
+            InvoiceItem::query()->where('invoice_id', $planInvoice->id)->whereNull('deleted_at')->count()
+        );
+    }
+
+    private function clinicalTemplate(array $overrides = []): TreatmentTemplate
+    {
+        return TreatmentTemplate::query()->create(array_merge([
+            'name_ar' => 'علاج',
+            'name_en' => 'Filling',
+            'category' => TreatmentCategory::MEDICAL,
+            'scope' => TreatmentScope::TOOTH,
+            'default_price' => 120,
+            'estimated_duration_minutes' => 30,
+            'is_active' => true,
+        ], $overrides));
+    }
+
     /**
      * @param  array<string, mixed>  $overrides
      */

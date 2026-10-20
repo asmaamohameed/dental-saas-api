@@ -122,7 +122,11 @@ class PatientTreatmentService
             }
 
             $treatment = $this->freshTreatment($treatment);
-            $this->invoiceService->createInitialInvoiceForTreatment($treatment, $actor->id);
+            $this->invoiceService->createInitialInvoiceForTreatment(
+                $treatment,
+                $actor->id,
+                isset($data['appointment_id']) ? (string) $data['appointment_id'] : null,
+            );
             $this->invoiceService->recomputeFinancialStatus($treatment);
 
             return $this->freshTreatment($treatment);

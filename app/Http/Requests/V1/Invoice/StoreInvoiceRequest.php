@@ -12,6 +12,12 @@ class StoreInvoiceRequest extends FormRequest
 {
     public function authorize(): bool
     {
+        foreach ($this->input('items', []) as $item) {
+            if (empty($item['patient_treatment_id'])) {
+                return $this->user()?->can('canChangePrice') ?? false;
+            }
+        }
+
         return true;
     }
 

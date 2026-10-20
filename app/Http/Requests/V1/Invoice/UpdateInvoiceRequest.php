@@ -13,6 +13,18 @@ class UpdateInvoiceRequest extends FormRequest
 {
     public function authorize(): bool
     {
+        if (! $this->has('items')) {
+            return true;
+        }
+
+        foreach ($this->input('items', []) as $item) {
+            if (empty($item['patient_treatment_id']) && array_key_exists('price', $item)) {
+                if (! ($this->user()?->can('canChangePrice') ?? false)) {
+                    return false;
+                }
+            }
+        }
+
         return true;
     }
 

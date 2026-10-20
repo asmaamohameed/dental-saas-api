@@ -82,13 +82,13 @@ class InvoiceItemPolicyTest extends TestCase
         $this->getJson("/api/v1/invoices/{$invoice->id}/items")->assertNotFound();
     }
 
-    public function test_receptionist_can_add_item_to_unpaid_invoice(): void
+    public function test_receptionist_cannot_add_manual_item_without_change_price_permission(): void
     {
         $user = $this->userWithRole(UserRole::RECEPTIONIST);
         Sanctum::actingAs($user, ['*']);
         $invoice = $this->invoiceWithStatus(InvoiceStatus::UNPAID);
 
-        $this->postJson("/api/v1/invoices/{$invoice->id}/items", $this->manualItemPayload())->assertCreated();
+        $this->postJson("/api/v1/invoices/{$invoice->id}/items", $this->manualItemPayload())->assertForbidden();
     }
 
     public function test_receptionist_cannot_add_item_to_partial_invoice(): void

@@ -74,14 +74,14 @@ class InvoicePolicyTest extends TestCase
             ->assertForbidden();
     }
 
-    public function test_receptionist_can_update_items_on_an_unpaid_invoice(): void
+    public function test_receptionist_cannot_update_manual_items_without_change_price_permission(): void
     {
         $user = $this->userWithRole(UserRole::RECEPTIONIST);
         Sanctum::actingAs($user, ['*']);
         $invoice = $this->invoiceWithStatus(InvoiceStatus::UNPAID);
 
         $this->putJson("/api/v1/invoices/{$invoice->id}", $this->validItemsPayload())
-            ->assertOk();
+            ->assertForbidden();
     }
 
     public function test_doctor_cannot_reach_the_update_invoice_route_at_all(): void

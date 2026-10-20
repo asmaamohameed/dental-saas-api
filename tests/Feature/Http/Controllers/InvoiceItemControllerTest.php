@@ -82,9 +82,9 @@ class InvoiceItemControllerTest extends TestCase
             ->assertCreated();
     }
 
-    public function test_receptionist_can_add_an_item_and_total_is_recalculated(): void
+    public function test_owner_can_add_an_item_and_total_is_recalculated(): void
     {
-        $this->actingAsRole(UserRole::RECEPTIONIST);
+        $this->actingAsRole(UserRole::OWNER);
         $invoice = Invoice::factory()->create(['status' => InvoiceStatus::UNPAID, 'total_amount' => 0]);
 
         $this->postJson("/api/v1/invoices/{$invoice->id}/items", $this->manualItemPayload([

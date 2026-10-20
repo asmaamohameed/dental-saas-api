@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\V1\Invoice;
 
+use App\Models\InvoiceItem;
 use App\Support\Tenancy\CurrentTenant;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -10,7 +11,19 @@ class UpdateInvoiceItemRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return $this->user()->can('update', $this->route('item'));
+        if (! $this->user()->can('update', $this->route('item'))) {
+            return false;
+        }
+
+        /** @var InvoiceItem $item */
+        $item = $this->route('item');
+        $treatmentId = $this->input('patient_treatment_id', $item->patient_treatment_id);
+
+        if ($this->has('price') && empty($treatmentId)) {
+            return $this->user()->can('canChangePrice');
+        }
+
+        return true;
     }
 
     public function rules(): array

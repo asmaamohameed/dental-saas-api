@@ -11,7 +11,15 @@ class StoreInvoiceItemRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return $this->user()->can('create', [InvoiceItem::class, $this->route('invoice')]);
+        if (! $this->user()->can('create', [InvoiceItem::class, $this->route('invoice')])) {
+            return false;
+        }
+
+        if (! $this->filled('patient_treatment_id')) {
+            return $this->user()->can('canChangePrice');
+        }
+
+        return true;
     }
 
     public function rules(): array

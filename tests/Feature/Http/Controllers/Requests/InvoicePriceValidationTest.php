@@ -39,7 +39,7 @@ class InvoicePriceValidationTest extends TestCase
 
     public function test_store_requires_description_when_no_treatment_is_selected(): void
     {
-        $this->actingAsRole(UserRole::RECEPTIONIST);
+        $this->actingAsRole(UserRole::OWNER);
         $patient = Patient::factory()->create();
 
         $this->postJson('/api/v1/invoices', [
@@ -50,7 +50,7 @@ class InvoicePriceValidationTest extends TestCase
 
     public function test_store_rejects_short_note_when_no_treatment_is_selected(): void
     {
-        $this->actingAsRole(UserRole::RECEPTIONIST);
+        $this->actingAsRole(UserRole::OWNER);
         $patient = Patient::factory()->create();
 
         $this->postJson('/api/v1/invoices', [
@@ -61,7 +61,7 @@ class InvoicePriceValidationTest extends TestCase
 
     public function test_store_accepts_amount_only_line_with_description(): void
     {
-        $this->actingAsRole(UserRole::RECEPTIONIST);
+        $this->actingAsRole(UserRole::OWNER);
         $patient = Patient::factory()->create();
 
         $this->postJson('/api/v1/invoices', [

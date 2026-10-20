@@ -139,7 +139,7 @@ class TreatmentTrackingTest extends TestCase
             ->assertJsonValidationErrors(['dentist_id']);
     }
 
-    public function test_assistant_can_change_tooth_price(): void
+    public function test_assistant_cannot_change_tooth_price_without_permission(): void
     {
         $assistant = User::factory()->create(['tenant_id' => $this->tenant->id, 'role' => UserRole::ASSISTANT]);
         Sanctum::actingAs($assistant, ['*']);
@@ -148,9 +148,7 @@ class TreatmentTrackingTest extends TestCase
 
         $this->patchJson("/api/v1/patient-treatments/{$treatment->id}/teeth", [
             'teeth' => [['tooth_number' => '16', 'price' => 50]],
-        ])->assertOk();
-
-        $this->assertSame('50.00', (string) $treatment->teeth()->where('tooth_number', '16')->value('price'));
+        ])->assertForbidden();
     }
 
     public function test_receptionist_cannot_use_teeth_endpoint(): void

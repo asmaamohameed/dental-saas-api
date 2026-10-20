@@ -121,22 +121,20 @@ class InvoiceControllerTest extends TestCase
         ])->assertCreated();
     }
 
-    public function test_receptionist_can_create_an_invoice(): void
+    public function test_receptionist_cannot_create_a_manual_invoice_without_change_price_permission(): void
     {
-        $user = $this->actingAsRole(UserRole::RECEPTIONIST);
+        $this->actingAsRole(UserRole::RECEPTIONIST);
         $patient = Patient::factory()->create();
-        $response = $this->postJson('/api/v1/invoices', [
+
+        $this->postJson('/api/v1/invoices', [
             'patient_id' => $patient->id,
             'items' => [['price' => 120, 'description' => 'Treatment billing line', 'quantity' => 1]],
-        ])->assertCreated();
-
-        $this->assertEquals(120, $response->json('data.total_amount'));
-        $this->assertEquals($user->id, $response->json('data.created_by'));
+        ])->assertForbidden();
     }
 
     public function test_store_rejects_a_patient_from_another_tenant(): void
     {
-        $this->actingAsRole(UserRole::RECEPTIONIST);
+        $this->actingAsRole(UserRole::OWNER);
 
         $otherTenant = Tenant::factory()->create();
         $myTenantId = app(CurrentTenant::class)->id();
@@ -186,9 +184,9 @@ class InvoiceControllerTest extends TestCase
         ])->assertOk();
     }
 
-    public function test_receptionist_can_update_items_on_an_unpaid_invoice(): void
+    public function test_owner_can_update_items_on_an_unpaid_invoice(): void
     {
-        $this->actingAsRole(UserRole::RECEPTIONIST);
+        $this->actingAsRole(UserRole::OWNER);
         $invoice = Invoice::factory()->create(['status' => InvoiceStatus::UNPAID, 'total_amount' => 100]);
         $item = InvoiceItem::factory()->create([
             'invoice_id' => $invoice->id,

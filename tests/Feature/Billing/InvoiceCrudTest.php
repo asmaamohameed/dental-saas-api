@@ -18,7 +18,7 @@ class InvoiceCrudTest extends TestCase
         app(CurrentTenant::class)->set($tenant->id);
         $patient = Patient::factory()->create();
 
-        $this->actingAsTenantUser($tenant, UserRole::RECEPTIONIST);
+        $this->actingAsTenantUser($tenant, UserRole::OWNER);
 
         $this->postJson('/api/v1/invoices', [
             'patient_id' => $patient->id,

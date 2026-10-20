@@ -4,6 +4,7 @@ namespace App\Http\Requests\V1\Invoice;
 
 use App\Enums\InvoiceStatus;
 use App\Models\Appointment;
+use App\Models\Invoice;
 use App\Models\PatientTreatment;
 use App\Support\Tenancy\CurrentTenant;
 use Illuminate\Foundation\Http\FormRequest;
@@ -17,9 +18,24 @@ class UpdateInvoiceRequest extends FormRequest
             return true;
         }
 
+        /** @var Invoice|null $invoice */
+        $invoice = $this->route('invoice');
+
         foreach ($this->input('items', []) as $item) {
             if (empty($item['patient_treatment_id']) && array_key_exists('price', $item)) {
-                if (! ($this->user()?->can('canChangePrice') ?? false)) {
+                $requiresChangePrice = true;
+
+                if (! empty($item['id']) && $invoice) {
+                    $existing = $invoice->items()->find($item['id']);
+
+                    if ($existing && (string) $existing->invoice_id === (string) $invoice->id) {
+                        if (bccomp((string) $item['price'], (string) $existing->price, 2) === 0) {
+                            $requiresChangePrice = false;
+                        }
+                    }
+                }
+
+                if ($requiresChangePrice && ! ($this->user()?->can('canChangePrice') ?? false)) {
                     return false;
                 }
             }

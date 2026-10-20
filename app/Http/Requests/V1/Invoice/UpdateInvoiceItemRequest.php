@@ -20,7 +20,9 @@ class UpdateInvoiceItemRequest extends FormRequest
         $treatmentId = $this->input('patient_treatment_id', $item->patient_treatment_id);
 
         if ($this->has('price') && empty($treatmentId)) {
-            return $this->user()->can('canChangePrice');
+            if (bccomp((string) $this->input('price'), (string) $item->price, 2) !== 0) {
+                return $this->user()->can('canChangePrice');
+            }
         }
 
         return true;

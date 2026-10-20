@@ -27,7 +27,7 @@ class UpdateStaffRequest extends FormRequest
                 UserRole::RECEPTIONIST->value,
             ])],
             'locale' => ['nullable', 'string', 'max:10'],
-            'working_days' => ['nullable', 'array'],
+            'working_days' => ['nullable', 'array', 'min:1'],
             'working_days.*' => ['string', Rule::in(WorkingDay::values())],
         ];
     }

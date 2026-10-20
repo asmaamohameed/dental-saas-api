@@ -8,6 +8,7 @@ use App\Models\AuditLog;
 use App\Models\Tenant;
 use App\Models\User;
 use App\Support\Tenancy\CurrentTenant;
+use App\Support\WorkingDay;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
@@ -133,6 +134,36 @@ class StaffCrudTest extends TestCase
         $this->assertNull($user->working_days);
     }
 
+    public function test_creating_a_doctor_with_empty_working_days_array_fails_validation(): void
+    {
+        Sanctum::actingAs($this->owner, ['*']);
+
+        $this->postJson('/api/v1/staff', [
+            'name' => 'Dr. Empty Schedule',
+            'email' => 'empty-schedule@example.com',
+            'password' => 'password123',
+            'role' => UserRole::DOCTOR->value,
+            'working_days' => [],
+        ])->assertUnprocessable()->assertJsonValidationErrors('working_days');
+    }
+
+    public function test_creating_a_doctor_with_null_working_days_succeeds(): void
+    {
+        Sanctum::actingAs($this->owner, ['*']);
+
+        $this->postJson('/api/v1/staff', [
+            'name' => 'Dr. Null Schedule',
+            'email' => 'null-schedule@example.com',
+            'password' => 'password123',
+            'role' => UserRole::DOCTOR->value,
+            'working_days' => null,
+        ])->assertCreated();
+
+        $user = User::query()->where('email', 'null-schedule@example.com')->first();
+
+        $this->assertNull($user->working_days);
+    }
+
     public function test_owner_can_create_an_assistant(): void
     {
         Sanctum::actingAs($this->owner, ['*']);
@@ -212,6 +243,51 @@ class StaffCrudTest extends TestCase
         ]);
 
         $response->assertOk()->assertJsonPath('data.name', 'Updated Name');
+    }
+
+    public function test_updating_a_doctor_with_empty_working_days_array_fails_validation(): void
+    {
+        $doctor = User::factory()->doctor()->for($this->tenant)->create([
+            'working_days' => [WorkingDay::MONDAY],
+        ]);
+
+        Sanctum::actingAs($this->owner, ['*']);
+
+        $this->putJson("/api/v1/staff/{$doctor->id}", [
+            'working_days' => [],
+        ])->assertUnprocessable()->assertJsonValidationErrors('working_days');
+
+        $this->assertSame([WorkingDay::MONDAY], $doctor->fresh()->working_days);
+    }
+
+    public function test_updating_a_doctor_with_working_days_persists_them(): void
+    {
+        $doctor = User::factory()->doctor()->for($this->tenant)->create([
+            'working_days' => [WorkingDay::MONDAY],
+        ]);
+
+        Sanctum::actingAs($this->owner, ['*']);
+
+        $this->putJson("/api/v1/staff/{$doctor->id}", [
+            'working_days' => [WorkingDay::TUESDAY],
+        ])->assertOk();
+
+        $this->assertSame([WorkingDay::TUESDAY], $doctor->fresh()->working_days);
+    }
+
+    public function test_updating_a_doctor_with_null_working_days_clears_schedule(): void
+    {
+        $doctor = User::factory()->doctor()->for($this->tenant)->create([
+            'working_days' => [WorkingDay::MONDAY],
+        ]);
+
+        Sanctum::actingAs($this->owner, ['*']);
+
+        $this->putJson("/api/v1/staff/{$doctor->id}", [
+            'working_days' => null,
+        ])->assertOk();
+
+        $this->assertNull($doctor->fresh()->working_days);
     }
 
     public function test_owner_cannot_update_another_owner_via_staff_endpoint(): void

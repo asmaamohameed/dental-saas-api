@@ -24,3 +24,4 @@ Homestead.json
 Homestead.yaml
 Thumbs.db
 .docker-compose.yml
+test-*.txt

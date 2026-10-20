@@ -2,11 +2,23 @@
 
 namespace Tests\Feature\Policies;
 
+use App\Enums\ConsentStatus;
+use App\Enums\FinancialStatus;
 use App\Enums\InvoiceStatus;
+use App\Enums\PatientTreatmentStatus;
+use App\Enums\TreatmentPriority;
+use App\Enums\TreatmentScope;
+use App\Enums\TreatmentToothStatus;
+use App\Enums\TreatmentType;
 use App\Enums\UserRole;
 use App\Models\Invoice;
+use App\Models\InvoiceItem;
 use App\Models\Patient;
+use App\Models\PatientTreatment;
+use App\Models\PatientTreatmentTooth;
+use App\Models\Payment;
 use App\Models\Tenant;
+use App\Models\TreatmentTemplate;
 use App\Models\User;
 use App\Support\Tenancy\CurrentTenant;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -148,5 +160,93 @@ class InvoiceItemPolicyTest extends TestCase
         Sanctum::actingAs($user, ['*']);
 
         $this->deleteJson("/api/v1/invoices/{$invoice->id}/items/{$item->id}")->assertOk();
+    }
+
+    public function test_doctor_can_void_a_completed_line_on_a_paid_invoice(): void
+    {
+        $user = $this->userWithRole(UserRole::DOCTOR);
+        Sanctum::actingAs($user, ['*']);
+        [, $item] = $this->doneInvoiceItem(pay: true);
+
+        $this->postJson("/api/v1/invoice-items/{$item->id}/void", [
+            'reason' => 'Clinical adjustment',
+        ])->assertOk();
+    }
+
+    public function test_assistant_cannot_void_or_reprice_done(): void
+    {
+        $assistant = $this->userWithRole(UserRole::ASSISTANT);
+        Sanctum::actingAs($assistant, ['*']);
+        [, $item] = $this->doneInvoiceItem();
+
+        $this->postJson("/api/v1/invoice-items/{$item->id}/void", ['reason' => 'Nope'])->assertForbidden();
+        $this->postJson("/api/v1/invoice-items/{$item->id}/reprice-done", [
+            'price' => 10,
+            'reason' => 'Nope',
+        ])->assertForbidden();
+    }
+
+    public function test_void_is_forbidden_when_invoice_is_cancelled(): void
+    {
+        $user = $this->userWithRole(UserRole::OWNER);
+        Sanctum::actingAs($user, ['*']);
+        [$invoice, $item] = $this->doneInvoiceItem();
+        $invoice->update(['status' => InvoiceStatus::CANCELLED]);
+
+        $this->postJson("/api/v1/invoice-items/{$item->id}/void", ['reason' => 'Too late'])->assertForbidden();
+    }
+
+    /**
+     * @return array{0: Invoice, 1: InvoiceItem}
+     */
+    private function doneInvoiceItem(bool $pay = false): array
+    {
+        $patient = Patient::factory()->create(['tenant_id' => $this->tenant->id]);
+        $template = TreatmentTemplate::query()->create([
+            'name_ar' => 'علاج',
+            'name_en' => 'Treatment',
+            'category' => 'medical',
+            'scope' => TreatmentScope::TOOTH,
+            'default_price' => 100,
+            'estimated_duration_minutes' => 30,
+            'is_active' => true,
+        ]);
+        $treatment = PatientTreatment::query()->create([
+            'patient_id' => $patient->id,
+            'treatment_template_id' => $template->id,
+            'scope' => TreatmentScope::TOOTH,
+            'agreed_price' => 80,
+            'clinical_status' => PatientTreatmentStatus::IN_PROGRESS,
+            'financial_status' => FinancialStatus::UNPAID,
+            'consent_status' => ConsentStatus::NOT_REQUIRED,
+            'treatment_type' => TreatmentType::ORIGINAL,
+            'priority' => TreatmentPriority::MEDIUM,
+        ]);
+        $tooth = PatientTreatmentTooth::query()->create([
+            'patient_treatment_id' => $treatment->id,
+            'tooth_number' => '21',
+            'status' => TreatmentToothStatus::DONE,
+            'price' => 80,
+        ]);
+        $invoice = Invoice::factory()->create([
+            'tenant_id' => $this->tenant->id,
+            'patient_id' => $patient->id,
+            'total_amount' => 80,
+            'status' => InvoiceStatus::UNPAID,
+        ]);
+        $item = InvoiceItem::factory()->create([
+            'invoice_id' => $invoice->id,
+            'patient_treatment_id' => $treatment->id,
+            'patient_treatment_tooth_id' => $tooth->id,
+            'price' => 80,
+            'quantity' => 1,
+        ]);
+
+        if ($pay) {
+            Payment::factory()->create(['invoice_id' => $invoice->id, 'amount' => 80]);
+            $invoice->update(['status' => InvoiceStatus::PAID]);
+        }
+
+        return [$invoice, $item];
     }
 }

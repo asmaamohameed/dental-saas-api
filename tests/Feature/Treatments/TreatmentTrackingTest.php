@@ -695,17 +695,18 @@ class TreatmentTrackingTest extends TestCase
 
         $this->postJson("/api/v1/invoices/{$invoiceId}/refunds", [
             'reason_code' => RefundReasonCode::DUPLICATE_PAYMENT->value,
+            'amount' => 100,
         ])->assertCreated();
 
         $treatment->refresh();
         $this->assertSame($clinical, $treatment->clinical_status);
-        $this->assertSame(FinancialStatus::PAID, $treatment->financial_status);
+        $this->assertSame(FinancialStatus::UNPAID, $treatment->financial_status);
         $this->assertEquals(100, (float) $treatment->agreed_price);
         $this->assertSame($notes, $treatment->notes);
-        $this->assertSame(InvoiceStatus::REFUNDED, Invoice::query()->find($invoiceId)->status);
+        $this->assertSame(InvoiceStatus::UNPAID, Invoice::query()->find($invoiceId)->status);
     }
 
-    public function test_treatment_price_change_does_not_update_a_refunded_invoice(): void
+    public function test_treatment_price_change_updates_invoice_after_full_cash_refund_reopens_it(): void
     {
         $treatment = $this->createTreatment(['agreed_price' => 100, 'tooth_numbers' => ['16']]);
         $invoiceId = $treatment->invoiceItems()->first()->invoice_id;
@@ -717,6 +718,7 @@ class TreatmentTrackingTest extends TestCase
 
         $this->postJson("/api/v1/invoices/{$invoiceId}/refunds", [
             'reason_code' => RefundReasonCode::DUPLICATE_PAYMENT->value,
+            'amount' => 100,
         ])->assertCreated();
 
         $this->patchJson("/api/v1/patient-treatments/{$treatment->id}/teeth", [
@@ -724,9 +726,9 @@ class TreatmentTrackingTest extends TestCase
         ])->assertOk();
 
         $invoice = Invoice::query()->findOrFail($invoiceId);
-        $this->assertSame(InvoiceStatus::REFUNDED, $invoice->status);
-        $this->assertSame('100.00', (string) $invoice->fresh()->total_amount);
-        $this->assertSame('100.00', (string) $invoice->items()->first()->price);
+        $this->assertSame(InvoiceStatus::UNPAID, $invoice->status);
+        $this->assertSame('200.00', (string) $invoice->fresh()->total_amount);
+        $this->assertSame('200.00', (string) $invoice->items()->first()->price);
         $this->assertEquals(200, (float) $treatment->fresh()->teeth()->first()->price);
     }
 

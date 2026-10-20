@@ -50,20 +50,6 @@ class UpdatePaymentRequest extends FormRequest
                     'A deduct reason is required when deducting from the invoice.'
                 );
             }
-
-            $otherApplied = (float) $invoice->payments()
-                ->where('id', '!=', $payment->id)
-                ->get()
-                ->sum(fn ($other) => (float) $other->amount + (float) ($other->deduct_amount ?? 0));
-
-            $maxAllowed = (float) $invoice->total_amount - $otherApplied;
-
-            if ($newAmount + $newDeduct > $maxAllowed + 0.0001) {
-                $validator->errors()->add(
-                    'amount',
-                    "Updated payment plus deduct exceeds max allowable balance ({$maxAllowed})."
-                );
-            }
         });
     }
 }

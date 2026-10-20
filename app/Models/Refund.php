@@ -16,6 +16,7 @@ use Illuminate\Support\Carbon;
  * @property string $id
  * @property string $tenant_id
  * @property string $invoice_id
+ * @property string|null $invoice_item_id
  * @property string $amount
  * @property RefundReasonCode $reason_code
  * @property string|null $reason_note
@@ -23,6 +24,7 @@ use Illuminate\Support\Carbon;
  * @property string|null $refunded_by
  * @property Carbon $refunded_at
  * @property-read Invoice $invoice
+ * @property-read InvoiceItem|null $invoiceItem
  * @property-read User|null $refundedBy
  */
 class Refund extends Model
@@ -31,6 +33,7 @@ class Refund extends Model
 
     protected $fillable = [
         'invoice_id',
+        'invoice_item_id',
         'amount',
         'reason_code',
         'reason_note',
@@ -51,6 +54,11 @@ class Refund extends Model
     public function invoice(): BelongsTo
     {
         return $this->belongsTo(Invoice::class);
+    }
+
+    public function invoiceItem(): BelongsTo
+    {
+        return $this->belongsTo(InvoiceItem::class);
     }
 
     public function refundedBy(): BelongsTo

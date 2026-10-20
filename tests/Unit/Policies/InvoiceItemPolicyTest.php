@@ -49,6 +49,8 @@ class InvoiceItemPolicyTest extends TestCase
         $this->assertNull($this->policy->before($owner, 'create'));
         $this->assertNull($this->policy->before($owner, 'update'));
         $this->assertNull($this->policy->before($owner, 'delete'));
+        $this->assertNull($this->policy->before($owner, 'void'));
+        $this->assertNull($this->policy->before($owner, 'repriceDone'));
     }
 
     public function test_before_grants_owner_other_abilities(): void
@@ -144,5 +146,27 @@ class InvoiceItemPolicyTest extends TestCase
         $item = $this->invoiceItem($this->invoice('tenant-b', InvoiceStatus::UNPAID));
 
         $this->assertFalse($this->policy->delete($receptionist, $item));
+    }
+
+    public function test_void_and_reprice_done_require_invoice_refund_permission(): void
+    {
+        $paidItem = $this->invoiceItem($this->invoice('tenant-a', InvoiceStatus::PAID));
+
+        $this->assertFalse($this->policy->void($this->user(UserRole::ASSISTANT, 'tenant-a'), $paidItem));
+        $this->assertFalse($this->policy->repriceDone($this->user(UserRole::ASSISTANT, 'tenant-a'), $paidItem));
+        $this->assertTrue($this->policy->void($this->user(UserRole::DOCTOR, 'tenant-a'), $paidItem));
+        $this->assertTrue($this->policy->repriceDone($this->user(UserRole::RECEPTIONIST, 'tenant-a'), $paidItem));
+        $this->assertTrue($this->policy->void($this->user(UserRole::OWNER, 'tenant-a'), $paidItem));
+    }
+
+    public function test_void_and_reprice_done_are_denied_when_invoice_is_closed(): void
+    {
+        $owner = $this->user(UserRole::OWNER);
+
+        foreach ([InvoiceStatus::CANCELLED, InvoiceStatus::REFUNDED] as $status) {
+            $item = $this->invoiceItem($this->invoice('tenant-a', $status));
+            $this->assertFalse($this->policy->void($owner, $item));
+            $this->assertFalse($this->policy->repriceDone($owner, $item));
+        }
     }
 }

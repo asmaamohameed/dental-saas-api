@@ -2,6 +2,8 @@
 
 namespace App\Services;
 
+use App\Billing\Actions\RecomputeInvoiceTotal;
+use App\Billing\Queries\InvoiceItemStateSql;
 use App\Enums\FinancialStatus;
 use App\Enums\InvoiceStatus;
 use App\Exceptions\InvoiceHasPaymentsException;
@@ -26,7 +28,7 @@ class InvoiceService
         'items.patientTreatment.teeth',
         'items.patientTreatment.sessions.dentist',
         'payments',
-        'refund.refundedBy',
+        'refunds.refundedBy',
     ];
 
     public function list(array $filters = [], int $perPage = 15): LengthAwarePaginator
@@ -88,6 +90,8 @@ class InvoiceService
                 $invoice->items()->create($resolvedItem);
             }
 
+            app(RecomputeInvoiceTotal::class)->handle($invoice);
+
             $this->recomputeFinancialStatusesForInvoice($invoice);
 
             return $invoice->load(array_merge(self::INVOICE_RELATIONS, ['payments.receiver']));
@@ -130,6 +134,8 @@ class InvoiceService
                 'quantity' => 1,
             ]);
 
+            app(RecomputeInvoiceTotal::class)->handle($invoice);
+
             $this->recomputeFinancialStatus($treatment);
 
             return $invoice->load(self::INVOICE_RELATIONS);
@@ -159,14 +165,13 @@ class InvoiceService
                     continue;
                 }
 
-                if ($invoice->status === InvoiceStatus::PAID) {
+                if (
+                    $invoice->status === InvoiceStatus::PAID
+                    && bccomp((string) $invoice->total_amount, '0', 2) === 1
+                ) {
                     throw ValidationException::withMessages([
                         'invoice' => 'Cannot change treatment pricing while its invoice is fully paid.',
                     ]);
-                }
-
-                if (InvoiceFinancials::isLocked($invoice)) {
-                    continue;
                 }
 
                 if (! in_array($invoice->status, [InvoiceStatus::UNPAID, InvoiceStatus::PARTIAL], true)) {
@@ -180,20 +185,16 @@ class InvoiceService
                     ]);
                 }
 
-                $newTotal = (float) $invoice->items()->get()->sum(
-                    fn (InvoiceItem $row) => (float) $row->price * (int) $row->quantity
-                );
-
+                $billableTotal = app(InvoiceItemStateSql::class)->totalsForInvoice((string) $invoice->id)['total'];
                 $totalPayments = InvoiceFinancials::appliedCredits($invoice);
 
-                if (bccomp((string) $newTotal, (string) $totalPayments, 2) === -1) {
+                if (bccomp($billableTotal, (string) $totalPayments, 2) === -1) {
                     throw ValidationException::withMessages([
                         'invoice' => 'Updated treatment total would be less than payments already applied to this invoice.',
                     ]);
                 }
 
-                $invoice->update(['total_amount' => $newTotal]);
-                $this->recalculateStatus($invoice);
+                app(RecomputeInvoiceTotal::class)->handle($invoice);
             }
 
             $this->recomputeFinancialStatus($treatment);
@@ -266,7 +267,10 @@ class InvoiceService
                 ]);
             }
 
+            $itemsReplaced = false;
+
             if (isset($data['items'])) {
+                $itemsReplaced = true;
                 $itemsData = $data['items'];
                 unset($data['items']);
 
@@ -312,12 +316,14 @@ class InvoiceService
                     $lockedInvoice->items()->create($resolvedItem);
                 }
 
-                $data['total_amount'] = $totalAmount;
+                $lockedInvoice = app(RecomputeInvoiceTotal::class)->handle($lockedInvoice);
             }
 
             $lockedInvoice->update($data);
 
-            $this->recalculateStatus($lockedInvoice);
+            if (! $itemsReplaced) {
+                $this->recalculateStatus($lockedInvoice);
+            }
 
             return $lockedInvoice->load(self::INVOICE_RELATIONS);
         });
@@ -385,9 +391,7 @@ class InvoiceService
                 continue;
             }
 
-            $newTotal = (float) $remainingItems->sum(fn ($item) => (float) $item->price * (int) $item->quantity);
-            $invoice->update(['total_amount' => $newTotal]);
-            $this->recalculateStatus($invoice);
+            app(RecomputeInvoiceTotal::class)->handle($invoice);
         }
 
         $this->recomputeFinancialStatus($treatment);
@@ -395,7 +399,7 @@ class InvoiceService
 
     public function recalculateStatus(Invoice $invoice): void
     {
-        $invoice->load('payments');
+        $invoice->load(['payments', 'refunds']);
 
         if (InvoiceFinancials::isClosed($invoice)) {
             return;
@@ -470,7 +474,7 @@ class InvoiceService
 
     public function getPatientSummary(string $patientId): array
     {
-        $invoices = Invoice::where('patient_id', $patientId)->with(['payments', 'refund'])->get();
+        $invoices = Invoice::where('patient_id', $patientId)->with(['payments', 'refunds'])->get();
         $invoiceIds = $invoices->pluck('id');
 
         $totalBilled = $invoices->sum('total_amount');

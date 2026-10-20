@@ -5,10 +5,10 @@ namespace App\Services;
 use App\Enums\InvoiceStatus;
 use App\Enums\RefundReasonCode;
 use App\Models\Invoice;
+use App\Models\InvoiceItem;
 use App\Models\Refund;
 use App\Support\Billing\InvoiceFinancials;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
-use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -20,8 +20,10 @@ class RefundService
         'invoice.creator',
         'invoice.items.patientTreatment.template',
         'invoice.payments',
-        'invoice.refund',
+        'invoice.refunds',
     ];
+
+    public function __construct(private readonly InvoiceService $invoiceService) {}
 
     public function list(array $filters = [], int $perPage = 15): LengthAwarePaginator
     {
@@ -81,72 +83,98 @@ class RefundService
 
     public function create(Invoice $invoice, array $data, string $userId): Refund
     {
-        try {
-            return DB::transaction(function () use ($invoice, $data, $userId) {
-                /** @var Invoice $lockedInvoice */
-                $lockedInvoice = Invoice::query()->lockForUpdate()->findOrFail($invoice->id);
-                $lockedInvoice->load('payments');
+        return DB::transaction(function () use ($invoice, $data, $userId) {
+            /** @var Invoice $lockedInvoice */
+            $lockedInvoice = Invoice::query()->lockForUpdate()->findOrFail($invoice->id);
+            $lockedInvoice->load(['payments', 'refunds']);
 
-                if ($lockedInvoice->status === InvoiceStatus::REFUNDED) {
-                    throw ValidationException::withMessages([
-                        'invoice' => 'This invoice has already been refunded.',
-                    ]);
-                }
-
-                if ($lockedInvoice->status === InvoiceStatus::CANCELLED) {
-                    throw ValidationException::withMessages([
-                        'invoice' => 'A cancelled invoice cannot be refunded.',
-                    ]);
-                }
-
-                $amount = InvoiceFinancials::paidAmount($lockedInvoice);
-
-                if (bccomp((string) $amount, '0', 2) !== 1) {
-                    throw ValidationException::withMessages([
-                        'invoice' => 'A refund can only be issued for an invoice that has recorded payments.',
-                    ]);
-                }
-
-                $reasonCode = $data['reason_code'] instanceof RefundReasonCode
-                    ? $data['reason_code']
-                    : RefundReasonCode::from((string) $data['reason_code']);
-
-                $reasonNote = null;
-                if ($reasonCode->requiresNote()) {
-                    $reasonNote = trim((string) ($data['reason_note'] ?? ''));
-                    if ($reasonNote === '') {
-                        throw ValidationException::withMessages([
-                            'reason_note' => 'A note is required when the refund reason is Other.',
-                        ]);
-                    }
-                    if (mb_strlen($reasonNote) > RefundReasonCode::NOTE_MAX_LENGTH) {
-                        throw ValidationException::withMessages([
-                            'reason_note' => 'The refund note may not be greater than '.RefundReasonCode::NOTE_MAX_LENGTH.' characters.',
-                        ]);
-                    }
-                }
-
-                $method = $data['method'] ?? InvoiceFinancials::defaultRefundMethod($lockedInvoice);
-
-                /** @var Refund $refund */
-                $refund = $lockedInvoice->refund()->create([
-                    'amount' => $amount,
-                    'reason_code' => $reasonCode,
-                    'reason_note' => $reasonNote,
-                    'method' => $method,
-                    'refunded_by' => $userId,
-                    'refunded_at' => now(),
+            if ($lockedInvoice->status === InvoiceStatus::CANCELLED) {
+                throw ValidationException::withMessages([
+                    'invoice' => 'A cancelled invoice cannot be refunded.',
                 ]);
+            }
 
-                $lockedInvoice->update(['status' => InvoiceStatus::REFUNDED]);
+            $netPaid = bcadd((string) InvoiceFinancials::netPaid($lockedInvoice), '0', 2);
 
-                return $refund->load(self::REFUND_RELATIONS);
-            });
-        } catch (UniqueConstraintViolationException) {
-            throw ValidationException::withMessages([
-                'invoice' => 'This invoice has already been refunded.',
+            if (bccomp($netPaid, '0', 2) !== 1) {
+                throw ValidationException::withMessages([
+                    'invoice' => 'A refund can only be issued for an invoice that has recorded payments.',
+                ]);
+            }
+
+            $amount = bcadd((string) ($data['amount'] ?? '0'), '0', 2);
+
+            if (bccomp($amount, '0', 2) !== 1) {
+                throw ValidationException::withMessages([
+                    'amount' => 'The refund amount must be greater than zero.',
+                ]);
+            }
+
+            if (bccomp($amount, $netPaid, 2) === 1) {
+                throw ValidationException::withMessages([
+                    'amount' => "The refund amount ({$amount}) cannot exceed net paid ({$netPaid}).",
+                ]);
+            }
+
+            $invoiceItemId = $data['invoice_item_id'] ?? null;
+            if ($invoiceItemId !== null) {
+                /** @var InvoiceItem|null $item */
+                $item = InvoiceItem::query()
+                    ->where('invoice_id', $lockedInvoice->id)
+                    ->whereNull('deleted_at')
+                    ->find($invoiceItemId);
+
+                if (! $item) {
+                    throw ValidationException::withMessages([
+                        'invoice_item_id' => 'The selected invoice item is invalid for this invoice.',
+                    ]);
+                }
+
+                $itemRemaining = bcsub($item->subtotal, bcadd((string) $item->refundedAmount(), '0', 2), 2);
+
+                if (bccomp($amount, $itemRemaining, 2) === 1) {
+                    throw ValidationException::withMessages([
+                        'amount' => "The refund amount ({$amount}) cannot exceed the remaining refundable amount for this item ({$itemRemaining}).",
+                    ]);
+                }
+            }
+
+            $reasonCode = $data['reason_code'] instanceof RefundReasonCode
+                ? $data['reason_code']
+                : RefundReasonCode::from((string) $data['reason_code']);
+
+            $reasonNote = null;
+            if ($reasonCode->requiresNote()) {
+                $reasonNote = trim((string) ($data['reason_note'] ?? ''));
+                if ($reasonNote === '') {
+                    throw ValidationException::withMessages([
+                        'reason_note' => 'A note is required when the refund reason is Other.',
+                    ]);
+                }
+                if (mb_strlen($reasonNote) > RefundReasonCode::NOTE_MAX_LENGTH) {
+                    throw ValidationException::withMessages([
+                        'reason_note' => 'The refund note may not be greater than '.RefundReasonCode::NOTE_MAX_LENGTH.' characters.',
+                    ]);
+                }
+            }
+
+            $method = $data['method'] ?? InvoiceFinancials::defaultRefundMethod($lockedInvoice);
+
+            /** @var Refund $refund */
+            $refund = $lockedInvoice->refunds()->create([
+                'amount' => $amount,
+                'invoice_item_id' => $invoiceItemId,
+                'reason_code' => $reasonCode,
+                'reason_note' => $reasonNote,
+                'method' => $method,
+                'refunded_by' => $userId,
+                'refunded_at' => now(),
             ]);
-        }
+
+            $this->invoiceService->recalculateStatus($lockedInvoice->fresh(['payments', 'refunds']));
+
+            return $refund->load(self::REFUND_RELATIONS);
+        });
     }
 
     private function applyFilters(object $query, array $filters): void

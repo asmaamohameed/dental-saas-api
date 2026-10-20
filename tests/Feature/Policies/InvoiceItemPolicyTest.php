@@ -91,13 +91,17 @@ class InvoiceItemPolicyTest extends TestCase
         $this->postJson("/api/v1/invoices/{$invoice->id}/items", $this->manualItemPayload())->assertForbidden();
     }
 
-    public function test_receptionist_cannot_add_item_to_partial_invoice(): void
+    public function test_receptionist_can_add_a_treatment_line_to_a_partial_invoice(): void
     {
         $user = $this->userWithRole(UserRole::RECEPTIONIST);
         Sanctum::actingAs($user, ['*']);
         $invoice = $this->invoiceWithStatus(InvoiceStatus::PARTIAL);
+        $treatment = $this->plannedTreatmentForInvoice($invoice);
 
-        $this->postJson("/api/v1/invoices/{$invoice->id}/items", $this->manualItemPayload())->assertForbidden();
+        $this->postJson("/api/v1/invoices/{$invoice->id}/items", [
+            'patient_treatment_id' => $treatment->id,
+            'quantity' => 1,
+        ])->assertCreated();
     }
 
     public function test_owner_can_add_item_to_partial_invoice(): void
@@ -140,7 +144,7 @@ class InvoiceItemPolicyTest extends TestCase
         $this->deleteJson("/api/v1/invoices/{$invoice->id}/items/{$item->id}")->assertOk();
     }
 
-    public function test_receptionist_cannot_delete_an_item_from_a_partial_invoice(): void
+    public function test_receptionist_can_delete_an_item_from_a_partial_invoice(): void
     {
         $user = $this->userWithRole(UserRole::RECEPTIONIST);
         $invoice = $this->invoiceWithStatus(InvoiceStatus::PARTIAL);
@@ -149,7 +153,7 @@ class InvoiceItemPolicyTest extends TestCase
 
         Sanctum::actingAs($user, ['*']);
 
-        $this->deleteJson("/api/v1/invoices/{$invoice->id}/items/{$item->id}")->assertForbidden();
+        $this->deleteJson("/api/v1/invoices/{$invoice->id}/items/{$item->id}")->assertOk();
     }
 
     public function test_doctor_cannot_delete_an_invoice_item(): void
@@ -196,6 +200,38 @@ class InvoiceItemPolicyTest extends TestCase
         $invoice->update(['status' => InvoiceStatus::CANCELLED]);
 
         $this->postJson("/api/v1/invoice-items/{$item->id}/void", ['reason' => 'Too late'])->assertForbidden();
+    }
+
+    private function plannedTreatmentForInvoice(Invoice $invoice): PatientTreatment
+    {
+        $template = TreatmentTemplate::query()->create([
+            'name_ar' => 'علاج',
+            'name_en' => 'Treatment',
+            'category' => 'medical',
+            'scope' => TreatmentScope::TOOTH,
+            'default_price' => 80,
+            'estimated_duration_minutes' => 30,
+            'is_active' => true,
+        ]);
+        $treatment = PatientTreatment::query()->create([
+            'patient_id' => $invoice->patient_id,
+            'treatment_template_id' => $template->id,
+            'scope' => TreatmentScope::TOOTH,
+            'agreed_price' => 80,
+            'clinical_status' => PatientTreatmentStatus::PLANNED,
+            'financial_status' => FinancialStatus::UNPAID,
+            'consent_status' => ConsentStatus::NOT_REQUIRED,
+            'treatment_type' => TreatmentType::ORIGINAL,
+            'priority' => TreatmentPriority::MEDIUM,
+        ]);
+        PatientTreatmentTooth::query()->create([
+            'patient_treatment_id' => $treatment->id,
+            'tooth_number' => '21',
+            'status' => TreatmentToothStatus::PLANNED,
+            'price' => 80,
+        ]);
+
+        return $treatment;
     }
 
     /**

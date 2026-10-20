@@ -87,11 +87,19 @@ class InvoiceItemPolicyTest extends TestCase
         $this->assertTrue($this->policy->create($receptionist, $this->invoice('tenant-a', InvoiceStatus::UNPAID)));
     }
 
-    public function test_create_denies_receptionist_on_partial_invoice(): void
+    public function test_create_allows_receptionist_on_partial_invoice(): void
     {
         $receptionist = $this->user(UserRole::RECEPTIONIST, 'tenant-a');
 
-        $this->assertFalse($this->policy->create($receptionist, $this->invoice('tenant-a', InvoiceStatus::PARTIAL)));
+        $this->assertTrue($this->policy->create($receptionist, $this->invoice('tenant-a', InvoiceStatus::PARTIAL)));
+    }
+
+    public function test_create_denies_refunded_and_cancelled_invoices(): void
+    {
+        $receptionist = $this->user(UserRole::RECEPTIONIST, 'tenant-a');
+
+        $this->assertFalse($this->policy->create($receptionist, $this->invoice('tenant-a', InvoiceStatus::REFUNDED)));
+        $this->assertFalse($this->policy->create($receptionist, $this->invoice('tenant-a', InvoiceStatus::CANCELLED)));
     }
 
     public function test_create_denies_receptionist_cross_tenant(): void
@@ -124,12 +132,12 @@ class InvoiceItemPolicyTest extends TestCase
         $this->assertTrue($this->policy->update($receptionist, $item));
     }
 
-    public function test_update_denies_receptionist_on_partial_invoice(): void
+    public function test_update_allows_receptionist_on_partial_invoice(): void
     {
         $receptionist = $this->user(UserRole::RECEPTIONIST, 'tenant-a');
         $item = $this->invoiceItem($this->invoice('tenant-a', InvoiceStatus::PARTIAL));
 
-        $this->assertFalse($this->policy->update($receptionist, $item));
+        $this->assertTrue($this->policy->update($receptionist, $item));
     }
 
     public function test_delete_is_allowed_when_invoice_is_paid(): void

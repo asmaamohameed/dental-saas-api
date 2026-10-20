@@ -81,14 +81,16 @@ class InvoiceServiceTest extends TestCase
         $this->service->update($invoice, ['appointment_id' => Appointment::factory()->create()->id]);
     }
 
-    public function test_update_rejects_item_changes_on_a_partial_invoice(): void
+    public function test_update_allows_item_changes_on_a_partial_invoice(): void
     {
-        $invoice = Invoice::factory()->create(['status' => InvoiceStatus::PARTIAL]);
-        $this->expectException(ValidationException::class);
+        $invoice = Invoice::factory()->create(['status' => InvoiceStatus::PARTIAL, 'total_amount' => 0]);
 
-        $this->service->update($invoice, [
+        $updated = $this->service->update($invoice, [
             'items' => [['price' => 50, 'description' => 'Manual billing line', 'quantity' => 1]],
         ]);
+
+        $this->assertCount(1, $updated->items);
+        $this->assertEquals(50, $updated->total_amount);
     }
 
     public function test_update_rejects_changing_patient_on_a_partial_invoice(): void

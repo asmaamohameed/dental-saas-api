@@ -53,18 +53,17 @@ class InvoicePolicyTest extends TestCase
         ];
     }
 
-    public function test_owner_cannot_update_items_on_a_partial_invoice_either(): void
+    public function test_owner_can_update_items_on_a_partial_invoice(): void
     {
         $user = $this->userWithRole(UserRole::OWNER);
         Sanctum::actingAs($user, ['*']);
         $invoice = $this->invoiceWithStatus(InvoiceStatus::PARTIAL);
 
         $this->putJson("/api/v1/invoices/{$invoice->id}", $this->validItemsPayload())
-            ->assertStatus(422)
-            ->assertJsonValidationErrors(['items']);
+            ->assertOk();
     }
 
-    public function test_receptionist_cannot_update_items_on_a_partial_invoice(): void
+    public function test_receptionist_cannot_add_a_new_manual_line_on_partial_without_change_price(): void
     {
         $user = $this->userWithRole(UserRole::RECEPTIONIST);
         Sanctum::actingAs($user, ['*']);

@@ -322,7 +322,7 @@ Filters: `status`, `patient_id`, `date_from`, `date_to`.
 | POST | `/invoice-items/{item}/void` | Yes | owner, doctor, receptionist (requires `invoice:refund`) |
 | POST | `/invoice-items/{item}/reprice-done` | Yes | owner, doctor, receptionist (requires `invoice:refund`) |
 
-Planned lines (manual or not yet performed) can be added, updated, or deleted on open invoices, including when `status = paid` (which becomes `partial` when new work is added). Completed or voided lines cannot be changed via item PUT or invoice `items` payloads; use `reprice-done` or void instead. `PUT /invoices/{invoice}` with an `items` array is incremental: entries without `id` append, entries with `id` update that line, and omitted lines are left unchanged. Deletes go through the item DELETE endpoint and write an audit row. If a planned change would make the billable total fall below settled payments, the API returns 422 with a refund-first message (`refundDue` is only set by void/reprice-done, not by planned edits).
+Planned lines (manual or not yet performed) can be added, updated, or deleted on any invoice that is not `refunded` or `cancelled`, including `unpaid`, `partial`, and `paid` (paid becomes `partial` when new billable work is added). Anyone with `invoice:edit` in the same tenant may do this; `canChangePrice` still gates a real price change on Other lines. Completed or voided lines cannot be changed via item PUT or invoice `items` payloads; use `reprice-done` or void instead. `PUT /invoices/{invoice}` with an `items` array is incremental: entries without `id` append, entries with `id` update that line, and omitted lines are left unchanged. Deletes go through the item DELETE endpoint and write an audit row. If a planned change would make the billable total fall below settled payments, the API returns 422 with a refund-first message (`refundDue` is only set by void/reprice-done, not by planned edits).
 
 #### Payments
 | Method | Path | Auth | Roles |
@@ -559,7 +559,7 @@ POST /api/v1/inventory-items/{item}/transactions
 ### Invoice & Payment Business Rules
 
 - Fully paid invoices cannot have scalar fields changed (`patient_id`, etc.); planned invoice lines may still be added or edited via the item endpoints or an `items`-only invoice update.
-- Partially paid invoices cannot change `patient_id` or replace items with non-treatment manual lines via the invoice update endpoint (owner can still edit payments and use item endpoints).
+- Partially paid invoices cannot change `patient_id`. Item add/edit/delete follows the same open-invoice rule as unpaid and paid (`refunded` / `cancelled` stay closed). The settled-total floor still applies.
 - Deleting an invoice with payments throws `InvoiceHasPaymentsException`.
 - Payment amount cannot exceed the invoice's remaining balance.
 - The "Other" service is system-reserved: it cannot be deactivated, deleted, or have its name changed.

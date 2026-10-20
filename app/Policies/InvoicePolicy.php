@@ -34,10 +34,6 @@ class InvoicePolicy
             return false;
         }
 
-        if (! $user->isOwner() && $invoice->status === InvoiceStatus::PARTIAL) {
-            return false;
-        }
-
         return true;
     }
 }

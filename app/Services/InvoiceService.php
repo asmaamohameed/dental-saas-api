@@ -243,18 +243,6 @@ class InvoiceService
                 $itemsData = $data['items'];
                 unset($data['items']);
 
-                if ($lockedInvoice->status === InvoiceStatus::PARTIAL) {
-                    $onlyTreatmentItems = collect($itemsData)->every(
-                        fn (array $item) => ! empty($item['patient_treatment_id'])
-                    );
-
-                    if (! $onlyTreatmentItems) {
-                        throw ValidationException::withMessages([
-                            'items' => 'Partially paid invoices cannot be updated.',
-                        ]);
-                    }
-                }
-
                 $tenantId = app(CurrentTenant::class)->id();
                 $stateResolver = app(InvoiceItemStateResolver::class);
                 $factsReader = app(InvoiceItemFactsReader::class);

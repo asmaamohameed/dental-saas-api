@@ -132,7 +132,7 @@ class InvoiceUpdateTest extends TestCase
         ])->assertOk();
     }
 
-    public function test_updating_items_on_a_partial_invoice_is_blocked_even_for_owner(): void
+    public function test_updating_items_on_a_partial_invoice_is_allowed(): void
     {
         $this->actingAsRole(UserRole::OWNER);
 
@@ -144,7 +144,7 @@ class InvoiceUpdateTest extends TestCase
             'items' => [
                 ['price' => 50, 'description' => 'Manual billing line', 'quantity' => 1],
             ],
-        ])->assertStatus(422)->assertJsonValidationErrors(['items']);
+        ])->assertOk();
     }
 
     public function test_appointment_must_belong_to_the_given_patient(): void

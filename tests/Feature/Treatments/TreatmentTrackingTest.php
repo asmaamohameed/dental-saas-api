@@ -23,6 +23,7 @@ use App\Models\Tenant;
 use App\Models\TreatmentTemplate;
 use App\Models\User;
 use App\Services\DefaultTreatmentTemplatesProvisioner;
+use App\Services\PatientTreatmentService;
 use App\Support\Tenancy\CurrentTenant;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Sanctum\Sanctum;
@@ -621,6 +622,48 @@ class TreatmentTrackingTest extends TestCase
         $this->assertSame('retreatment', $response->json('data.treatment_type'));
         $this->assertSame(['26'], $response->json('data.tooth_numbers'));
         $this->assertSame(0, (int) $response->json('data.agreed_price'));
+    }
+
+    public function test_retreat_without_agreed_price_uses_parent_unit_price_not_raised_catalog_default(): void
+    {
+        $treatment = $this->createTreatment(['agreed_price' => 120]);
+        $template = $treatment->template;
+
+        $this->putJson("/api/v1/treatment-templates/{$template->id}", [
+            'name_ar' => $template->name_ar,
+            'name_en' => $template->name_en,
+            'category' => $template->category->value,
+            'scope' => $template->scope->value,
+            'default_price' => 500,
+            'estimated_duration_minutes' => $template->estimated_duration_minutes,
+        ])->assertOk();
+
+        $response = $this->postJson("/api/v1/patient-treatments/{$treatment->id}/retreat")
+            ->assertCreated();
+
+        $this->assertSame(120, (int) $response->json('data.agreed_price'));
+    }
+
+    public function test_retreat_with_explicit_agreed_price_uses_requested_value(): void
+    {
+        $treatment = $this->createTreatment(['agreed_price' => 120]);
+
+        $response = $this->postJson("/api/v1/patient-treatments/{$treatment->id}/retreat", [
+            'agreed_price' => 175,
+        ])->assertCreated();
+
+        $this->assertSame(175, (int) $response->json('data.agreed_price'));
+    }
+
+    public function test_retreat_falls_back_to_template_default_when_parent_has_no_agreed_price(): void
+    {
+        $treatment = $this->createTreatment(['agreed_price' => 120]);
+        $treatment->load('template');
+        $treatment->agreed_price = null;
+
+        $retreatment = app(PatientTreatmentService::class)->retreat($treatment, [], $this->user->id);
+
+        $this->assertSame(250.0, (float) $retreatment->agreed_price);
     }
 
     public function test_appointment_no_show_does_not_change_clinical_status(): void

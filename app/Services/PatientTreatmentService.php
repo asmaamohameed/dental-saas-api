@@ -266,19 +266,27 @@ class PatientTreatmentService
     public function retreat(PatientTreatment $treatment, array $data, string $userId): PatientTreatment
     {
         return DB::transaction(function () use ($treatment, $data, $userId) {
+            $treatment->loadMissing('template');
+
+            $parentAgreedPrice = $treatment->getAttributes()['agreed_price'] ?? null;
+
+            $unitPrice = array_key_exists('agreed_price', $data) && $data['agreed_price'] !== null
+                ? $data['agreed_price']
+                : ($parentAgreedPrice !== null
+                    ? $parentAgreedPrice
+                    : ($treatment->template !== null ? $treatment->template->default_price : null));
+
             $status = $this->clinical($treatment);
 
             if (! in_array($status, [PatientTreatmentStatus::FAILED, PatientTreatmentStatus::COMPLETED], true)) {
-                $treatment->clinical_status = PatientTreatmentStatus::FAILED;
-                $treatment->save();
+                PatientTreatment::query()
+                    ->whereKey($treatment->id)
+                    ->update(['clinical_status' => PatientTreatmentStatus::FAILED]);
             } elseif ($status === PatientTreatmentStatus::COMPLETED) {
-                $treatment->clinical_status = PatientTreatmentStatus::FAILED;
-                $treatment->save();
+                PatientTreatment::query()
+                    ->whereKey($treatment->id)
+                    ->update(['clinical_status' => PatientTreatmentStatus::FAILED]);
             }
-
-            $unitPrice = $data['agreed_price']
-                ?? ($treatment->template !== null ? $treatment->template->default_price : null)
-                ?? $treatment->agreed_price;
 
             $payload = [
                 'patient_id' => $treatment->patient_id,

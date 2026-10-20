@@ -38,8 +38,25 @@ class UpdateInvoiceItemRequest extends FormRequest
                 Rule::exists('patient_treatments', 'id')->where('tenant_id', app(CurrentTenant::class)->id()),
             ],
             'description' => ['nullable', 'string', 'max:500'],
-            'price' => ['sometimes', 'required', 'numeric', 'min:0'],
+            'price' => ['sometimes', 'nullable', 'numeric', 'min:0'],
             'quantity' => ['sometimes', 'required', 'integer', 'min:1'],
         ];
+    }
+
+    public function withValidator($validator): void
+    {
+        $validator->after(function ($validator) {
+            /** @var InvoiceItem $item */
+            $item = $this->route('item');
+            $treatmentId = $this->input('patient_treatment_id', $item->patient_treatment_id);
+
+            if (! empty($treatmentId)) {
+                return;
+            }
+
+            if ($this->has('price') && $this->input('price') === null) {
+                $validator->errors()->add('price', 'Price is required when no treatment is selected.');
+            }
+        });
     }
 }

@@ -122,7 +122,7 @@ Enums live in `app/Enums/UserRole.php`:
   - `auth:sanctum` + `tenant` middleware on all protected tenant routes.
   - `auth:sanctum` + `is_admin` middleware on all admin routes.
   - `clinic.permission:{key}` (`EnsureClinicPermission`) checks `ClinicPermissionGate`. The signed-in user's role selects `ClinicPermissionCatalog::baseline()`. A saved `clinic_role_permissions` value replaces the baseline for that key only. Keys missing from an older saved row fall back to the baseline in `forUser()` and in the owner editor payload, so no backfill migration is required. The owner always keeps every key. `matrix()` is the platform-admin read-only view.
-  - `treatment:change_price` (baseline: owner and doctor) gates the `canChangePrice` ability used for treatment `agreed_price`, per-tooth prices, and **manual** invoice line prices (lines without a linked `patient_treatment_id`). Treatment-linked invoice lines still take price from the treatment total on the server.
+  - `treatment:change_price` (baseline: owner and doctor) gates the `canChangePrice` ability used for treatment `agreed_price`, per-tooth prices, and **manual** invoice line prices (lines without a linked `patient_treatment_id`). A line linked to a `patient_treatment_id` always stores `$treatment->total_price`; a client-supplied `price` on that line is ignored (POST/PATCH item and invoice PUT `items`). Attach a treatment to an existing Other line and the stored price becomes the treatment total. `reprice-done` is the exception: it writes a client `price` on a completed line.
 
 ### Clinic permission keys added for financial and treatment reads
 

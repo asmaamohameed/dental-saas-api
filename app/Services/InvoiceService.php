@@ -260,17 +260,10 @@ class InvoiceService
                 $factsReader = app(InvoiceItemFactsReader::class);
 
                 foreach ($itemsData as $index => $item) {
-                    [$price, $description] = $this->resolveItemPriceAndDescription($item, $tenantId);
-
-                    $attributes = [
-                        'patient_treatment_id' => $item['patient_treatment_id'] ?? null,
-                        'description' => $description,
-                        'price' => $price,
-                        'quantity' => $item['quantity'],
-                    ];
+                    /** @var InvoiceItem|null $existing */
+                    $existing = null;
 
                     if (! empty($item['id'])) {
-                        /** @var InvoiceItem|null $existing */
                         $existing = $lockedInvoice->items()->find($item['id']);
 
                         if (! $existing || (string) $existing->invoice_id !== (string) $lockedInvoice->id) {
@@ -287,6 +280,21 @@ class InvoiceService
                             ]);
                         }
 
+                        if (! array_key_exists('patient_treatment_id', $item)) {
+                            $item['patient_treatment_id'] = $existing->patient_treatment_id;
+                        }
+                    }
+
+                    [$price, $description] = $this->resolveItemPriceAndDescription($item, $tenantId);
+
+                    $attributes = [
+                        'patient_treatment_id' => $item['patient_treatment_id'] ?? null,
+                        'description' => $description,
+                        'price' => $price,
+                        'quantity' => $item['quantity'],
+                    ];
+
+                    if ($existing) {
                         $existing->update($attributes);
                     } else {
                         $lockedInvoice->items()->create($attributes);
@@ -490,7 +498,7 @@ class InvoiceService
             $label = $treatment->template?->name_en ?: $treatment->template?->name_ar ?: 'Patient treatment';
 
             return [
-                isset($item['price']) ? (float) $item['price'] : $treatment->total_price,
+                (float) $treatment->total_price,
                 $item['description'] ?? $this->treatmentInvoiceDescription($treatment),
             ];
         }

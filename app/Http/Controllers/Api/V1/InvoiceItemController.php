@@ -64,7 +64,7 @@ class InvoiceItemController extends Controller
                 $treatment = PatientTreatment::with('template')
                     ->where('tenant_id', app(CurrentTenant::class)->id())
                     ->findOrFail($validated['patient_treatment_id']);
-                $validated['price'] = $validated['price'] ?? $treatment->total_price;
+                $validated['price'] = $treatment->total_price;
                 $validated['description'] ??= $treatment->template?->name_en ?: $treatment->template?->name_ar;
             }
 
@@ -103,11 +103,20 @@ class InvoiceItemController extends Controller
             }
 
             $validated = $request->validated();
+            $hasSubmittedPrice = array_key_exists('price', $validated);
+            $submittedPrice = $validated['price'] ?? null;
+            unset($validated['price']);
 
-            if (! empty($validated['patient_treatment_id'])) {
+            $treatmentId = array_key_exists('patient_treatment_id', $validated)
+                ? $validated['patient_treatment_id']
+                : $item->patient_treatment_id;
+
+            if (! empty($treatmentId)) {
                 $treatment = PatientTreatment::where('tenant_id', app(CurrentTenant::class)->id())
-                    ->findOrFail($validated['patient_treatment_id']);
-                $validated['price'] = $validated['price'] ?? $treatment->total_price;
+                    ->findOrFail($treatmentId);
+                $validated['price'] = $treatment->total_price;
+            } elseif ($hasSubmittedPrice) {
+                $validated['price'] = $submittedPrice;
             }
 
             $item->update($validated);

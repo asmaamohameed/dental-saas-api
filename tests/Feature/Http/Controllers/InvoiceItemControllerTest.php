@@ -118,7 +118,8 @@ class InvoiceItemControllerTest extends TestCase
 
         $this->putJson("/api/v1/invoices/{$invoice->id}/items/{$item->id}", [
             'quantity' => 1,
-        ])->assertStatus(422)->assertJsonValidationErrors(['quantity']);
+        ])->assertStatus(422)->assertJsonValidationErrors(['quantity'])
+            ->assertJsonPath('errors.quantity.0', __('billing.total_below_settled'));
     }
 
     public function test_update_returns_404_when_item_does_not_belong_to_the_invoice(): void

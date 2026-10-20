@@ -6,6 +6,7 @@ use App\Enums\InvoiceStatus;
 use App\Exceptions\InvoiceHasPaymentsException;
 use App\Models\Appointment;
 use App\Models\Invoice;
+use App\Models\InvoiceItem;
 use App\Models\Patient;
 use App\Models\Payment;
 use App\Models\Tenant;
@@ -120,23 +121,57 @@ class InvoiceServiceTest extends TestCase
     public function test_update_rejects_new_total_lower_than_existing_payments(): void
     {
         $invoice = Invoice::factory()->create(['status' => InvoiceStatus::UNPAID, 'total_amount' => 500]);
-        Payment::factory()->create(['invoice_id' => $invoice->id, 'amount' => 300]);
-        $this->expectException(ValidationException::class);
-
-        $this->service->update($invoice, [
-            'items' => [['price' => 50, 'description' => 'Reduced billing line', 'quantity' => 1]],
+        $item = InvoiceItem::factory()->create([
+            'invoice_id' => $invoice->id,
+            'description' => 'Large line',
+            'price' => 500,
+            'quantity' => 1,
         ]);
+        Payment::factory()->create(['invoice_id' => $invoice->id, 'amount' => 300]);
+
+        try {
+            $this->service->update($invoice, [
+                'items' => [[
+                    'id' => $item->id,
+                    'price' => 50,
+                    'description' => 'Reduced billing line',
+                    'quantity' => 1,
+                ]],
+            ]);
+            $this->fail('Expected ValidationException');
+        } catch (ValidationException $exception) {
+            $this->assertSame(__('billing.total_below_settled'), $exception->errors()['items'][0]);
+        }
     }
 
-    public function test_update_replaces_items_and_recalculates_total(): void
+    public function test_update_appends_and_updates_items_without_deleting_omitted_lines(): void
     {
         $invoice = Invoice::factory()->create(['status' => InvoiceStatus::UNPAID, 'total_amount' => 100]);
-        $updated = $this->service->update($invoice, [
-            'items' => [['price' => 75, 'description' => 'Updated billing line', 'quantity' => 2]],
+        $existing = InvoiceItem::factory()->create([
+            'invoice_id' => $invoice->id,
+            'description' => 'Existing billing line',
+            'price' => 100,
+            'quantity' => 1,
         ]);
 
-        $this->assertEquals(150, $updated->total_amount);
-        $this->assertCount(1, $updated->items);
+        $updated = $this->service->update($invoice, [
+            'items' => [
+                [
+                    'id' => $existing->id,
+                    'price' => 75,
+                    'description' => 'Updated billing line',
+                    'quantity' => 1,
+                ],
+                [
+                    'price' => 25,
+                    'description' => 'Appended billing line',
+                    'quantity' => 1,
+                ],
+            ],
+        ]);
+
+        $this->assertEquals(100, $updated->total_amount);
+        $this->assertCount(2, $updated->items);
     }
 
     // ---------- delete() ----------

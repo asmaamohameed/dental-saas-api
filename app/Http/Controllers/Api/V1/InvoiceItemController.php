@@ -2,9 +2,13 @@
 
 namespace App\Http\Controllers\Api\V1;
 
+use App\Billing\Actions\DeletePlannedItem;
 use App\Billing\Actions\RecomputeInvoiceTotal;
 use App\Billing\Actions\RepriceDoneItem;
 use App\Billing\Actions\VoidInvoiceItem;
+use App\Billing\Domain\InvoiceItemState;
+use App\Billing\Domain\InvoiceItemStateResolver;
+use App\Billing\Queries\InvoiceItemFactsReader;
 use App\Billing\Queries\InvoiceItemStateSql;
 use App\Enums\InvoiceStatus;
 use App\Http\Controllers\Controller;
@@ -31,6 +35,9 @@ class InvoiceItemController extends Controller
     public function __construct(
         private readonly RecomputeInvoiceTotal $recomputeInvoiceTotal,
         private readonly InvoiceItemStateSql $invoiceItemStateSql,
+        private readonly InvoiceItemFactsReader $invoiceItemFactsReader,
+        private readonly InvoiceItemStateResolver $invoiceItemStateResolver,
+        private readonly DeletePlannedItem $deletePlannedItem,
         private readonly VoidInvoiceItem $voidInvoiceItem,
         private readonly RepriceDoneItem $repriceDoneItem,
     ) {}
@@ -70,6 +77,8 @@ class InvoiceItemController extends Controller
 
             $item = $lockedInvoice->items()->create($validated);
 
+            $this->assertBillableTotalNotBelowSettled($lockedInvoice, 'invoice');
+
             $this->recomputeInvoiceTotal->handle($lockedInvoice);
 
             return $item;
@@ -88,8 +97,6 @@ class InvoiceItemController extends Controller
             return $this->errorResponse('Item does not belong to this invoice.', 404);
         }
 
-        // TODO(billing-6b): block PUT changes on DONE lines; use reprice-done instead.
-
         $updatedItem = DB::transaction(function () use ($request, $invoice, $item) {
             $lockedInvoice = Invoice::lockForUpdate()->find($invoice->id);
             InvoiceFinancials::assertMutable($lockedInvoice);
@@ -97,6 +104,14 @@ class InvoiceItemController extends Controller
             if ($lockedInvoice->status === InvoiceStatus::PAID) {
                 throw ValidationException::withMessages([
                     'invoice' => 'Cannot modify items of a fully paid invoice.',
+                ]);
+            }
+
+            $state = $this->invoiceItemStateResolver->resolve($this->invoiceItemFactsReader->read($item));
+
+            if (in_array($state, [InvoiceItemState::DONE, InvoiceItemState::VOIDED], true)) {
+                throw ValidationException::withMessages([
+                    'item' => __('billing.invoice_item_not_mutable'),
                 ]);
             }
 
@@ -110,15 +125,7 @@ class InvoiceItemController extends Controller
 
             $item->update($validated);
 
-            $billableTotal = $this->invoiceItemStateSql->totalsForInvoice((string) $lockedInvoice->id)['total'];
-            $lockedInvoice->load(['payments', 'refunds']);
-            $settled = (string) InvoiceFinancials::settledAmount($lockedInvoice);
-
-            if (bccomp($billableTotal, $settled, 2) === -1) {
-                throw ValidationException::withMessages([
-                    'quantity' => 'New total cannot be less than paid amount.',
-                ]);
-            }
+            $this->assertBillableTotalNotBelowSettled($lockedInvoice, 'quantity');
 
             $this->recomputeInvoiceTotal->handle($lockedInvoice);
 
@@ -139,7 +146,12 @@ class InvoiceItemController extends Controller
 
         $this->authorize('delete', $item);
 
-        DB::transaction(function () use ($invoice, $item) {
+        $actor = request()->user();
+        if (! $actor instanceof User) {
+            abort(401);
+        }
+
+        DB::transaction(function () use ($invoice, $item, $actor) {
             $lockedInvoice = Invoice::lockForUpdate()->find($invoice->id);
             InvoiceFinancials::assertMutable($lockedInvoice);
 
@@ -155,19 +167,9 @@ class InvoiceItemController extends Controller
                 ]);
             }
 
-            $item->delete();
+            $this->assertBillableTotalNotBelowSettledAfterRemovingItem($lockedInvoice, $item);
 
-            $billableTotal = $this->invoiceItemStateSql->totalsForInvoice((string) $lockedInvoice->id)['total'];
-            $lockedInvoice->load(['payments', 'refunds']);
-            $settled = (string) InvoiceFinancials::settledAmount($lockedInvoice);
-
-            if (bccomp($billableTotal, $settled, 2) === -1) {
-                throw ValidationException::withMessages([
-                    'item' => 'New total cannot be less than paid amount.',
-                ]);
-            }
-
-            $this->recomputeInvoiceTotal->handle($lockedInvoice);
+            $this->deletePlannedItem->handle($lockedInvoice, $item, $actor);
         });
 
         return $this->successResponse(null, 'Invoice item deleted successfully.');
@@ -220,5 +222,37 @@ class InvoiceItemController extends Controller
             new InvoiceItemResource($updated->load(['patientTreatment.template'])),
             'Completed line repriced successfully.'
         );
+    }
+
+    private function assertBillableTotalNotBelowSettled(Invoice $invoice, string $errorKey): void
+    {
+        $invoice->load(['payments', 'refunds']);
+        $billableTotal = $this->invoiceItemStateSql->totalsForInvoice((string) $invoice->id)['total'];
+        $settled = (string) InvoiceFinancials::settledAmount($invoice);
+
+        if (bccomp($billableTotal, $settled, 2) === -1) {
+            throw ValidationException::withMessages([
+                $errorKey => __('billing.total_below_settled'),
+            ]);
+        }
+    }
+
+    private function assertBillableTotalNotBelowSettledAfterRemovingItem(Invoice $invoice, InvoiceItem $item): void
+    {
+        $invoice->load(['payments', 'refunds']);
+        $billableTotal = $this->invoiceItemStateSql->totalsForInvoice((string) $invoice->id)['total'];
+        $facts = $this->invoiceItemFactsReader->read($item);
+
+        if ($this->invoiceItemStateResolver->billable($facts)) {
+            $billableTotal = bcsub($billableTotal, bcmul((string) $item->price, (string) $item->quantity, 2), 2);
+        }
+
+        $settled = (string) InvoiceFinancials::settledAmount($invoice);
+
+        if (bccomp($billableTotal, $settled, 2) === -1) {
+            throw ValidationException::withMessages([
+                'item' => __('billing.total_below_settled'),
+            ]);
+        }
     }
 }

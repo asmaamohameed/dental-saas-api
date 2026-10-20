@@ -3,6 +3,9 @@
 namespace App\Services;
 
 use App\Billing\Actions\RecomputeInvoiceTotal;
+use App\Billing\Domain\InvoiceItemState;
+use App\Billing\Domain\InvoiceItemStateResolver;
+use App\Billing\Queries\InvoiceItemFactsReader;
 use App\Billing\Queries\InvoiceItemStateSql;
 use App\Enums\FinancialStatus;
 use App\Enums\InvoiceStatus;
@@ -267,10 +270,10 @@ class InvoiceService
                 ]);
             }
 
-            $itemsReplaced = false;
+            $itemsChanged = false;
 
             if (isset($data['items'])) {
-                $itemsReplaced = true;
+                $itemsChanged = true;
                 $itemsData = $data['items'];
                 unset($data['items']);
 
@@ -287,41 +290,51 @@ class InvoiceService
                 }
 
                 $tenantId = app(CurrentTenant::class)->id();
-                $totalAmount = 0;
-                $resolvedItems = [];
+                $stateResolver = app(InvoiceItemStateResolver::class);
+                $factsReader = app(InvoiceItemFactsReader::class);
 
-                foreach ($itemsData as $item) {
+                foreach ($itemsData as $index => $item) {
                     [$price, $description] = $this->resolveItemPriceAndDescription($item, $tenantId);
-                    $totalAmount += $price * $item['quantity'];
 
-                    $resolvedItems[] = [
+                    $attributes = [
                         'patient_treatment_id' => $item['patient_treatment_id'] ?? null,
                         'description' => $description,
                         'price' => $price,
                         'quantity' => $item['quantity'],
                     ];
+
+                    if (! empty($item['id'])) {
+                        /** @var InvoiceItem|null $existing */
+                        $existing = $lockedInvoice->items()->find($item['id']);
+
+                        if (! $existing || (string) $existing->invoice_id !== (string) $lockedInvoice->id) {
+                            throw ValidationException::withMessages([
+                                "items.{$index}.id" => 'One or more invoice lines are invalid for this invoice.',
+                            ]);
+                        }
+
+                        $state = $stateResolver->resolve($factsReader->read($existing));
+
+                        if (in_array($state, [InvoiceItemState::DONE, InvoiceItemState::VOIDED], true)) {
+                            throw ValidationException::withMessages([
+                                "items.{$index}.id" => __('billing.invoice_item_not_mutable'),
+                            ]);
+                        }
+
+                        $existing->update($attributes);
+                    } else {
+                        $lockedInvoice->items()->create($attributes);
+                    }
                 }
 
-                $totalPayments = InvoiceFinancials::appliedCredits($lockedInvoice);
-
-                if (bccomp((string) $totalAmount, (string) $totalPayments, 2) === -1) {
-                    throw ValidationException::withMessages([
-                        'items' => 'New total cannot be less than paid amount.',
-                    ]);
-                }
-
-                $lockedInvoice->items()->delete();
-
-                foreach ($resolvedItems as $resolvedItem) {
-                    $lockedInvoice->items()->create($resolvedItem);
-                }
+                $this->assertBillableTotalNotBelowSettled($lockedInvoice, 'items');
 
                 $lockedInvoice = app(RecomputeInvoiceTotal::class)->handle($lockedInvoice);
             }
 
             $lockedInvoice->update($data);
 
-            if (! $itemsReplaced) {
+            if (! $itemsChanged) {
                 $this->recalculateStatus($lockedInvoice);
             }
 
@@ -526,6 +539,19 @@ class InvoiceService
             (float) $item['price'],
             $item['description'] ?? null,
         ];
+    }
+
+    private function assertBillableTotalNotBelowSettled(Invoice $invoice, string $errorKey): void
+    {
+        $invoice->load(['payments', 'refunds']);
+        $billableTotal = app(InvoiceItemStateSql::class)->totalsForInvoice((string) $invoice->id)['total'];
+        $settled = (string) InvoiceFinancials::settledAmount($invoice);
+
+        if (bccomp($billableTotal, $settled, 2) === -1) {
+            throw ValidationException::withMessages([
+                $errorKey => __('billing.total_below_settled'),
+            ]);
+        }
     }
 
     private function treatmentInvoiceDescription(PatientTreatment $treatment): string

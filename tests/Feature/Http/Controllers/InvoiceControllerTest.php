@@ -5,6 +5,7 @@ namespace Tests\Feature\Http\Controllers;
 use App\Enums\InvoiceStatus;
 use App\Enums\UserRole;
 use App\Models\Invoice;
+use App\Models\InvoiceItem;
 use App\Models\Patient;
 use App\Models\Payment;
 use App\Models\Tenant;
@@ -189,8 +190,19 @@ class InvoiceControllerTest extends TestCase
     {
         $this->actingAsRole(UserRole::RECEPTIONIST);
         $invoice = Invoice::factory()->create(['status' => InvoiceStatus::UNPAID, 'total_amount' => 100]);
+        $item = InvoiceItem::factory()->create([
+            'invoice_id' => $invoice->id,
+            'description' => 'Existing billing line',
+            'price' => 100,
+            'quantity' => 1,
+        ]);
         $this->putJson("/api/v1/invoices/{$invoice->id}", [
-            'items' => [['price' => 60, 'description' => 'Updated billing line', 'quantity' => 1]],
+            'items' => [[
+                'id' => $item->id,
+                'price' => 60,
+                'description' => 'Updated billing line',
+                'quantity' => 1,
+            ]],
         ])->assertOk()->assertJsonPath('data.total_amount', 60);
     }
 

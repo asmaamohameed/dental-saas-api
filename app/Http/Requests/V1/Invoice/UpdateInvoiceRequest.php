@@ -21,6 +21,11 @@ class UpdateInvoiceRequest extends FormRequest
         return [
             'patient_id' => ['sometimes', 'required', 'uuid', Rule::exists('patients', 'id')->where('tenant_id', app(CurrentTenant::class)->id())],
             'items' => ['sometimes', 'required', 'array', 'min:1'],
+            'items.*.id' => [
+                'nullable',
+                'uuid',
+                Rule::exists('invoice_items', 'id')->where('tenant_id', app(CurrentTenant::class)->id()),
+            ],
             'items.*.patient_treatment_id' => ['nullable', 'uuid', Rule::exists('patient_treatments', 'id')->where('tenant_id', app(CurrentTenant::class)->id())],
             'items.*.description' => ['nullable', 'string', 'max:500'],
             'items.*.price' => ['nullable', 'numeric', 'min:0'],

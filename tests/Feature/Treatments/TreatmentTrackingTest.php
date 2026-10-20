@@ -2,6 +2,9 @@
 
 namespace Tests\Feature\Treatments;
 
+use App\Billing\Domain\InvoiceItemState;
+use App\Billing\Domain\InvoiceItemStateResolver;
+use App\Billing\Queries\InvoiceItemFactsReader;
 use App\Enums\AppointmentStatus;
 use App\Enums\AppointmentType;
 use App\Enums\AuditAction;
@@ -902,6 +905,94 @@ class TreatmentTrackingTest extends TestCase
 
         $this->patchJson("/api/v1/patient-treatments/{$treatment->id}/status", [
             'clinical_status' => 'completed',
+        ])->assertForbidden();
+
+        $this->assertSame(PatientTreatmentStatus::PLANNED, $treatment->fresh()->clinical_status);
+    }
+
+    public function test_whole_mouth_reopen_clears_completed_at_and_invoice_item_returns_to_planned(): void
+    {
+        $template = $this->createTemplate(TreatmentScope::FULL_MOUTH);
+        $treatment = $this->createTreatment([
+            'treatment_template_id' => $template->id,
+            'agreed_price' => 250,
+            'tooth_numbers' => [],
+        ]);
+
+        $this->patchJson("/api/v1/patient-treatments/{$treatment->id}/status", [
+            'clinical_status' => 'in_progress',
+        ])->assertOk();
+
+        $this->patchJson("/api/v1/patient-treatments/{$treatment->id}/status", [
+            'clinical_status' => 'completed',
+        ])->assertOk();
+
+        $treatment->refresh();
+        $this->assertNotNull($treatment->completed_at);
+
+        $item = $treatment->invoiceItems()->first();
+        $resolver = new InvoiceItemStateResolver;
+        $factsReader = app(InvoiceItemFactsReader::class);
+        $this->assertSame(InvoiceItemState::DONE, $resolver->resolve($factsReader->read($item)));
+
+        $this->patchJson("/api/v1/patient-treatments/{$treatment->id}/status", [
+            'clinical_status' => 'in_progress',
+        ])->assertOk();
+
+        $treatment->refresh();
+        $this->assertSame(PatientTreatmentStatus::IN_PROGRESS, $treatment->clinical_status);
+        $this->assertNull($treatment->completed_at);
+
+        $item->refresh();
+        $item->load(['patientTreatment']);
+        $this->assertSame(InvoiceItemState::IN_PROGRESS, $resolver->resolve($factsReader->read($item)));
+
+        $this->putJson("/api/v1/patient-treatments/{$treatment->id}", [
+            'agreed_price' => 260,
+        ])->assertOk();
+
+        $this->assertEquals(260.0, (float) $treatment->fresh()->agreed_price);
+    }
+
+    public function test_tooth_scoped_treatment_cannot_reopen_via_status_patch(): void
+    {
+        $treatment = $this->createTreatment(['tooth_numbers' => ['16']]);
+
+        $this->patchJson("/api/v1/patient-treatments/{$treatment->id}/teeth", [
+            'teeth' => [['tooth_number' => '16', 'status' => 'in_progress']],
+        ])->assertOk();
+
+        $this->patchJson("/api/v1/patient-treatments/{$treatment->id}/teeth", [
+            'teeth' => [['tooth_number' => '16', 'status' => 'done']],
+        ])->assertOk();
+
+        $treatment->refresh();
+        $this->assertSame(PatientTreatmentStatus::COMPLETED, $treatment->clinical_status);
+
+        $this->patchJson("/api/v1/patient-treatments/{$treatment->id}/status", [
+            'clinical_status' => 'in_progress',
+        ])->assertUnprocessable()
+            ->assertJsonValidationErrors(['clinical_status']);
+
+        $this->assertSame(PatientTreatmentStatus::COMPLETED, $treatment->fresh()->clinical_status);
+    }
+
+    public function test_assistant_cannot_patch_whole_mouth_clinical_status(): void
+    {
+        $template = $this->createTemplate(TreatmentScope::FULL_MOUTH);
+        $treatment = $this->createTreatment([
+            'treatment_template_id' => $template->id,
+            'tooth_numbers' => [],
+        ]);
+
+        $assistant = User::factory()->create([
+            'tenant_id' => $this->tenant->id,
+            'role' => UserRole::ASSISTANT,
+        ]);
+        Sanctum::actingAs($assistant, ['*']);
+
+        $this->patchJson("/api/v1/patient-treatments/{$treatment->id}/status", [
+            'clinical_status' => 'in_progress',
         ])->assertForbidden();
 
         $this->assertSame(PatientTreatmentStatus::PLANNED, $treatment->fresh()->clinical_status);

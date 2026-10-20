@@ -794,7 +794,12 @@ class PatientTreatmentService
             return;
         }
 
-        if (! $current->canTransitionTo($target)) {
+        $transitionAllowed = $current->canTransitionTo($target)
+            || ($current === PatientTreatmentStatus::COMPLETED
+                && $target === PatientTreatmentStatus::IN_PROGRESS
+                && $treatment->scope !== TreatmentScope::TOOTH);
+
+        if (! $transitionAllowed) {
             throw ValidationException::withMessages([
                 'clinical_status' => "Cannot change clinical status from {$current->value} to {$target->value}.",
             ]);

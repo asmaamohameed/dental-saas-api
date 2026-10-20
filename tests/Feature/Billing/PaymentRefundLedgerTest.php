@@ -68,29 +68,74 @@ class PaymentRefundLedgerTest extends TestCase
         $this->assertDatabaseHas('payments', ['id' => $second->id]);
     }
 
-    public function test_updating_payment_to_ledger_cap_is_allowed(): void
+    public function test_updating_second_payment_to_200_within_ledger_cap_is_allowed(): void
     {
-        ['invoice' => $invoice, 'first' => $first] = $this->invoiceWithTwoPayments(700, 600, 400);
+        ['invoice' => $invoice, 'second' => $second] = $this->invoiceWithTwoPayments(1000, 600, 400);
         $this->recordRefund($invoice, 300);
 
-        $this->putJson("/api/v1/invoices/{$invoice->id}/payments/{$first->id}", [
-            'amount' => 300,
+        $this->putJson("/api/v1/invoices/{$invoice->id}/payments/{$second->id}", [
+            'amount' => 200,
         ])->assertOk();
 
-        $this->assertDatabaseHas('payments', ['id' => $first->id, 'amount' => 300]);
+        $this->assertDatabaseHas('payments', ['id' => $second->id, 'amount' => 200]);
     }
 
-    public function test_updating_payment_above_ledger_cap_is_rejected(): void
+    public function test_updating_second_payment_to_ledger_cap_is_allowed(): void
     {
-        ['invoice' => $invoice, 'first' => $first] = $this->invoiceWithTwoPayments(700, 600, 400);
+        ['invoice' => $invoice, 'second' => $second] = $this->invoiceWithTwoPayments(1000, 600, 400);
         $this->recordRefund($invoice, 300);
 
-        $this->putJson("/api/v1/invoices/{$invoice->id}/payments/{$first->id}", [
-            'amount' => 301,
+        $this->putJson("/api/v1/invoices/{$invoice->id}/payments/{$second->id}", [
+            'amount' => 700,
+        ])->assertOk();
+
+        $this->assertDatabaseHas('payments', ['id' => $second->id, 'amount' => 700]);
+    }
+
+    public function test_updating_second_payment_above_ledger_cap_is_rejected(): void
+    {
+        ['invoice' => $invoice, 'second' => $second] = $this->invoiceWithTwoPayments(1000, 600, 400);
+        $this->recordRefund($invoice, 300);
+
+        $this->putJson("/api/v1/invoices/{$invoice->id}/payments/{$second->id}", [
+            'amount' => 701,
         ])->assertUnprocessable()
             ->assertJsonValidationErrors(['amount']);
 
-        $this->assertDatabaseHas('payments', ['id' => $first->id, 'amount' => 600]);
+        $this->assertDatabaseHas('payments', ['id' => $second->id, 'amount' => 400]);
+    }
+
+    public function test_updating_payment_amount_plus_deduct_at_ledger_cap_is_allowed(): void
+    {
+        ['invoice' => $invoice, 'second' => $second] = $this->invoiceWithTwoPayments(1000, 600, 400);
+        $this->recordRefund($invoice, 300);
+
+        $this->putJson("/api/v1/invoices/{$invoice->id}/payments/{$second->id}", [
+            'amount' => 500,
+            'deduct_amount' => 200,
+            'deduct_reason' => 'Courtesy adjustment',
+        ])->assertOk();
+
+        $this->assertDatabaseHas('payments', [
+            'id' => $second->id,
+            'amount' => 500,
+            'deduct_amount' => 200,
+        ]);
+    }
+
+    public function test_updating_payment_amount_plus_deduct_above_ledger_cap_is_rejected(): void
+    {
+        ['invoice' => $invoice, 'second' => $second] = $this->invoiceWithTwoPayments(1000, 600, 400);
+        $this->recordRefund($invoice, 300);
+
+        $this->putJson("/api/v1/invoices/{$invoice->id}/payments/{$second->id}", [
+            'amount' => 500,
+            'deduct_amount' => 201,
+            'deduct_reason' => 'Courtesy adjustment',
+        ])->assertUnprocessable()
+            ->assertJsonValidationErrors(['amount']);
+
+        $this->assertDatabaseHas('payments', ['id' => $second->id, 'amount' => 400]);
     }
 
     public function test_deleting_payment_within_ledger_cap_is_allowed(): void
@@ -102,23 +147,5 @@ class PaymentRefundLedgerTest extends TestCase
             ->assertOk();
 
         $this->assertSoftDeleted('payments', ['id' => $second->id]);
-    }
-
-    public function test_updating_deduct_amount_respects_refund_floor_and_ledger_cap(): void
-    {
-        ['invoice' => $invoice, 'first' => $first] = $this->invoiceWithTwoPayments(700, 600, 400);
-        $this->recordRefund($invoice, 300);
-
-        $this->putJson("/api/v1/invoices/{$invoice->id}/payments/{$first->id}", [
-            'amount' => 250,
-            'deduct_amount' => 50,
-            'deduct_reason' => 'Courtesy adjustment',
-        ])->assertOk();
-
-        $this->assertDatabaseHas('payments', [
-            'id' => $first->id,
-            'amount' => 250,
-            'deduct_amount' => 50,
-        ]);
     }
 }

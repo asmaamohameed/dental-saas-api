@@ -128,16 +128,31 @@ final class InvoiceFinancials
         }
     }
 
-    public static function assertGrossPaidWithinInvoiceTotal(string $grossPaidAfter, string $invoiceTotal): void
-    {
-        $grossPaidAfter = self::money($grossPaidAfter);
+    /**
+     * Max amount+deduct allowed on the payment being edited (other rows held fixed).
+     * settledOther uses InvoiceBalance; the invoice total argument does not affect settled.
+     */
+    public static function maxAppliedForEditedPayment(
+        string $grossOther,
+        string $deductOther,
+        string $refundedTotal,
+        string $invoiceTotal,
+    ): string {
+        $grossOther = self::money($grossOther);
+        $deductOther = self::money($deductOther);
+        $refundedTotal = self::money($refundedTotal);
         $invoiceTotal = self::money($invoiceTotal);
 
-        if (bccomp($grossPaidAfter, $invoiceTotal, 2) === 1) {
-            throw ValidationException::withMessages([
-                'amount' => "Recorded payments ({$grossPaidAfter}) cannot exceed the invoice total ({$invoiceTotal}).",
-            ]);
-        }
+        $settledOther = InvoiceBalance::fromRawSums(
+            $grossOther,
+            $refundedTotal,
+            $deductOther,
+            $invoiceTotal,
+        )->settled;
+
+        $headroom = bcsub($invoiceTotal, $settledOther, 2);
+
+        return bccomp($headroom, '0', 2) === -1 ? '0.00' : $headroom;
     }
 
     private static function snapshot(Invoice $invoice): InvoiceBalance

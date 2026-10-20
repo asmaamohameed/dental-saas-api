@@ -4,17 +4,13 @@ namespace Tests\Feature\Services;
 
 use App\Enums\InvoiceStatus;
 use App\Exceptions\InvoiceHasPaymentsException;
-use App\Models\Appointment;
 use App\Models\Invoice;
-use App\Models\InvoiceItem;
 use App\Models\Patient;
 use App\Models\Payment;
 use App\Models\Tenant;
-use App\Models\User;
 use App\Services\InvoiceService;
 use App\Support\Tenancy\CurrentTenant;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Validation\ValidationException;
 use Tests\TestCase;
 
 class InvoiceServiceTest extends TestCase
@@ -35,145 +31,6 @@ class InvoiceServiceTest extends TestCase
     private function makePatient(): Patient
     {
         return Patient::factory()->create();
-    }
-
-    private function makeUser(): User
-    {
-        return User::factory()->create();
-    }
-
-    // ---------- create() ----------
-
-    public function test_create_computes_total_from_manual_line_items(): void
-    {
-        $patient = $this->makePatient();
-        $user = $this->makeUser();
-
-        $invoice = $this->service->create([
-            'patient_id' => $patient->id,
-            'items' => [
-                ['price' => 100, 'description' => 'Manual billing line', 'quantity' => 2],
-            ],
-        ], $user->id);
-
-        $this->assertEquals(200, $invoice->total_amount);
-        $this->assertSame(InvoiceStatus::UNPAID, $invoice->status);
-        $this->assertSame($user->id, $invoice->created_by);
-    }
-
-    // ---------- update() ----------
-
-    public function test_update_rejects_a_fully_paid_invoice(): void
-    {
-        $invoice = Invoice::factory()->create(['status' => InvoiceStatus::PAID]);
-
-        $this->expectException(ValidationException::class);
-
-        $this->service->update($invoice, ['patient_id' => $this->makePatient()->id]);
-    }
-
-    public function test_update_rejects_changing_appointment_id(): void
-    {
-        $invoice = Invoice::factory()->create(['status' => InvoiceStatus::UNPAID]);
-
-        $this->expectException(ValidationException::class);
-
-        $this->service->update($invoice, ['appointment_id' => Appointment::factory()->create()->id]);
-    }
-
-    public function test_update_allows_item_changes_on_a_partial_invoice(): void
-    {
-        $invoice = Invoice::factory()->create(['status' => InvoiceStatus::PARTIAL, 'total_amount' => 0]);
-
-        $updated = $this->service->update($invoice, [
-            'items' => [['price' => 50, 'description' => 'Manual billing line', 'quantity' => 1]],
-        ]);
-
-        $this->assertCount(1, $updated->items);
-        $this->assertEquals(50, $updated->total_amount);
-    }
-
-    public function test_update_rejects_changing_patient_on_a_partial_invoice(): void
-    {
-        $originalPatient = $this->makePatient();
-        $invoice = Invoice::factory()->create([
-            'status' => InvoiceStatus::PARTIAL,
-            'patient_id' => $originalPatient->id,
-        ]);
-        $newPatient = $this->makePatient();
-
-        $this->expectException(ValidationException::class);
-
-        $this->service->update($invoice, ['patient_id' => $newPatient->id]);
-    }
-
-    public function test_update_allows_changing_patient_on_a_partial_invoice_to_the_same_patient(): void
-    {
-        $patient = $this->makePatient();
-        $invoice = Invoice::factory()->create([
-            'status' => InvoiceStatus::PARTIAL,
-            'patient_id' => $patient->id,
-        ]);
-
-        $updated = $this->service->update($invoice, ['patient_id' => $patient->id]);
-
-        $this->assertSame($patient->id, $updated->patient_id);
-    }
-
-    public function test_update_rejects_new_total_lower_than_existing_payments(): void
-    {
-        $invoice = Invoice::factory()->create(['status' => InvoiceStatus::UNPAID, 'total_amount' => 500]);
-        $item = InvoiceItem::factory()->create([
-            'invoice_id' => $invoice->id,
-            'description' => 'Large line',
-            'price' => 500,
-            'quantity' => 1,
-        ]);
-        Payment::factory()->create(['invoice_id' => $invoice->id, 'amount' => 300]);
-
-        try {
-            $this->service->update($invoice, [
-                'items' => [[
-                    'id' => $item->id,
-                    'price' => 50,
-                    'description' => 'Reduced billing line',
-                    'quantity' => 1,
-                ]],
-            ]);
-            $this->fail('Expected ValidationException');
-        } catch (ValidationException $exception) {
-            $this->assertSame(__('billing.total_below_settled'), $exception->errors()['items'][0]);
-        }
-    }
-
-    public function test_update_appends_and_updates_items_without_deleting_omitted_lines(): void
-    {
-        $invoice = Invoice::factory()->create(['status' => InvoiceStatus::UNPAID, 'total_amount' => 100]);
-        $existing = InvoiceItem::factory()->create([
-            'invoice_id' => $invoice->id,
-            'description' => 'Existing billing line',
-            'price' => 100,
-            'quantity' => 1,
-        ]);
-
-        $updated = $this->service->update($invoice, [
-            'items' => [
-                [
-                    'id' => $existing->id,
-                    'price' => 75,
-                    'description' => 'Updated billing line',
-                    'quantity' => 1,
-                ],
-                [
-                    'price' => 25,
-                    'description' => 'Appended billing line',
-                    'quantity' => 1,
-                ],
-            ],
-        ]);
-
-        $this->assertEquals(100, $updated->total_amount);
-        $this->assertCount(2, $updated->items);
     }
 
     // ---------- delete() ----------

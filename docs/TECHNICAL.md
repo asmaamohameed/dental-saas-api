@@ -122,7 +122,7 @@ Enums live in `app/Enums/UserRole.php`:
   - `auth:sanctum` + `tenant` middleware on all protected tenant routes.
   - `auth:sanctum` + `is_admin` middleware on all admin routes.
   - `clinic.permission:{key}` (`EnsureClinicPermission`) checks `ClinicPermissionGate`. The signed-in user's role selects `ClinicPermissionCatalog::baseline()`. A saved `clinic_role_permissions` value replaces the baseline for that key only. Keys missing from an older saved row fall back to the baseline in `forUser()` and in the owner editor payload, so no backfill migration is required. The owner always keeps every key. `matrix()` is the platform-admin read-only view.
-  - `treatment:change_price` (baseline: owner and doctor) gates the `canChangePrice` ability used for treatment `agreed_price`, per-tooth prices, and **manual** invoice line prices (lines without a linked `patient_treatment_id`). A line linked to a `patient_treatment_id` always stores `$treatment->total_price`; a client-supplied `price` on that line is ignored (POST/PATCH item and invoice PUT `items`). Attach a treatment to an existing Other line and the stored price becomes the treatment total. `reprice-done` is the exception: it writes a client `price` on a completed line.
+  - `treatment:change_price` (baseline: owner and doctor) gates the `canChangePrice` ability used for treatment `agreed_price`, per-tooth prices, and **manual** invoice line prices (lines without a linked `patient_treatment_id`). A line linked to a `patient_treatment_id` always stores `$treatment->total_price`; a client-supplied `price` on that line is ignored (POST/PATCH item). Attach a treatment to an existing Other line and the stored price becomes the treatment total. `reprice-done` is the exception: it writes a client `price` on a completed line.
 
 ### Clinic permission keys added for financial and treatment reads
 
@@ -305,8 +305,6 @@ Filters: `is_active` (boolean), `search` (searches `name_ar` and `name_en`).
 |--------|------|------|-------|
 | GET | `/invoices` | Yes | doctor, receptionist, owner |
 | GET | `/invoices/{invoice}` | Yes | doctor, receptionist, owner |
-| POST | `/invoices` | Yes | owner, receptionist |
-| PUT/PATCH | `/invoices/{invoice}` | Yes | owner, receptionist |
 | DELETE | `/invoices/{invoice}` | Yes | owner only |
 | GET | `/patients/{patient}/invoices-summary` | Yes | doctor, receptionist, owner |
 
@@ -322,7 +320,9 @@ Filters: `status`, `patient_id`, `date_from`, `date_to`.
 | POST | `/invoice-items/{item}/void` | Yes | owner, doctor, receptionist (requires `invoice:refund`) |
 | POST | `/invoice-items/{item}/reprice-done` | Yes | owner, doctor, receptionist (requires `invoice:refund`) |
 
-Planned lines (manual or not yet performed) can be added, updated, or deleted on any invoice that is not `refunded` or `cancelled`, including `unpaid`, `partial`, and `paid` (paid becomes `partial` when new billable work is added). Anyone with `invoice:edit` in the same tenant may do this; `canChangePrice` still gates a real price change on Other lines. Completed or voided lines cannot be changed via item PUT or invoice `items` payloads; use `reprice-done` or void instead. `PUT /invoices/{invoice}` with an `items` array is incremental: entries without `id` append, entries with `id` update that line, and omitted lines are left unchanged. Deletes go through the item DELETE endpoint and write an audit row. If a planned change would make the billable total fall below settled payments, the API returns 422 with a refund-first message (`refundDue` is only set by void/reprice-done, not by planned edits).
+Planned lines (manual or not yet performed) can be added, updated, or deleted on any invoice that is not `refunded` or `cancelled`, including `unpaid`, `partial`, and `paid` (paid becomes `partial` when new billable work is added). Anyone with `invoice:edit` in the same tenant may do this; `canChangePrice` still gates a real price change on Other lines. Completed or voided lines cannot be changed via item PUT; use `reprice-done` or void instead. Deletes go through the item DELETE endpoint and write an audit row. If a planned change would make the billable total fall below settled payments, the API returns 422 with a refund-first message (`refundDue` is only set by void/reprice-done, not by planned edits).
+
+Invoices are not created via a standalone POST endpoint. Creating a patient treatment opens the initial invoice and line through `InvoiceService::createInitialInvoiceForTreatment`. Additional manual or treatment lines use `POST /invoices/{invoice}/items`.
 
 #### Payments
 | Method | Path | Auth | Roles |
@@ -422,28 +422,9 @@ POST /api/v1/appointments
 
 **Response includes:** `id`, `patient_id`, `doctor_id`, `scheduled_at`, `duration_minutes`, `status` (default: `scheduled`), `appointment_type`, `notes`, `patient` (id + name), `doctor` (id + name), `treatment_sessions` when loaded. Optional `patient_treatment_ids` on create/update schedules sessions for those treatments.
 
-### Create Invoice
+### Invoice creation
 
-```json
-POST /api/v1/invoices
-{
-  "patient_id": "...",
-  "appointment_id": "...",
-  "items": [
-    {
-      "service_id": "...",
-      "description": "...",
-      "quantity": 1
-    }
-  ]
-}
-```
-
-- `service_id` must belong to the current tenant.
-- If the service has `is_other = true`, `description` is required and `price` overrides `default_price`.
-- The server calculates `total_amount` automatically.
-
-**Response includes:** `id`, `total_amount`, `remaining_amount`, `status` (default: `unpaid`), `patient`, `appointment`, `items`, `payments`.
+There is no `POST /invoices` endpoint. Creating a patient treatment (`POST /patient-treatments` or `POST /patients/{patient}/treatments`) opens an invoice with one line linked to that treatment. Use `POST /invoices/{invoice}/items` to add further lines to an existing invoice.
 
 ### Odontogram Response
 

@@ -3,20 +3,15 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
-use App\Http\Requests\V1\Invoice\StoreInvoiceRequest;
-use App\Http\Requests\V1\Invoice\UpdateInvoiceRequest;
 use App\Http\Resources\V1\InvoiceListResource;
 use App\Http\Resources\V1\InvoiceResource;
 use App\Models\Invoice;
 use App\Services\InvoiceService;
-use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 class InvoiceController extends Controller
 {
-    use AuthorizesRequests;
-
     public function __construct(private readonly InvoiceService $invoiceService) {}
 
     public function index(Request $request): JsonResponse
@@ -34,20 +29,6 @@ class InvoiceController extends Controller
         );
     }
 
-    public function store(StoreInvoiceRequest $request): JsonResponse
-    {
-        $invoice = $this->invoiceService->create(
-            $request->validated(),
-            $request->user()->id
-        );
-
-        return $this->successResponse(
-            new InvoiceResource($invoice),
-            'Invoice created successfully.',
-            201
-        );
-    }
-
     public function show(Invoice $invoice): JsonResponse
     {
         $invoice = $this->invoiceService->show($invoice);
@@ -55,20 +36,6 @@ class InvoiceController extends Controller
         return $this->successResponse(
             new InvoiceResource($invoice),
             'Invoice retrieved successfully.'
-        );
-    }
-
-    public function update(UpdateInvoiceRequest $request, Invoice $invoice): JsonResponse
-    {
-        if ($request->has('items')) {
-            $this->authorize('updateItems', $invoice);
-        }
-
-        $updatedInvoice = $this->invoiceService->update($invoice, $request->validated());
-
-        return $this->successResponse(
-            new InvoiceResource($updatedInvoice),
-            'Invoice updated successfully.'
         );
     }
 

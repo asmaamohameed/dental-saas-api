@@ -59,28 +59,6 @@ class ManualInvoiceLinePriceAuthorizationTest extends TestCase
         return [$invoice, $item];
     }
 
-    public function test_receptionist_can_put_existing_manual_line_when_price_unchanged(): void
-    {
-        $this->receptionist();
-        [$invoice, $item] = $this->unpaidInvoiceWithManualLine();
-
-        $this->putJson("/api/v1/invoices/{$invoice->id}", [
-            'items' => [
-                [
-                    'id' => $item->id,
-                    'price' => 100,
-                    'description' => 'Updated manual billing note',
-                    'quantity' => 2,
-                ],
-            ],
-        ])->assertOk();
-
-        $item->refresh();
-        $this->assertSame('Updated manual billing note', $item->description);
-        $this->assertSame(2, $item->quantity);
-        $this->assertSame('100.00', (string) $item->price);
-    }
-
     public function test_receptionist_can_patch_manual_line_when_price_key_unchanged(): void
     {
         $this->receptionist();
@@ -103,53 +81,6 @@ class ManualInvoiceLinePriceAuthorizationTest extends TestCase
         $this->putJson("/api/v1/invoices/{$invoice->id}/items/{$item->id}", [
             'price' => 150,
         ])->assertForbidden();
-
-        $this->putJson("/api/v1/invoices/{$invoice->id}", [
-            'items' => [
-                [
-                    'id' => $item->id,
-                    'price' => 150,
-                    'description' => 'Manual billing line item',
-                    'quantity' => 1,
-                ],
-            ],
-        ])->assertForbidden();
-    }
-
-    public function test_receptionist_gets_forbidden_when_adding_new_manual_line_via_put(): void
-    {
-        $this->receptionist();
-        [$invoice] = $this->unpaidInvoiceWithManualLine();
-
-        $this->putJson("/api/v1/invoices/{$invoice->id}", [
-            'items' => [
-                [
-                    'price' => 50,
-                    'description' => 'Another manual billing line',
-                    'quantity' => 1,
-                ],
-            ],
-        ])->assertForbidden();
-    }
-
-    public function test_receptionist_gets_forbidden_when_item_id_belongs_to_another_invoice(): void
-    {
-        $this->receptionist();
-        [$invoiceA] = $this->unpaidInvoiceWithManualLine();
-        [$invoiceB, $itemOnB] = $this->unpaidInvoiceWithManualLine();
-
-        $this->putJson("/api/v1/invoices/{$invoiceA->id}", [
-            'items' => [
-                [
-                    'id' => $itemOnB->id,
-                    'price' => 200,
-                    'description' => 'Cross invoice attempt line',
-                    'quantity' => 1,
-                ],
-            ],
-        ])->assertForbidden();
-
-        $this->assertSame($invoiceB->id, $itemOnB->fresh()->invoice_id);
     }
 
     public function test_receptionist_can_change_price_after_owner_grants_permission(): void

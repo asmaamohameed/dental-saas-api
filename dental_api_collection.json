@@ -1856,66 +1856,6 @@
                     }
                 },
                 {
-                    "name": "POST /api/v1/invoices",
-                    "request": {
-                        "method": "POST",
-                        "header": [
-                            {
-                                "key": "Accept",
-                                "value": "application/json"
-                            }
-                        ],
-                        "url": {
-                            "raw": "{{base_url}}/api/v1/invoices",
-                            "host": [
-                                "{{base_url}}"
-                            ],
-                            "path": [
-                                "api",
-                                "v1",
-                                "invoices"
-                            ]
-                        },
-                        "auth": {
-                            "type": "bearer",
-                            "bearer": [
-                                {
-                                    "key": "token",
-                                    "value": "{{token}}",
-                                    "type": "string"
-                                }
-                            ]
-                        },
-                        "body": {
-                            "mode": "raw",
-                            "raw": "{\n    \"patient_id\": \"{{patient_id}}\",\n    \"appointment_id\": \"{{appointment_id}}\",\n    \"items\": [\n        {\n            \"service_id\": \"{{service_id}}\",\n            \"description\": \"Routine dental cleaning session\",\n            \"price\": 150.00,\n            \"quantity\": 1\n        }\n    ]\n}",
-                            "options": {
-                                "raw": {
-                                    "language": "json"
-                                }
-                            }
-                        }
-                    },
-                    "event": [
-                        {
-                            "listen": "test",
-                            "script": {
-                                "type": "text/javascript",
-                                "exec": [
-                                    "if (pm.response.code === 201 || pm.response.code === 200) {",
-                                    "    const data = pm.response.json();",
-                                    "    const payload = data.data || data;",
-                                    "    if (payload.id) pm.environment.set('invoice_id', payload.id);",
-                                    "    if (payload.items && payload.items.length > 0) {",
-                                    "        pm.environment.set('item_id', payload.items[0].id);",
-                                    "    }",
-                                    "}"
-                                ]
-                            }
-                        }
-                    ]
-                },
-                {
                     "name": "GET /api/v1/invoices/{{invoice_id}}",
                     "request": {
                         "method": "GET",
@@ -1946,49 +1886,6 @@
                                     "type": "string"
                                 }
                             ]
-                        }
-                    }
-                },
-                {
-                    "name": "PUT /api/v1/invoices/{{invoice_id}}",
-                    "request": {
-                        "method": "PUT",
-                        "header": [
-                            {
-                                "key": "Accept",
-                                "value": "application/json"
-                            }
-                        ],
-                        "url": {
-                            "raw": "{{base_url}}/api/v1/invoices/{{invoice_id}}",
-                            "host": [
-                                "{{base_url}}"
-                            ],
-                            "path": [
-                                "api",
-                                "v1",
-                                "invoices",
-                                "{{invoice_id}}"
-                            ]
-                        },
-                        "auth": {
-                            "type": "bearer",
-                            "bearer": [
-                                {
-                                    "key": "token",
-                                    "value": "{{token}}",
-                                    "type": "string"
-                                }
-                            ]
-                        },
-                        "body": {
-                            "mode": "raw",
-                            "raw": "{\n    \"patient_id\": \"{{patient_id}}\",\n    \"appointment_id\": \"{{appointment_id}}\",\n    \"items\": [\n        {\n            \"service_id\": \"{{service_id}}\",\n            \"description\": \"Updated dental cleaning session\",\n            \"price\": 180.00,\n            \"quantity\": 1\n        }\n    ]\n}",
-                            "options": {
-                                "raw": {
-                                    "language": "json"
-                                }
-                            }
                         }
                     }
                 },

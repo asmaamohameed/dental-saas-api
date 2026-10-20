@@ -80,54 +80,6 @@ class TreatmentLinkedInvoiceLinePriceTest extends TestCase
         $this->assertNotNull($item->fresh()->patient_treatment_id);
     }
 
-    public function test_receptionist_put_with_client_price_stores_treatment_price(): void
-    {
-        $this->actingAsRole(UserRole::RECEPTIONIST);
-        [$invoice, $treatment, $item] = $this->unpaidInvoiceWithTreatmentLine(80);
-
-        $this->putJson("/api/v1/invoices/{$invoice->id}", [
-            'items' => [[
-                'id' => $item->id,
-                'patient_treatment_id' => $treatment->id,
-                'price' => 9999,
-                'quantity' => 1,
-            ]],
-        ])->assertOk();
-
-        $this->assertSame('80.00', (string) $item->fresh()->price);
-    }
-
-    public function test_receptionist_put_attaching_treatment_to_other_line_uses_treatment_price(): void
-    {
-        $this->actingAsRole(UserRole::RECEPTIONIST);
-        $patient = Patient::factory()->create(['tenant_id' => $this->tenant->id]);
-        $invoice = Invoice::factory()->create([
-            'tenant_id' => $this->tenant->id,
-            'patient_id' => $patient->id,
-            'status' => InvoiceStatus::UNPAID,
-            'total_amount' => 100,
-        ]);
-        $item = InvoiceItem::factory()->create([
-            'invoice_id' => $invoice->id,
-            'description' => 'Manual billing line item',
-            'price' => 100,
-            'quantity' => 1,
-        ]);
-        $treatment = $this->makeToothTreatment($patient, 80);
-
-        $this->putJson("/api/v1/invoices/{$invoice->id}", [
-            'items' => [[
-                'id' => $item->id,
-                'patient_treatment_id' => $treatment->id,
-                'price' => 9999,
-                'quantity' => 1,
-            ]],
-        ])->assertOk();
-
-        $this->assertSame('80.00', (string) $item->fresh()->price);
-        $this->assertSame($treatment->id, $item->fresh()->patient_treatment_id);
-    }
-
     public function test_owner_and_doctor_also_store_treatment_price_not_client_price(): void
     {
         foreach ([UserRole::OWNER, UserRole::DOCTOR] as $role) {

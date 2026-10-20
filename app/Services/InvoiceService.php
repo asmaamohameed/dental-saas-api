@@ -3,9 +3,6 @@
 namespace App\Services;
 
 use App\Billing\Actions\RecomputeInvoiceTotal;
-use App\Billing\Domain\InvoiceItemState;
-use App\Billing\Domain\InvoiceItemStateResolver;
-use App\Billing\Queries\InvoiceItemFactsReader;
 use App\Billing\Queries\InvoiceItemStateSql;
 use App\Enums\FinancialStatus;
 use App\Enums\InvoiceStatus;
@@ -16,7 +13,6 @@ use App\Models\PatientTreatment;
 use App\Models\Payment;
 use App\Models\Refund;
 use App\Support\Billing\InvoiceFinancials;
-use App\Support\Tenancy\CurrentTenant;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -58,47 +54,6 @@ class InvoiceService
         }
 
         return $query->newestFirst()->paginate($perPage);
-    }
-
-    public function create(array $data, string $userId): Invoice
-    {
-        return DB::transaction(function () use ($data, $userId) {
-            $itemsData = $data['items'];
-            unset($data['items']);
-
-            $tenantId = app(CurrentTenant::class)->id();
-            $resolvedItems = [];
-            $totalAmount = 0;
-
-            foreach ($itemsData as $item) {
-                [$price, $description] = $this->resolveItemPriceAndDescription($item, $tenantId);
-                $totalAmount += $price * $item['quantity'];
-
-                $resolvedItems[] = [
-                    'patient_treatment_id' => $item['patient_treatment_id'] ?? null,
-                    'description' => $description,
-                    'price' => $price,
-                    'quantity' => $item['quantity'],
-                ];
-            }
-
-            $invoice = Invoice::create([
-                ...$data,
-                'created_by' => $userId,
-                'total_amount' => $totalAmount,
-                'status' => InvoiceStatus::UNPAID,
-            ]);
-
-            foreach ($resolvedItems as $resolvedItem) {
-                $invoice->items()->create($resolvedItem);
-            }
-
-            app(RecomputeInvoiceTotal::class)->handle($invoice);
-
-            $this->recomputeFinancialStatusesForInvoice($invoice);
-
-            return $invoice->load(array_merge(self::INVOICE_RELATIONS, ['payments.receiver']));
-        });
     }
 
     public function show(Invoice $invoice): Invoice
@@ -201,106 +156,6 @@ class InvoiceService
             }
 
             $this->recomputeFinancialStatus($treatment);
-        });
-    }
-
-    public function update(Invoice $invoice, array $data): Invoice
-    {
-        return DB::transaction(function () use ($invoice, $data) {
-            $lockedInvoice = Invoice::lockForUpdate()->find($invoice->id);
-
-            InvoiceFinancials::assertMutable($lockedInvoice);
-
-            $scalarData = $data;
-            unset($scalarData['items']);
-
-            if ($lockedInvoice->status === InvoiceStatus::PAID && $scalarData !== []) {
-                throw ValidationException::withMessages([
-                    'invoice' => 'Fully paid invoices cannot be updated.',
-                ]);
-            }
-
-            if (array_key_exists('appointment_id', $data)) {
-                throw ValidationException::withMessages([
-                    'appointment_id' => 'The appointment linked to an invoice cannot be changed after creation.',
-                ]);
-            }
-
-            if (
-                isset($data['patient_id'])
-                && $lockedInvoice->status === InvoiceStatus::PARTIAL
-                && (string) $data['patient_id'] !== (string) $lockedInvoice->patient_id
-            ) {
-                throw ValidationException::withMessages([
-                    'patient_id' => 'The patient on an invoice with recorded payments cannot be changed.',
-                ]);
-            }
-
-            $itemsChanged = false;
-
-            if (isset($data['items'])) {
-                $itemsChanged = true;
-                $itemsData = $data['items'];
-                unset($data['items']);
-
-                $tenantId = app(CurrentTenant::class)->id();
-                $stateResolver = app(InvoiceItemStateResolver::class);
-                $factsReader = app(InvoiceItemFactsReader::class);
-
-                foreach ($itemsData as $index => $item) {
-                    /** @var InvoiceItem|null $existing */
-                    $existing = null;
-
-                    if (! empty($item['id'])) {
-                        $existing = $lockedInvoice->items()->find($item['id']);
-
-                        if (! $existing || (string) $existing->invoice_id !== (string) $lockedInvoice->id) {
-                            throw ValidationException::withMessages([
-                                "items.{$index}.id" => 'One or more invoice lines are invalid for this invoice.',
-                            ]);
-                        }
-
-                        $state = $stateResolver->resolve($factsReader->read($existing));
-
-                        if (in_array($state, [InvoiceItemState::DONE, InvoiceItemState::VOIDED], true)) {
-                            throw ValidationException::withMessages([
-                                "items.{$index}.id" => __('billing.invoice_item_not_mutable'),
-                            ]);
-                        }
-
-                        if (! array_key_exists('patient_treatment_id', $item)) {
-                            $item['patient_treatment_id'] = $existing->patient_treatment_id;
-                        }
-                    }
-
-                    [$price, $description] = $this->resolveItemPriceAndDescription($item, $tenantId);
-
-                    $attributes = [
-                        'patient_treatment_id' => $item['patient_treatment_id'] ?? null,
-                        'description' => $description,
-                        'price' => $price,
-                        'quantity' => $item['quantity'],
-                    ];
-
-                    if ($existing) {
-                        $existing->update($attributes);
-                    } else {
-                        $lockedInvoice->items()->create($attributes);
-                    }
-                }
-
-                $this->assertBillableTotalNotBelowSettled($lockedInvoice, 'items');
-
-                $lockedInvoice = app(RecomputeInvoiceTotal::class)->handle($lockedInvoice);
-            }
-
-            $lockedInvoice->update($data);
-
-            if (! $itemsChanged) {
-                $this->recalculateStatus($lockedInvoice);
-            }
-
-            return $lockedInvoice->load(self::INVOICE_RELATIONS);
         });
     }
 
@@ -465,55 +320,6 @@ class InvoiceService
             'total_refunded' => (float) $totalRefunded,
             'total_remaining' => (float) max(0, $totalRemaining),
         ];
-    }
-
-    /**
-     * @return array{0: float, 1: string|null}
-     */
-    private function resolveItemPriceAndDescription(array $item, string $tenantId): array
-    {
-        if (! empty($item['patient_treatment_id'])) {
-            $treatment = PatientTreatment::with('template')
-                ->where('tenant_id', $tenantId)
-                ->find($item['patient_treatment_id']);
-
-            if (! $treatment) {
-                throw ValidationException::withMessages([
-                    'items' => 'One or more selected treatments are invalid.',
-                ]);
-            }
-
-            $label = $treatment->template?->name_en ?: $treatment->template?->name_ar ?: 'Patient treatment';
-
-            return [
-                (float) $treatment->total_price,
-                $item['description'] ?? $this->treatmentInvoiceDescription($treatment),
-            ];
-        }
-
-        if (! isset($item['price'])) {
-            throw ValidationException::withMessages([
-                'items' => 'Price is required when no treatment is selected.',
-            ]);
-        }
-
-        return [
-            (float) $item['price'],
-            $item['description'] ?? null,
-        ];
-    }
-
-    private function assertBillableTotalNotBelowSettled(Invoice $invoice, string $errorKey): void
-    {
-        $invoice->load(['payments', 'refunds']);
-        $billableTotal = app(InvoiceItemStateSql::class)->totalsForInvoice((string) $invoice->id)['total'];
-        $settled = (string) InvoiceFinancials::settledAmount($invoice);
-
-        if (bccomp($billableTotal, $settled, 2) === -1) {
-            throw ValidationException::withMessages([
-                $errorKey => __('billing.total_below_settled'),
-            ]);
-        }
     }
 
     private function treatmentInvoiceDescription(PatientTreatment $treatment): string

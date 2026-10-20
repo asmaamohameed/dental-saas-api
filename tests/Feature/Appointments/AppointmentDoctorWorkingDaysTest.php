@@ -203,7 +203,7 @@ class AppointmentDoctorWorkingDaysTest extends TestCase
             ->assertJsonValidationErrors('scheduled_at');
     }
 
-    public function test_booking_at_2330_cairo_on_working_day_is_accepted(): void
+    public function test_late_evening_booking_is_accepted_on_working_day(): void
     {
         $tenant = Tenant::factory()->create(['working_hours' => $this->scheduleWithLateClose()]);
         app(CurrentTenant::class)->set($tenant->id);
@@ -249,7 +249,10 @@ class AppointmentDoctorWorkingDaysTest extends TestCase
             ->assertJsonValidationErrors('scheduled_at');
     }
 
-    public function test_working_day_weekday_uses_clinic_timezone_not_utc(): void
+    /**
+     * Cairo/local weekday must drive working_days checks (e.g. Tuesday 01:30 Cairo is still Monday in UTC).
+     */
+    public function test_working_day_weekday_uses_clinic_timezone_at_utc_date_boundary(): void
     {
         $tenant = Tenant::factory()->create(['working_hours' => $this->scheduleWithLateClose()]);
         app(CurrentTenant::class)->set($tenant->id);

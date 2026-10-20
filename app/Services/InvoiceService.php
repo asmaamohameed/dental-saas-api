@@ -2,16 +2,23 @@
 
 namespace App\Services;
 
+use App\Billing\Actions\DeletePlannedItem;
 use App\Billing\Actions\RecomputeInvoiceTotal;
+use App\Billing\Domain\InvoiceItemState;
+use App\Billing\Domain\InvoiceItemStateResolver;
+use App\Billing\Queries\InvoiceItemFactsReader;
 use App\Billing\Queries\InvoiceItemStateSql;
 use App\Enums\FinancialStatus;
 use App\Enums\InvoiceStatus;
 use App\Exceptions\InvoiceHasPaymentsException;
+use App\Models\Appointment;
 use App\Models\Invoice;
 use App\Models\InvoiceItem;
 use App\Models\PatientTreatment;
 use App\Models\Payment;
 use App\Models\Refund;
+use App\Models\TreatmentTemplate;
+use App\Models\User;
 use App\Support\Billing\InvoiceFinancials;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\DB;
@@ -59,6 +66,110 @@ class InvoiceService
     public function show(Invoice $invoice): Invoice
     {
         return $invoice->load(array_merge(self::INVOICE_RELATIONS, ['payments.receiver']));
+    }
+
+    public function createVisitFeeInvoiceAtCheckIn(Appointment $appointment, User $actor): void
+    {
+        if ($appointment->service_id === null || $appointment->service_id === '') {
+            return;
+        }
+
+        if (bccomp(bcadd((string) ($appointment->fee ?? 0), '0', 2), '0', 2) <= 0) {
+            return;
+        }
+
+        $appointment->loadMissing('service');
+        if (! $appointment->service instanceof TreatmentTemplate) {
+            return;
+        }
+
+        if (! $appointment->service->category->isVisit()) {
+            return;
+        }
+
+        DB::transaction(function () use ($appointment, $actor) {
+            if (
+                InvoiceItem::query()
+                    ->where('appointment_id', $appointment->id)
+                    ->whereNull('voided_at')
+                    ->lockForUpdate()
+                    ->exists()
+            ) {
+                return;
+            }
+
+            $appointment->loadMissing('service');
+            if (! $appointment->service instanceof TreatmentTemplate) {
+                return;
+            }
+
+            $service = $appointment->service;
+            $description = $service->name_en ?: $service->name_ar ?: 'Visit';
+            $fee = bcadd((string) $appointment->fee, '0', 2);
+
+            $invoice = Invoice::create([
+                'patient_id' => $appointment->patient_id,
+                'appointment_id' => $appointment->id,
+                'treatment_plan_id' => null,
+                'created_by' => $actor->id,
+                'total_amount' => $fee,
+                'status' => InvoiceStatus::UNPAID,
+            ]);
+
+            $invoice->items()->create([
+                'appointment_id' => $appointment->id,
+                'description' => $description,
+                'price' => $fee,
+                'quantity' => 1,
+            ]);
+
+            app(RecomputeInvoiceTotal::class)->handle($invoice);
+        });
+    }
+
+    public function removeVisitFeeInvoiceWhenAppointmentCancelled(Appointment $appointment, User $actor): void
+    {
+        DB::transaction(function () use ($appointment, $actor) {
+            /** @var InvoiceItem|null $item */
+            $item = InvoiceItem::query()
+                ->where('appointment_id', $appointment->id)
+                ->whereNull('voided_at')
+                ->lockForUpdate()
+                ->first();
+
+            if ($item === null) {
+                return;
+            }
+
+            /** @var Invoice|null $invoice */
+            $invoice = Invoice::query()->lockForUpdate()->find($item->invoice_id);
+            if ($invoice === null) {
+                return;
+            }
+
+            if ($invoice->payments()->exists()) {
+                return;
+            }
+
+            $state = app(InvoiceItemStateResolver::class)->resolve(
+                app(InvoiceItemFactsReader::class)->read($item)
+            );
+
+            if ($state === InvoiceItemState::DONE) {
+                return;
+            }
+
+            app(DeletePlannedItem::class)->handle($invoice, $item, $actor);
+
+            $invoice->refresh();
+
+            if ($invoice->items()->exists() || $invoice->payments()->exists()) {
+                return;
+            }
+
+            $invoice->update(['status' => InvoiceStatus::CANCELLED->value]);
+            $invoice->delete();
+        });
     }
 
     public function createInitialInvoiceForTreatment(PatientTreatment $treatment, string $userId): ?Invoice

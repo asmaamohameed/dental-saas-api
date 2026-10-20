@@ -34,7 +34,6 @@ class ClinicPermissionCatalog
             'treatment:toggleActive' => 'Activate or deactivate treatments',
             'treatment:change_price' => 'Change treatment and manual invoice line prices',
             'invoice:view' => 'View invoices',
-            'invoice:create' => 'Create invoices',
             'invoice:edit' => 'Edit invoices',
             'invoice:delete' => 'Delete invoices',
             'invoice:refund' => 'Refund invoices',

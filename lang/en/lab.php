@@ -1,0 +1,32 @@
+<?php
+
+return [
+    'fields' => [
+        'patient' => 'patient',
+        'lab' => 'lab',
+        'work' => 'work',
+        'work_name' => 'work name',
+        'lab_name' => 'lab name',
+        'phone' => 'phone',
+        'contact_person' => 'contact person',
+        'address' => 'address',
+        'turnaround' => 'default turnaround',
+        'notes' => 'notes',
+        'sent_on' => 'date sent',
+        'expected_on' => 'expected date',
+        'received_on' => 'received date',
+        'status' => 'status',
+    ],
+    'work_already_listed' => 'This work is already in the list.',
+    'work_list_full' => 'The work list is full.',
+    'inactive_lab' => 'Inactive labs cannot be selected.',
+    'cancelled_not_editable' => 'Cancelled lab work cannot be edited.',
+    'status_not_allowed' => 'This status change is not allowed.',
+    'invalid_lab' => 'The selected lab is invalid.',
+    'invalid_patient' => 'The selected patient is invalid.',
+    'expected_before_sent' => 'The expected date must be on or after the date sent.',
+    'received_required' => 'A received date is required.',
+    'received_before_sent' => 'The received date must be on or after the date sent.',
+    'received_in_future' => 'The received date cannot be in the future.',
+    'lab_has_work' => 'Cannot delete a lab that already has lab work. Deactivate it instead.',
+];

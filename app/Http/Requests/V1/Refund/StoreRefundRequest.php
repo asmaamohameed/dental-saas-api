@@ -3,6 +3,7 @@
 namespace App\Http\Requests\V1\Refund;
 
 use App\Enums\RefundReasonCode;
+use App\Enums\RefundType;
 use App\Models\Invoice;
 use App\Models\Refund;
 use Illuminate\Foundation\Http\FormRequest;
@@ -16,13 +17,37 @@ class StoreRefundRequest extends FormRequest
         return $this->user()->can('create', [Refund::class, $this->route('invoice')]);
     }
 
+    protected function prepareForValidation(): void
+    {
+        $merge = [];
+
+        if (! $this->filled('reason_code') && $this->filled('reason')) {
+            $merge['reason_code'] = $this->input('reason');
+        }
+
+        if (! $this->filled('reason_note') && $this->filled('notes')) {
+            $merge['reason_note'] = $this->input('notes');
+        }
+
+        if ($merge !== []) {
+            $this->merge($merge);
+        }
+    }
+
     public function rules(): array
     {
         /** @var Invoice $invoice */
         $invoice = $this->route('invoice');
 
         return [
-            'amount' => ['required', 'numeric', 'decimal:0,2', 'min:0.01'],
+            'type' => ['nullable', 'string', Rule::enum(RefundType::class)],
+            'amount' => [
+                Rule::requiredIf(fn () => $this->input('type') !== RefundType::FULL->value),
+                'nullable',
+                'numeric',
+                'decimal:0,2',
+                'min:0.01',
+            ],
             'reason_code' => ['required', 'string', Rule::enum(RefundReasonCode::class)],
             'reason_note' => ['nullable', 'string', 'max:'.RefundReasonCode::NOTE_MAX_LENGTH],
             'method' => ['nullable', 'string', 'in:cash,card,transfer,other'],
@@ -55,7 +80,8 @@ class StoreRefundRequest extends FormRequest
 
     /**
      * @return array{
-     *     amount: string,
+     *     amount?: string,
+     *     type?: string,
      *     reason_code: string,
      *     reason_note: string|null,
      *     method?: string,
@@ -70,11 +96,6 @@ class StoreRefundRequest extends FormRequest
 
         $data = parent::validated();
 
-        $amount = $data['amount'] ?? null;
-        if (! is_numeric($amount)) {
-            throw new \UnexpectedValueException('Validated refund amount must be numeric.');
-        }
-
         $reasonCode = $data['reason_code'] ?? null;
         if (! is_string($reasonCode)) {
             throw new \UnexpectedValueException('Validated refund reason_code must be a string.');
@@ -87,10 +108,23 @@ class StoreRefundRequest extends FormRequest
         }
 
         $payload = [
-            'amount' => bcadd((string) $amount, '0', 2),
             'reason_code' => $reasonCode,
             'reason_note' => $reasonNote,
         ];
+
+        $type = $data['type'] ?? null;
+        if (is_string($type) && $type !== '') {
+            $payload['type'] = $type;
+        }
+
+        $amount = $data['amount'] ?? null;
+        if ($type !== RefundType::FULL->value) {
+            if (! is_numeric($amount)) {
+                throw new \UnexpectedValueException('Validated refund amount must be numeric.');
+            }
+
+            $payload['amount'] = bcadd((string) $amount, '0', 2);
+        }
 
         if (isset($data['invoice_item_id']) && is_string($data['invoice_item_id'])) {
             $payload['invoice_item_id'] = $data['invoice_item_id'];

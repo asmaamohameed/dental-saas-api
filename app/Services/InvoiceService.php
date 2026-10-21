@@ -10,6 +10,7 @@ use App\Billing\Queries\InvoiceItemFactsReader;
 use App\Billing\Queries\InvoiceItemStateSql;
 use App\Enums\FinancialStatus;
 use App\Enums\InvoiceStatus;
+use App\Enums\RefundType;
 use App\Exceptions\InvoiceHasPaymentsException;
 use App\Models\Appointment;
 use App\Models\Invoice;
@@ -301,7 +302,7 @@ class InvoiceService
 
             if ($lockedInvoice->payments()->exists()) {
                 throw new InvoiceHasPaymentsException(
-                    'Cannot cancel an invoice that has recorded payments.'
+                    __('billing.invoice_has_payments')
                 );
             }
 
@@ -365,6 +366,16 @@ class InvoiceService
         $invoice->load(['payments', 'refunds']);
 
         if (InvoiceFinancials::isClosed($invoice)) {
+            return;
+        }
+
+        if ($invoice->refunds->contains(fn ($refund) => $refund->type === RefundType::FULL)) {
+            if ($invoice->status !== InvoiceStatus::REFUNDED) {
+                $invoice->update(['status' => InvoiceStatus::REFUNDED]);
+            }
+
+            $this->recomputeFinancialStatusesForInvoice($invoice);
+
             return;
         }
 
@@ -440,17 +451,22 @@ class InvoiceService
         $invoices = Invoice::where('patient_id', $patientId)->with(['payments', 'refunds'])->get();
         $invoiceIds = $invoices->pluck('id');
 
-        $totalBilled = $invoices->sum('total_amount');
-        $totalPaid = Payment::whereIn('invoice_id', $invoiceIds)->sum('amount');
-        $totalRefunded = Refund::whereIn('invoice_id', $invoiceIds)->sum('amount');
-        $totalRemaining = $invoices->sum(fn (Invoice $invoice) => InvoiceFinancials::remainingAmount($invoice));
+        $billableInvoices = $invoices->reject(
+            fn (Invoice $invoice) => in_array($invoice->status, [InvoiceStatus::REFUNDED, InvoiceStatus::CANCELLED], true)
+        );
+        $totalBilled = $billableInvoices->sum('total_amount');
+        $totalPaid = (float) Payment::whereIn('invoice_id', $invoiceIds)->sum('amount');
+        $totalRefunded = (float) Refund::whereIn('invoice_id', $invoiceIds)->sum('amount');
+        $totalCollected = max(0, $totalPaid - $totalRefunded);
+        $totalRemaining = $billableInvoices->sum(fn (Invoice $invoice) => InvoiceFinancials::remainingAmount($invoice));
 
         return [
             'patient_id' => $patientId,
             'total_invoices_count' => $invoices->count(),
             'total_billed' => (float) $totalBilled,
-            'total_paid' => (float) $totalPaid,
-            'total_refunded' => (float) $totalRefunded,
+            'total_paid' => $totalPaid,
+            'total_collected' => (float) $totalCollected,
+            'total_refunded' => $totalRefunded,
             'total_remaining' => (float) max(0, $totalRemaining),
         ];
     }

@@ -48,7 +48,8 @@ class OdontogramService
                 'dentist.name as dentist_name',
                 'ptt.updated_at as row_updated_at',
                 'pt.id as patient_treatment_id',
-                DB::raw('(select ii.invoice_id from invoice_items as ii where ii.patient_treatment_id = pt.id order by ii.created_at desc limit 1) as invoice_id'),
+                DB::raw('(select ii.invoice_id from invoice_items as ii inner join invoices as i on i.id = ii.invoice_id and i.deleted_at is null where ii.patient_treatment_id = pt.id and ii.deleted_at is null order by ii.created_at desc limit 1) as invoice_id'),
+                DB::raw('(select i.status from invoice_items as ii inner join invoices as i on i.id = ii.invoice_id and i.deleted_at is null where ii.patient_treatment_id = pt.id and ii.deleted_at is null order by ii.created_at desc limit 1) as invoice_status'),
                 'tt.name_ar as service_name_ar',
                 'tt.name_en as service_name_en',
             ])
@@ -112,6 +113,7 @@ class OdontogramService
                 'updated_at' => isset($row->row_updated_at) ? $row->row_updated_at : null,
                 'dentist_name' => isset($row->dentist_name) ? $row->dentist_name : null,
                 'invoice_id' => isset($row->invoice_id) ? $row->invoice_id : null,
+                'invoice_status' => isset($row->invoice_status) ? $row->invoice_status : null,
             ];
         }, $entries);
     }

@@ -78,7 +78,9 @@ class DashboardService
         $endMtd = $now->copy()->endOfMonth();
 
         // 1. KPIs
-        $totalInvoicedMtd = (float) Invoice::whereBetween('created_at', [$startMtd, $endMtd])->sum('total_amount');
+        $totalInvoicedMtd = (float) Invoice::whereBetween('created_at', [$startMtd, $endMtd])
+            ->whereNotIn('status', [InvoiceStatus::REFUNDED->value, InvoiceStatus::CANCELLED->value])
+            ->sum('total_amount');
         $totalCollectedMtd = (float) Payment::whereBetween('created_at', [$startMtd, $endMtd])->sum('amount');
         $totalRefundedMtd = (float) Refund::whereBetween('refunded_at', [$startMtd, $endMtd])->sum('amount');
         $refundsCountMtd = Refund::whereBetween('refunded_at', [$startMtd, $endMtd])->count();

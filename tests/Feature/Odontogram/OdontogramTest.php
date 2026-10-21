@@ -2,9 +2,12 @@
 
 namespace Tests\Feature\Odontogram;
 
+use App\Enums\InvoiceStatus;
 use App\Enums\TreatmentScope;
 use App\Enums\TreatmentToothStatus;
 use App\Enums\UserRole;
+use App\Models\Invoice;
+use App\Models\InvoiceItem;
 use App\Models\Patient;
 use App\Models\PatientTreatment;
 use App\Models\Tenant;
@@ -199,6 +202,26 @@ class OdontogramTest extends TestCase
         $this->getJson("/api/v1/patients/{$patient->id}/odontogram")
             ->assertOk()
             ->assertJsonMissingPath('data.teeth.16');
+    }
+
+    public function test_odontogram_reports_fully_refunded_invoice_status(): void
+    {
+        $patient = Patient::factory()->create(['tenant_id' => $this->tenant->id]);
+        $template = $this->clinicalTemplate();
+        $treatmentId = $this->postJson('/api/v1/patient-treatments', [
+            'patient_id' => $patient->id,
+            'treatment_template_id' => $template->id,
+            'tooth_numbers' => ['16'],
+        ])->assertCreated()->json('data.id');
+
+        $invoiceId = InvoiceItem::query()->where('patient_treatment_id', $treatmentId)->value('invoice_id');
+        $this->assertNotNull($invoiceId);
+        Invoice::query()->whereKey($invoiceId)->update(['status' => InvoiceStatus::REFUNDED->value]);
+
+        $this->getJson("/api/v1/patients/{$patient->id}/odontogram")
+            ->assertOk()
+            ->assertJsonPath('data.teeth.16.treatments.0.invoice_id', $invoiceId)
+            ->assertJsonPath('data.teeth.16.treatments.0.invoice_status', 'refunded');
     }
 
     private function clinicalTemplate(): TreatmentTemplate

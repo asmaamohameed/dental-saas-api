@@ -42,6 +42,7 @@ class SetLocaleMiddlewareTest extends TestCase
     public function test_falls_back_to_config_locale_when_no_header_and_no_user(): void
     {
         $request = Request::create('/', 'GET');
+        $request->headers->remove('Accept-Language');
 
         $this->passThrough($request);
 
@@ -58,7 +59,7 @@ class SetLocaleMiddlewareTest extends TestCase
         $this->assertSame(config('app.locale'), App::getLocale());
     }
 
-    public function test_authenticated_users_explicit_locale_overrides_accept_language_header(): void
+    public function test_site_language_wins_over_the_saved_user_language(): void
     {
         $tenant = Tenant::factory()->create();
         app(CurrentTenant::class)->set($tenant->id);
@@ -66,6 +67,21 @@ class SetLocaleMiddlewareTest extends TestCase
 
         $request = Request::create('/', 'GET');
         $request->headers->set('Accept-Language', 'en-US,en;q=0.9');
+        $request->setUserResolver(fn () => $user);
+
+        $this->passThrough($request);
+
+        $this->assertSame('en', App::getLocale());
+    }
+
+    public function test_falls_back_to_the_saved_user_language_when_the_site_sends_none(): void
+    {
+        $tenant = Tenant::factory()->create(['locale' => 'en']);
+        app(CurrentTenant::class)->set($tenant->id);
+        $user = User::factory()->create(['tenant_id' => $tenant->id, 'locale' => 'ar']);
+
+        $request = Request::create('/', 'GET');
+        $request->headers->remove('Accept-Language');
         $request->setUserResolver(fn () => $user);
 
         $this->passThrough($request);
@@ -80,7 +96,7 @@ class SetLocaleMiddlewareTest extends TestCase
         $user = User::factory()->create(['tenant_id' => $tenant->id, 'locale' => null]);
 
         $request = Request::create('/', 'GET');
-        $request->headers->set('Accept-Language', 'en-US,en;q=0.9');
+        $request->headers->remove('Accept-Language');
         $request->setUserResolver(fn () => $user);
 
         $this->passThrough($request);

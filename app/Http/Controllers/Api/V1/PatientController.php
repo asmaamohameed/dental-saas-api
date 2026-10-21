@@ -105,9 +105,10 @@ class PatientController extends Controller implements HasMiddleware
             || $patient->toothRecords()->exists()
             || $patient->xrayAttachments()->exists()
             || $patient->invoices()->exists()
+            || $patient->labWorks()->exists()
         ) {
             return $this->errorResponse(
-                'Cannot delete patient with existing appointments, tooth records, invoices, or x-ray attachments.',
+                'Cannot delete patient with existing appointments, tooth records, invoices, x-ray attachments, or lab works.',
                 422
             );
         }

@@ -7,6 +7,7 @@ use App\Enums\FinancialStatus;
 use App\Enums\InvoiceStatus;
 use App\Enums\PatientTreatmentStatus;
 use App\Enums\RefundReasonCode;
+use App\Enums\RefundType;
 use App\Enums\TreatmentPriority;
 use App\Enums\TreatmentScope;
 use App\Enums\TreatmentToothStatus;
@@ -54,6 +55,7 @@ class RefundTest extends TestCase
         ]))->assertCreated();
 
         $response->assertJsonPath('data.amount', 80)
+            ->assertJsonPath('data.type', RefundType::PARTIAL->value)
             ->assertJsonPath('data.reason_code', RefundReasonCode::DUPLICATE_PAYMENT->value)
             ->assertJsonPath('data.reason_note', null)
             ->assertJsonPath('data.method', 'card')
@@ -79,11 +81,16 @@ class RefundTest extends TestCase
 
         $this->postJson("/api/v1/invoices/{$invoice->id}/refunds", $this->refundPayload([
             'amount' => 40,
-        ]))->assertCreated()->assertJsonPath('data.amount', 40);
+            'type' => RefundType::PARTIAL->value,
+        ]))->assertCreated()
+            ->assertJsonPath('data.amount', 40)
+            ->assertJsonPath('data.type', RefundType::PARTIAL->value);
 
         $invoice->refresh();
         $this->assertSame(InvoiceStatus::PARTIAL, $invoice->status);
         $this->assertEquals(140, $invoice->remaining_amount);
+        $this->assertEquals(60, $invoice->paidAmount() - $invoice->refundedAmount());
+        $this->assertEquals(60, $invoice->fresh(['payments', 'refunds'])->balance()['net_paid']);
     }
 
     public function test_refund_amount_over_net_paid_is_rejected(): void
@@ -315,6 +322,89 @@ class RefundTest extends TestCase
         ])
             ->assertUnprocessable()
             ->assertJsonValidationErrors(['amount']);
+    }
+
+    public function test_reason_alias_is_accepted_as_reason_code(): void
+    {
+        $this->actingAsTenantUser(role: UserRole::OWNER);
+        $invoice = Invoice::factory()->create(['total_amount' => 100, 'status' => InvoiceStatus::PAID]);
+        Payment::factory()->create(['invoice_id' => $invoice->id, 'amount' => 80]);
+
+        $this->postJson("/api/v1/invoices/{$invoice->id}/refunds", [
+            'amount' => 20,
+            'reason' => RefundReasonCode::DUPLICATE_PAYMENT->value,
+            'method' => 'cash',
+        ])
+            ->assertCreated()
+            ->assertJsonPath('data.reason_code', RefundReasonCode::DUPLICATE_PAYMENT->value)
+            ->assertJsonPath('data.type', RefundType::PARTIAL->value);
+    }
+
+    public function test_full_type_refunds_entire_net_paid_without_amount(): void
+    {
+        $this->actingAsTenantUser(role: UserRole::OWNER);
+        $invoice = Invoice::factory()->create(['total_amount' => 200, 'status' => InvoiceStatus::PARTIAL]);
+        Payment::factory()->create(['invoice_id' => $invoice->id, 'amount' => 80]);
+
+        $this->postJson("/api/v1/invoices/{$invoice->id}/refunds", [
+            'type' => RefundType::FULL->value,
+            'reason_code' => RefundReasonCode::INCORRECT_PAYMENT->value,
+            'method' => 'card',
+        ])
+            ->assertCreated()
+            ->assertJsonPath('data.amount', 80)
+            ->assertJsonPath('data.type', RefundType::FULL->value);
+
+        $invoice->refresh();
+        $this->assertSame(InvoiceStatus::REFUNDED, $invoice->status);
+        $this->assertEquals(0, $invoice->remaining_amount);
+        $this->assertEquals(0, (float) $invoice->fresh(['payments', 'refunds'])->balance()['net_paid']);
+
+        Invoice::factory()->create([
+            'patient_id' => $invoice->patient_id,
+            'total_amount' => 50,
+            'status' => InvoiceStatus::UNPAID,
+        ]);
+
+        $summary = $this->getJson("/api/v1/patients/{$invoice->patient_id}/invoices-summary")->assertOk();
+        $this->assertEquals(50, $summary->json('data.total_billed'));
+        $this->assertEquals(50, $summary->json('data.total_remaining'));
+        $this->assertEquals(0, $summary->json('data.total_collected'));
+
+        $this->postJson("/api/v1/invoices/{$invoice->id}/payments", [
+            'amount' => 10,
+            'method' => 'cash',
+        ])->assertUnprocessable()->assertJsonValidationErrors(['invoice']);
+
+        $this->postJson("/api/v1/invoices/{$invoice->id}/refunds", [
+            'type' => RefundType::PARTIAL->value,
+            'amount' => 10,
+            'reason_code' => RefundReasonCode::DUPLICATE_PAYMENT->value,
+        ])->assertUnprocessable();
+
+        $this->assertSame(InvoiceStatus::REFUNDED, $invoice->fresh()->status);
+    }
+
+    public function test_invoice_show_includes_refunds_and_net_paid_after_partial_refund(): void
+    {
+        $this->actingAsTenantUser(role: UserRole::OWNER);
+        $invoice = Invoice::factory()->create(['total_amount' => 200, 'status' => InvoiceStatus::PARTIAL]);
+        Payment::factory()->create(['invoice_id' => $invoice->id, 'amount' => 100]);
+
+        $this->postJson("/api/v1/invoices/{$invoice->id}/refunds", $this->refundPayload([
+            'amount' => 25,
+            'type' => RefundType::PARTIAL->value,
+        ]))->assertCreated();
+
+        $this->getJson("/api/v1/invoices/{$invoice->id}")
+            ->assertOk()
+            ->assertJsonPath('data.net_paid', 75)
+            ->assertJsonPath('data.net_paid_amount', 75)
+            ->assertJsonPath('data.refunded_amount', 25)
+            ->assertJsonPath('data.remaining_amount', 125)
+            ->assertJsonPath('data.refund_state', 'partial')
+            ->assertJsonPath('data.refunds.0.amount', 25)
+            ->assertJsonPath('data.refunds.0.type', RefundType::PARTIAL->value);
     }
 
     public function test_missing_reason_is_rejected(): void

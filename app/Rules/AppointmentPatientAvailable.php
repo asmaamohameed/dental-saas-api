@@ -35,7 +35,7 @@ class AppointmentPatientAvailable implements ValidationRule
             ->exists();
 
         if ($exists) {
-            $fail('This patient already has an appointment during this time slot.');
+            $fail(__('errors.patient_slot_taken'));
         }
     }
 }

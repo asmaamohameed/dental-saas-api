@@ -59,6 +59,7 @@ return Application::configure(basePath: dirname(__DIR__))
 
         $middleware->api(append: [
             MeasureRequestTime::class,
+            SetLocale::class,
         ]);
 
         $middleware->priority([
@@ -81,12 +82,22 @@ return Application::configure(basePath: dirname(__DIR__))
             after: Authenticate::class,
             append: EnsureTenantAccess::class,
         );
+
+        $middleware->appendToPriorityList(
+            after: Authenticate::class,
+            append: SetLocale::class,
+        );
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->render(function (Throwable $e, Request $request) {
             if ($request->is('api/*') || $request->is('admin/*') || $request->is('broadcasting/auth') || $request->wantsJson()) {
+                $headerLocale = strtolower(substr((string) $request->header('Accept-Language', ''), 0, 2));
+                if (in_array($headerLocale, ['en', 'ar'], true)) {
+                    app()->setLocale($headerLocale);
+                }
+
                 $status = 500;
-                $message = 'An unexpected error occurred.';
+                $message = __('errors.unexpected');
                 $errors = null;
                 $headers = method_exists($e, 'getHeaders') ? $e->getHeaders() : [];
 
@@ -96,13 +107,13 @@ return Application::configure(basePath: dirname(__DIR__))
                     $errors = $e->errors();
                 } elseif ($e instanceof AuthenticationException) {
                     $status = 401;
-                    $message = 'Unauthenticated.';
+                    $message = __('errors.unauthenticated');
                 } elseif ($e instanceof HttpException) {
                     $status = $e->getStatusCode();
                     $message = $e->getMessage() ?: Response::$statusTexts[$status] ?? 'HTTP Error';
 
                     if ($status === 404 && $e->getPrevious() instanceof ModelNotFoundException) {
-                        $message = 'Resource not found.';
+                        $message = __('errors.not_found');
                     }
                 } elseif ($e instanceof InvoiceHasPaymentsException) {
                     $status = 422;
@@ -115,9 +126,9 @@ return Application::configure(basePath: dirname(__DIR__))
 
                     if ($sqlState === '23P01') {
                         $status = 422;
-                        $message = 'The given data was invalid.';
+                        $message = __('errors.invalid');
                         $errors = [
-                            'doctor_id' => ['This doctor already has an appointment during this time slot.'],
+                            'doctor_id' => [__('errors.doctor_slot_taken')],
                         ];
                     } else {
                         $message = config('app.debug') ? $e->getMessage() : $message;

@@ -42,7 +42,7 @@ class AppointmentDoctorAvailable implements ValidationRule
             ->exists();
 
         if ($exists) {
-            return 'This doctor already has an appointment during this time slot.';
+            return __('errors.doctor_slot_taken');
         }
 
         return null;

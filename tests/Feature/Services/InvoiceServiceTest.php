@@ -7,6 +7,7 @@ use App\Exceptions\InvoiceHasPaymentsException;
 use App\Models\Invoice;
 use App\Models\Patient;
 use App\Models\Payment;
+use App\Models\Refund;
 use App\Models\Tenant;
 use App\Services\InvoiceService;
 use App\Support\Tenancy\CurrentTenant;
@@ -101,6 +102,22 @@ class InvoiceServiceTest extends TestCase
         $this->assertSame(2, $summary['total_invoices_count']);
         $this->assertEquals(500, $summary['total_billed']);
         $this->assertEquals(350, $summary['total_paid']);
+        $this->assertEquals(350, $summary['total_collected']);
         $this->assertEquals(150, $summary['total_remaining']);
+    }
+
+    public function test_get_patient_summary_net_collected_subtracts_refunds_and_reopens_outstanding(): void
+    {
+        $patient = $this->makePatient();
+        $invoice = Invoice::factory()->create(['patient_id' => $patient->id, 'total_amount' => 200]);
+        Payment::factory()->create(['invoice_id' => $invoice->id, 'amount' => 120]);
+        Refund::factory()->create(['invoice_id' => $invoice->id, 'amount' => 40]);
+
+        $summary = $this->service->getPatientSummary($patient->id);
+
+        $this->assertEquals(120, $summary['total_paid']);
+        $this->assertEquals(40, $summary['total_refunded']);
+        $this->assertEquals(80, $summary['total_collected']);
+        $this->assertEquals(120, $summary['total_remaining']);
     }
 }

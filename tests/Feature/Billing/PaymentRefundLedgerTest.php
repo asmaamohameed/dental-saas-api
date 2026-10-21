@@ -51,7 +51,10 @@ class PaymentRefundLedgerTest extends TestCase
         $this->putJson("/api/v1/invoices/{$invoice->id}/payments/{$second->id}", [
             'amount' => 50,
         ])->assertUnprocessable()
-            ->assertJsonPath('message', 'Recorded payments (650.00) would fall below refunds already issued (700.00).');
+            ->assertJsonPath('message', __('billing.refunds_exceed_recorded_cash', [
+                'gross_paid' => '650.00',
+                'refunded' => '700.00',
+            ]));
 
         $this->assertDatabaseHas('payments', ['id' => $second->id, 'amount' => 400]);
     }
@@ -63,7 +66,10 @@ class PaymentRefundLedgerTest extends TestCase
 
         $this->deleteJson("/api/v1/invoices/{$invoice->id}/payments/{$second->id}")
             ->assertUnprocessable()
-            ->assertJsonPath('message', 'Recorded payments (600.00) would fall below refunds already issued (700.00).');
+            ->assertJsonPath('message', __('billing.refunds_exceed_recorded_cash', [
+                'gross_paid' => '600.00',
+                'refunded' => '700.00',
+            ]));
 
         $this->assertDatabaseHas('payments', ['id' => $second->id]);
     }

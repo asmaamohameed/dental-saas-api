@@ -85,6 +85,18 @@ class DashboardOutstandingPerformedKpiTest extends TestCase
         $this->assertSame(0.0, $this->outstandingPerformedKpi());
     }
 
+    public function test_refunded_invoice_is_ignored(): void
+    {
+        $this->actingAsTenantUser(role: UserRole::OWNER);
+        $invoice = Invoice::factory()->create([
+            'total_amount' => 90,
+            'status' => InvoiceStatus::REFUNDED,
+        ]);
+        $this->doneToothLine($invoice, '16', 90);
+
+        $this->assertSame(0.0, $this->outstandingPerformedKpi());
+    }
+
     public function test_cancelled_invoice_is_ignored(): void
     {
         $this->actingAsTenantUser(role: UserRole::OWNER);

@@ -27,6 +27,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property-read Collection<int, ToothRecord> $toothRecords
  * @property-read Collection<int, Invoice> $invoices
  * @property-read Collection<int, XrayAttachment> $xrayAttachments
+ * @property-read Collection<int, LabWork> $labWorks
  */
 class Patient extends Model
 {
@@ -82,5 +83,13 @@ class Patient extends Model
     public function treatmentPlans(): HasMany
     {
         return $this->hasMany(TreatmentPlan::class);
+    }
+
+    /**
+     * @return HasMany<LabWork, $this>
+     */
+    public function labWorks(): HasMany
+    {
+        return $this->hasMany(LabWork::class);
     }
 }

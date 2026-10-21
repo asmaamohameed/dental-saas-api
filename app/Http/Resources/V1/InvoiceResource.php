@@ -18,6 +18,11 @@ class InvoiceResource extends JsonResource
     public function toArray(Request $request): array
     {
         $refundDue = InvoiceFinancials::refundDue($this->resource);
+        $netPaid = InvoiceFinancials::netPaid($this->resource);
+        $refunded = $this->refundedAmount();
+        $refundState = bccomp((string) $refunded, '0', 2) !== 1
+            ? 'none'
+            : (bccomp((string) $netPaid, '0', 2) === 1 ? 'partial' : 'full');
 
         return [
             'id' => $this->id,
@@ -28,9 +33,11 @@ class InvoiceResource extends JsonResource
             'total_amount' => (float) $this->total_amount,
             'remaining_amount' => (float) $this->remaining_amount,
             'paid_amount' => $this->paidAmount(),
-            'net_paid_amount' => InvoiceFinancials::netPaid($this->resource),
+            'net_paid' => $netPaid,
+            'net_paid_amount' => $netPaid,
             'deducted_amount' => $this->deductedAmount(),
-            'refunded_amount' => $this->refundedAmount(),
+            'refunded_amount' => $refunded,
+            'refund_state' => $refundState,
             'refund_due' => $refundDue,
             'has_refund_due' => bccomp((string) $refundDue, '0', 2) === 1,
             'status' => $this->status,
@@ -56,6 +63,7 @@ class InvoiceResource extends JsonResource
             }),
             'items' => InvoiceItemResource::collection($this->whenLoaded('items')),
             'payments' => PaymentResource::collection($this->whenLoaded('payments')),
+            'refunds' => RefundResource::collection($this->whenLoaded('refunds')),
             'refund' => $this->whenLoaded('refunds', function () {
                 $latest = $this->refunds
                     ->sortBy([['refunded_at', 'desc'], ['id', 'desc']])

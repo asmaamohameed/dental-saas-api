@@ -58,6 +58,15 @@ class ClinicPermissionCatalog
             'reports:view' => 'View reports',
             'auditLog:view' => 'View clinic audit logs',
             'clinic:branding' => 'Update clinic logo and theme',
+            'lab:view' => 'View labs',
+            'lab:create' => 'Create labs',
+            'lab:edit' => 'Edit labs',
+            'lab:delete' => 'Delete labs',
+            'labWork:view' => 'View lab works',
+            'labWork:create' => 'Create lab works',
+            'labWork:edit' => 'Edit lab works',
+            'labWork:markReceived' => 'Mark lab works received',
+            'labWork:cancel' => 'Cancel lab works',
         ];
     }
 
@@ -89,6 +98,10 @@ class ClinicPermissionCatalog
             'reports:view',
             'auditLog:view',
             'clinic:branding',
+            'lab:create',
+            'lab:edit',
+            'lab:delete',
+            'labWork:cancel',
         ] as $denied) {
             $clinical[$denied] = false;
         }
@@ -113,6 +126,7 @@ class ClinicPermissionCatalog
             'reports:view',
             'auditLog:view',
             'clinic:branding',
+            'labWork:cancel',
         ] as $denied) {
             $receptionist[$denied] = false;
         }
@@ -193,6 +207,16 @@ class ClinicPermissionCatalog
 
         $assistant['treatment:change_price'] = false;
         $receptionist['treatment:change_price'] = false;
+
+        $doctor['lab:create'] = false;
+        $doctor['lab:edit'] = false;
+        $doctor['lab:delete'] = false;
+        $assistant['lab:create'] = false;
+        $assistant['lab:edit'] = false;
+        $assistant['lab:delete'] = false;
+        $doctor['labWork:cancel'] = false;
+        $assistant['labWork:cancel'] = false;
+        $receptionist['labWork:cancel'] = false;
 
         return [
             'owner' => $allow,

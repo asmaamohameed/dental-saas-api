@@ -79,6 +79,14 @@ class PatientTreatmentService
             $toothNumbers = $this->normalizeToothNumbers($data['tooth_numbers'] ?? []);
             $this->assertScopeToothRules($scope, $toothNumbers);
 
+            if (array_key_exists('agreed_price', $data) && $data['agreed_price'] !== null) {
+                $defaultFormatted = number_format((float) $template->default_price, 2, '.', '');
+                $requestedFormatted = number_format((float) $data['agreed_price'], 2, '.', '');
+                if ($requestedFormatted !== $defaultFormatted && ! Gate::forUser($actor)->allows('canChangePrice')) {
+                    throw new AccessDeniedHttpException('You are not allowed to change treatment prices.');
+                }
+            }
+
             $unitPrice = array_key_exists('agreed_price', $data) && $data['agreed_price'] !== null
                 ? $data['agreed_price']
                 : $template->default_price;
@@ -114,7 +122,11 @@ class PatientTreatmentService
             }
 
             $treatment = $this->freshTreatment($treatment);
-            $this->invoiceService->createInitialInvoiceForTreatment($treatment, $actor->id);
+            $this->invoiceService->createInitialInvoiceForTreatment(
+                $treatment,
+                $actor->id,
+                isset($data['appointment_id']) ? (string) $data['appointment_id'] : null,
+            );
             $this->invoiceService->recomputeFinancialStatus($treatment);
 
             return $this->freshTreatment($treatment);
@@ -266,19 +278,27 @@ class PatientTreatmentService
     public function retreat(PatientTreatment $treatment, array $data, string $userId): PatientTreatment
     {
         return DB::transaction(function () use ($treatment, $data, $userId) {
+            $treatment->loadMissing('template');
+
+            $parentAgreedPrice = $treatment->getAttributes()['agreed_price'] ?? null;
+
+            $unitPrice = array_key_exists('agreed_price', $data) && $data['agreed_price'] !== null
+                ? $data['agreed_price']
+                : ($parentAgreedPrice !== null
+                    ? $parentAgreedPrice
+                    : ($treatment->template !== null ? $treatment->template->default_price : null));
+
             $status = $this->clinical($treatment);
 
             if (! in_array($status, [PatientTreatmentStatus::FAILED, PatientTreatmentStatus::COMPLETED], true)) {
-                $treatment->clinical_status = PatientTreatmentStatus::FAILED;
-                $treatment->save();
+                PatientTreatment::query()
+                    ->whereKey($treatment->id)
+                    ->update(['clinical_status' => PatientTreatmentStatus::FAILED]);
             } elseif ($status === PatientTreatmentStatus::COMPLETED) {
-                $treatment->clinical_status = PatientTreatmentStatus::FAILED;
-                $treatment->save();
+                PatientTreatment::query()
+                    ->whereKey($treatment->id)
+                    ->update(['clinical_status' => PatientTreatmentStatus::FAILED]);
             }
-
-            $unitPrice = $data['agreed_price']
-                ?? ($treatment->template !== null ? $treatment->template->default_price : null)
-                ?? $treatment->agreed_price;
 
             $payload = [
                 'patient_id' => $treatment->patient_id,
@@ -774,7 +794,12 @@ class PatientTreatmentService
             return;
         }
 
-        if (! $current->canTransitionTo($target)) {
+        $transitionAllowed = $current->canTransitionTo($target)
+            || ($current === PatientTreatmentStatus::COMPLETED
+                && $target === PatientTreatmentStatus::IN_PROGRESS
+                && $treatment->scope !== TreatmentScope::TOOTH);
+
+        if (! $transitionAllowed) {
             throw ValidationException::withMessages([
                 'clinical_status' => "Cannot change clinical status from {$current->value} to {$target->value}.",
             ]);

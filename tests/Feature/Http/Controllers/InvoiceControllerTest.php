@@ -108,45 +108,15 @@ class InvoiceControllerTest extends TestCase
         $this->assertCount(1, $response->json('data.items'));
     }
 
-    // ---------- store ----------
-
-    public function test_doctor_cannot_create_an_invoice(): void
+    public function test_post_invoices_returns_not_found(): void
     {
-        $this->actingAsRole(UserRole::DOCTOR);
+        $this->actingAsRole(UserRole::OWNER);
         $patient = Patient::factory()->create();
+
         $this->postJson('/api/v1/invoices', [
             'patient_id' => $patient->id,
             'items' => [['price' => 100, 'description' => 'Manual charge line', 'quantity' => 1]],
-        ])->assertCreated();
-    }
-
-    public function test_receptionist_can_create_an_invoice(): void
-    {
-        $user = $this->actingAsRole(UserRole::RECEPTIONIST);
-        $patient = Patient::factory()->create();
-        $response = $this->postJson('/api/v1/invoices', [
-            'patient_id' => $patient->id,
-            'items' => [['price' => 120, 'description' => 'Treatment billing line', 'quantity' => 1]],
-        ])->assertCreated();
-
-        $this->assertEquals(120, $response->json('data.total_amount'));
-        $this->assertEquals($user->id, $response->json('data.created_by'));
-    }
-
-    public function test_store_rejects_a_patient_from_another_tenant(): void
-    {
-        $this->actingAsRole(UserRole::RECEPTIONIST);
-
-        $otherTenant = Tenant::factory()->create();
-        $myTenantId = app(CurrentTenant::class)->id();
-        app(CurrentTenant::class)->set($otherTenant->id);
-        $foreignPatient = Patient::factory()->create();
-        app(CurrentTenant::class)->set($myTenantId);
-
-        $this->postJson('/api/v1/invoices', [
-            'patient_id' => $foreignPatient->id,
-            'items' => [['price' => 50, 'description' => 'Manual charge line', 'quantity' => 1]],
-        ])->assertStatus(422)->assertJsonValidationErrors(['patient_id']);
+        ])->assertMethodNotAllowed();
     }
 
     // ---------- show ----------
@@ -174,44 +144,14 @@ class InvoiceControllerTest extends TestCase
         $this->getJson("/api/v1/invoices/{$foreignInvoice->id}")->assertStatus(404);
     }
 
-    // ---------- update ----------
-
-    public function test_doctor_is_forbidden_from_updating_items_on_an_invoice(): void
-    {
-        $this->actingAsRole(UserRole::DOCTOR);
-        $invoice = Invoice::factory()->create(['status' => InvoiceStatus::UNPAID]);
-        $this->putJson("/api/v1/invoices/{$invoice->id}", [
-            'items' => [['price' => 100, 'description' => 'Manual charge line', 'quantity' => 1]],
-        ])->assertOk();
-    }
-
-    public function test_receptionist_can_update_items_on_an_unpaid_invoice(): void
-    {
-        $this->actingAsRole(UserRole::RECEPTIONIST);
-        $invoice = Invoice::factory()->create(['status' => InvoiceStatus::UNPAID, 'total_amount' => 100]);
-        $this->putJson("/api/v1/invoices/{$invoice->id}", [
-            'items' => [['price' => 60, 'description' => 'Updated billing line', 'quantity' => 1]],
-        ])->assertOk()->assertJsonPath('data.total_amount', 60);
-    }
-
-    public function test_update_rejects_changing_appointment_id(): void
+    public function test_put_invoices_returns_not_found(): void
     {
         $this->actingAsRole(UserRole::OWNER);
         $invoice = Invoice::factory()->create(['status' => InvoiceStatus::UNPAID]);
 
         $this->putJson("/api/v1/invoices/{$invoice->id}", [
-            'appointment_id' => '11111111-1111-1111-1111-111111111111',
-        ])->assertStatus(422)->assertJsonValidationErrors(['appointment_id']);
-    }
-
-    public function test_update_rejects_a_fully_paid_invoice(): void
-    {
-        $this->actingAsRole(UserRole::OWNER);
-        $invoice = Invoice::factory()->create(['status' => InvoiceStatus::PAID]);
-
-        $this->putJson("/api/v1/invoices/{$invoice->id}", [
-            'patient_id' => Patient::factory()->create()->id,
-        ])->assertStatus(422)->assertJsonValidationErrors(['invoice']);
+            'patient_id' => $invoice->patient_id,
+        ])->assertMethodNotAllowed();
     }
 
     // ---------- destroy ----------

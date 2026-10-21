@@ -2,18 +2,24 @@
 
 namespace App\Services;
 
+use App\Billing\Actions\DeletePlannedItem;
 use App\Billing\Actions\RecomputeInvoiceTotal;
+use App\Billing\Domain\InvoiceItemState;
+use App\Billing\Domain\InvoiceItemStateResolver;
+use App\Billing\Queries\InvoiceItemFactsReader;
 use App\Billing\Queries\InvoiceItemStateSql;
 use App\Enums\FinancialStatus;
 use App\Enums\InvoiceStatus;
 use App\Exceptions\InvoiceHasPaymentsException;
+use App\Models\Appointment;
 use App\Models\Invoice;
 use App\Models\InvoiceItem;
 use App\Models\PatientTreatment;
 use App\Models\Payment;
 use App\Models\Refund;
+use App\Models\TreatmentTemplate;
+use App\Models\User;
 use App\Support\Billing\InvoiceFinancials;
-use App\Support\Tenancy\CurrentTenant;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -57,55 +63,121 @@ class InvoiceService
         return $query->newestFirst()->paginate($perPage);
     }
 
-    public function create(array $data, string $userId): Invoice
-    {
-        return DB::transaction(function () use ($data, $userId) {
-            $itemsData = $data['items'];
-            unset($data['items']);
-
-            $tenantId = app(CurrentTenant::class)->id();
-            $resolvedItems = [];
-            $totalAmount = 0;
-
-            foreach ($itemsData as $item) {
-                [$price, $description] = $this->resolveItemPriceAndDescription($item, $tenantId);
-                $totalAmount += $price * $item['quantity'];
-
-                $resolvedItems[] = [
-                    'patient_treatment_id' => $item['patient_treatment_id'] ?? null,
-                    'description' => $description,
-                    'price' => $price,
-                    'quantity' => $item['quantity'],
-                ];
-            }
-
-            $invoice = Invoice::create([
-                ...$data,
-                'created_by' => $userId,
-                'total_amount' => $totalAmount,
-                'status' => InvoiceStatus::UNPAID,
-            ]);
-
-            foreach ($resolvedItems as $resolvedItem) {
-                $invoice->items()->create($resolvedItem);
-            }
-
-            app(RecomputeInvoiceTotal::class)->handle($invoice);
-
-            $this->recomputeFinancialStatusesForInvoice($invoice);
-
-            return $invoice->load(array_merge(self::INVOICE_RELATIONS, ['payments.receiver']));
-        });
-    }
-
     public function show(Invoice $invoice): Invoice
     {
         return $invoice->load(array_merge(self::INVOICE_RELATIONS, ['payments.receiver']));
     }
 
-    public function createInitialInvoiceForTreatment(PatientTreatment $treatment, string $userId): ?Invoice
+    public function createVisitFeeInvoiceAtCheckIn(Appointment $appointment, User $actor): void
     {
-        return DB::transaction(function () use ($treatment, $userId) {
+        if ($appointment->service_id === null || $appointment->service_id === '') {
+            return;
+        }
+
+        if (bccomp(bcadd((string) ($appointment->fee ?? 0), '0', 2), '0', 2) <= 0) {
+            return;
+        }
+
+        $appointment->loadMissing('service');
+        if (! $appointment->service instanceof TreatmentTemplate) {
+            return;
+        }
+
+        if (! $appointment->service->category->isVisit()) {
+            return;
+        }
+
+        DB::transaction(function () use ($appointment, $actor) {
+            if (
+                InvoiceItem::query()
+                    ->where('appointment_id', $appointment->id)
+                    ->whereNull('voided_at')
+                    ->lockForUpdate()
+                    ->exists()
+            ) {
+                return;
+            }
+
+            $appointment->loadMissing('service');
+            if (! $appointment->service instanceof TreatmentTemplate) {
+                return;
+            }
+
+            $service = $appointment->service;
+            $description = $service->name_en ?: $service->name_ar ?: 'Visit';
+            $fee = bcadd((string) $appointment->fee, '0', 2);
+
+            $invoice = Invoice::create([
+                'patient_id' => $appointment->patient_id,
+                'appointment_id' => $appointment->id,
+                'treatment_plan_id' => null,
+                'created_by' => $actor->id,
+                'total_amount' => $fee,
+                'status' => InvoiceStatus::UNPAID,
+            ]);
+
+            $invoice->items()->create([
+                'appointment_id' => $appointment->id,
+                'description' => $description,
+                'price' => $fee,
+                'quantity' => 1,
+            ]);
+
+            app(RecomputeInvoiceTotal::class)->handle($invoice);
+        });
+    }
+
+    public function removeVisitFeeInvoiceWhenAppointmentCancelled(Appointment $appointment, User $actor): void
+    {
+        DB::transaction(function () use ($appointment, $actor) {
+            /** @var InvoiceItem|null $item */
+            $item = InvoiceItem::query()
+                ->where('appointment_id', $appointment->id)
+                ->whereNull('voided_at')
+                ->lockForUpdate()
+                ->first();
+
+            if ($item === null) {
+                return;
+            }
+
+            /** @var Invoice|null $invoice */
+            $invoice = Invoice::query()->lockForUpdate()->find($item->invoice_id);
+            if ($invoice === null) {
+                return;
+            }
+
+            if ($invoice->payments()->exists()) {
+                return;
+            }
+
+            $state = app(InvoiceItemStateResolver::class)->resolve(
+                app(InvoiceItemFactsReader::class)->read($item)
+            );
+
+            if ($state === InvoiceItemState::DONE) {
+                return;
+            }
+
+            app(DeletePlannedItem::class)->handle($invoice, $item, $actor);
+
+            $invoice->refresh();
+
+            if ($invoice->items()->exists() || $invoice->payments()->exists()) {
+                return;
+            }
+
+            $invoice->update(['status' => InvoiceStatus::CANCELLED->value]);
+            $invoice->delete();
+        });
+    }
+
+    public function createInitialInvoiceForTreatment(
+        PatientTreatment $treatment,
+        string $userId,
+        ?string $contextAppointmentId = null,
+    ): ?Invoice {
+        return DB::transaction(function () use ($treatment, $userId, $contextAppointmentId) {
             $treatment->load(['template', 'patient']);
 
             $alreadyExists = InvoiceItem::query()
@@ -118,14 +190,26 @@ class InvoiceService
 
             $price = $treatment->total_price;
             $label = $this->treatmentInvoiceDescription($treatment);
+            $planId = $treatment->treatment_plan_id;
 
-            $invoice = Invoice::create([
-                'patient_id' => $treatment->patient_id,
-                'appointment_id' => null,
-                'created_by' => $userId,
-                'total_amount' => $price,
-                'status' => InvoiceStatus::UNPAID,
-            ]);
+            $invoice = null;
+            if ($planId !== null) {
+                $invoice = Invoice::query()
+                    ->where('treatment_plan_id', $planId)
+                    ->lockForUpdate()
+                    ->first();
+            }
+
+            if ($invoice === null) {
+                $invoice = Invoice::create([
+                    'patient_id' => $treatment->patient_id,
+                    'appointment_id' => null,
+                    'treatment_plan_id' => $planId,
+                    'created_by' => $userId,
+                    'total_amount' => $price,
+                    'status' => InvoiceStatus::UNPAID,
+                ]);
+            }
 
             $invoice->items()->create([
                 'patient_treatment_id' => $treatment->id,
@@ -135,6 +219,13 @@ class InvoiceService
             ]);
 
             app(RecomputeInvoiceTotal::class)->handle($invoice);
+
+            if ($planId !== null) {
+                $appointmentId = $this->resolvePlanSourceAppointmentId($treatment, $contextAppointmentId);
+                if ($appointmentId !== null) {
+                    $this->mergeVisitFeeLineIntoPlanInvoice($invoice, $appointmentId);
+                }
+            }
 
             $this->recomputeFinancialStatus($treatment);
 
@@ -198,134 +289,6 @@ class InvoiceService
             }
 
             $this->recomputeFinancialStatus($treatment);
-        });
-    }
-
-    public function createFromTreatment(PatientTreatment $treatment, string $userId): Invoice
-    {
-        return DB::transaction(function () use ($treatment, $userId) {
-            $openInvoiceExists = Invoice::query()
-                ->where('patient_id', $treatment->patient_id)
-                ->whereIn('status', [InvoiceStatus::UNPAID, InvoiceStatus::PARTIAL])
-                ->whereHas('items', fn ($q) => $q->where('patient_treatment_id', $treatment->id))
-                ->exists();
-
-            if ($openInvoiceExists) {
-                throw ValidationException::withMessages([
-                    'patient_treatment_id' => 'An unpaid invoice already exists for this treatment.',
-                ]);
-            }
-
-            $alreadyBilled = InvoiceItem::query()
-                ->where('patient_treatment_id', $treatment->id)
-                ->exists();
-
-            if ($alreadyBilled) {
-                throw ValidationException::withMessages([
-                    'patient_treatment_id' => 'This treatment has already been billed.',
-                ]);
-            }
-
-            $invoice = $this->createInitialInvoiceForTreatment($treatment, $userId);
-
-            if (! $invoice) {
-                throw ValidationException::withMessages([
-                    'patient_treatment_id' => 'Unable to create an invoice for this treatment.',
-                ]);
-            }
-
-            return $invoice;
-        });
-    }
-
-    public function update(Invoice $invoice, array $data): Invoice
-    {
-        return DB::transaction(function () use ($invoice, $data) {
-            $lockedInvoice = Invoice::lockForUpdate()->find($invoice->id);
-
-            InvoiceFinancials::assertMutable($lockedInvoice);
-
-            if ($lockedInvoice->status === InvoiceStatus::PAID) {
-                throw ValidationException::withMessages([
-                    'invoice' => 'Fully paid invoices cannot be updated.',
-                ]);
-            }
-
-            if (array_key_exists('appointment_id', $data)) {
-                throw ValidationException::withMessages([
-                    'appointment_id' => 'The appointment linked to an invoice cannot be changed after creation.',
-                ]);
-            }
-
-            if (
-                isset($data['patient_id'])
-                && $lockedInvoice->status === InvoiceStatus::PARTIAL
-                && (string) $data['patient_id'] !== (string) $lockedInvoice->patient_id
-            ) {
-                throw ValidationException::withMessages([
-                    'patient_id' => 'The patient on an invoice with recorded payments cannot be changed.',
-                ]);
-            }
-
-            $itemsReplaced = false;
-
-            if (isset($data['items'])) {
-                $itemsReplaced = true;
-                $itemsData = $data['items'];
-                unset($data['items']);
-
-                if ($lockedInvoice->status === InvoiceStatus::PARTIAL) {
-                    $onlyTreatmentItems = collect($itemsData)->every(
-                        fn (array $item) => ! empty($item['patient_treatment_id'])
-                    );
-
-                    if (! $onlyTreatmentItems) {
-                        throw ValidationException::withMessages([
-                            'items' => 'Partially paid invoices cannot be updated.',
-                        ]);
-                    }
-                }
-
-                $tenantId = app(CurrentTenant::class)->id();
-                $totalAmount = 0;
-                $resolvedItems = [];
-
-                foreach ($itemsData as $item) {
-                    [$price, $description] = $this->resolveItemPriceAndDescription($item, $tenantId);
-                    $totalAmount += $price * $item['quantity'];
-
-                    $resolvedItems[] = [
-                        'patient_treatment_id' => $item['patient_treatment_id'] ?? null,
-                        'description' => $description,
-                        'price' => $price,
-                        'quantity' => $item['quantity'],
-                    ];
-                }
-
-                $totalPayments = InvoiceFinancials::appliedCredits($lockedInvoice);
-
-                if (bccomp((string) $totalAmount, (string) $totalPayments, 2) === -1) {
-                    throw ValidationException::withMessages([
-                        'items' => 'New total cannot be less than paid amount.',
-                    ]);
-                }
-
-                $lockedInvoice->items()->delete();
-
-                foreach ($resolvedItems as $resolvedItem) {
-                    $lockedInvoice->items()->create($resolvedItem);
-                }
-
-                $lockedInvoice = app(RecomputeInvoiceTotal::class)->handle($lockedInvoice);
-            }
-
-            $lockedInvoice->update($data);
-
-            if (! $itemsReplaced) {
-                $this->recalculateStatus($lockedInvoice);
-            }
-
-            return $lockedInvoice->load(self::INVOICE_RELATIONS);
         });
     }
 
@@ -492,42 +455,6 @@ class InvoiceService
         ];
     }
 
-    /**
-     * @return array{0: float, 1: string|null}
-     */
-    private function resolveItemPriceAndDescription(array $item, string $tenantId): array
-    {
-        if (! empty($item['patient_treatment_id'])) {
-            $treatment = PatientTreatment::with('template')
-                ->where('tenant_id', $tenantId)
-                ->find($item['patient_treatment_id']);
-
-            if (! $treatment) {
-                throw ValidationException::withMessages([
-                    'items' => 'One or more selected treatments are invalid.',
-                ]);
-            }
-
-            $label = $treatment->template?->name_en ?: $treatment->template?->name_ar ?: 'Patient treatment';
-
-            return [
-                isset($item['price']) ? (float) $item['price'] : $treatment->total_price,
-                $item['description'] ?? $this->treatmentInvoiceDescription($treatment),
-            ];
-        }
-
-        if (! isset($item['price'])) {
-            throw ValidationException::withMessages([
-                'items' => 'Price is required when no treatment is selected.',
-            ]);
-        }
-
-        return [
-            (float) $item['price'],
-            $item['description'] ?? null,
-        ];
-    }
-
     private function treatmentInvoiceDescription(PatientTreatment $treatment): string
     {
         $name = $treatment->template?->name_en ?: $treatment->template?->name_ar ?: 'Patient treatment';
@@ -538,5 +465,67 @@ class InvoiceService
         }
 
         return $name.' ('.implode(', ', $teeth).')';
+    }
+
+    private function resolvePlanSourceAppointmentId(
+        PatientTreatment $treatment,
+        ?string $contextAppointmentId,
+    ): ?string {
+        if ($contextAppointmentId !== null && $contextAppointmentId !== '') {
+            return $contextAppointmentId;
+        }
+
+        if ($treatment->treatment_plan_id === null) {
+            return null;
+        }
+
+        $appointmentId = Appointment::query()
+            ->where('patient_id', $treatment->patient_id)
+            ->where('treatment_plan_id', $treatment->treatment_plan_id)
+            ->value('id');
+
+        return $appointmentId !== null ? (string) $appointmentId : null;
+    }
+
+    private function mergeVisitFeeLineIntoPlanInvoice(Invoice $planInvoice, string $appointmentId): void
+    {
+        /** @var InvoiceItem|null $visitItem */
+        $visitItem = InvoiceItem::query()
+            ->where('appointment_id', $appointmentId)
+            ->whereNull('voided_at')
+            ->lockForUpdate()
+            ->first();
+
+        if ($visitItem === null) {
+            return;
+        }
+
+        if ((string) $visitItem->invoice_id === (string) $planInvoice->id) {
+            return;
+        }
+
+        /** @var Invoice|null $visitInvoice */
+        $visitInvoice = Invoice::query()->lockForUpdate()->find($visitItem->invoice_id);
+        if ($visitInvoice === null) {
+            return;
+        }
+
+        if ($visitInvoice->payments()->exists()) {
+            return;
+        }
+
+        $visitItem->update(['invoice_id' => $planInvoice->id]);
+
+        app(RecomputeInvoiceTotal::class)->handle($planInvoice->fresh());
+        app(RecomputeInvoiceTotal::class)->handle($visitInvoice->fresh());
+
+        $visitInvoice->refresh();
+
+        if ($visitInvoice->items()->exists() || $visitInvoice->payments()->exists()) {
+            return;
+        }
+
+        $visitInvoice->update(['status' => InvoiceStatus::CANCELLED->value]);
+        $visitInvoice->delete();
     }
 }

@@ -2,6 +2,9 @@
 
 namespace Tests\Feature\Treatments;
 
+use App\Billing\Domain\InvoiceItemState;
+use App\Billing\Domain\InvoiceItemStateResolver;
+use App\Billing\Queries\InvoiceItemFactsReader;
 use App\Enums\AppointmentStatus;
 use App\Enums\AppointmentType;
 use App\Enums\AuditAction;
@@ -23,6 +26,7 @@ use App\Models\Tenant;
 use App\Models\TreatmentTemplate;
 use App\Models\User;
 use App\Services\DefaultTreatmentTemplatesProvisioner;
+use App\Services\PatientTreatmentService;
 use App\Support\Tenancy\CurrentTenant;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Sanctum\Sanctum;
@@ -116,7 +120,7 @@ class TreatmentTrackingTest extends TestCase
             'agreed_price' => 200,
         ])->assertOk();
 
-        $this->assertSame('100.00', (string) $treatment->teeth()->where('tooth_number', '16')->value('price'));
+        $this->assertSame('250.00', (string) $treatment->teeth()->where('tooth_number', '16')->value('price'));
         $this->assertSame('200.00', (string) $treatment->teeth()->where('tooth_number', '26')->value('price'));
     }
 
@@ -139,7 +143,7 @@ class TreatmentTrackingTest extends TestCase
             ->assertJsonValidationErrors(['dentist_id']);
     }
 
-    public function test_assistant_can_change_tooth_price(): void
+    public function test_assistant_cannot_change_tooth_price_without_permission(): void
     {
         $assistant = User::factory()->create(['tenant_id' => $this->tenant->id, 'role' => UserRole::ASSISTANT]);
         Sanctum::actingAs($assistant, ['*']);
@@ -148,9 +152,7 @@ class TreatmentTrackingTest extends TestCase
 
         $this->patchJson("/api/v1/patient-treatments/{$treatment->id}/teeth", [
             'teeth' => [['tooth_number' => '16', 'price' => 50]],
-        ])->assertOk();
-
-        $this->assertSame('50.00', (string) $treatment->teeth()->where('tooth_number', '16')->value('price'));
+        ])->assertForbidden();
     }
 
     public function test_receptionist_cannot_use_teeth_endpoint(): void
@@ -625,6 +627,48 @@ class TreatmentTrackingTest extends TestCase
         $this->assertSame(0, (int) $response->json('data.agreed_price'));
     }
 
+    public function test_retreat_without_agreed_price_uses_parent_unit_price_not_raised_catalog_default(): void
+    {
+        $treatment = $this->createTreatment(['agreed_price' => 120]);
+        $template = $treatment->template;
+
+        $this->putJson("/api/v1/treatment-templates/{$template->id}", [
+            'name_ar' => $template->name_ar,
+            'name_en' => $template->name_en,
+            'category' => $template->category->value,
+            'scope' => $template->scope->value,
+            'default_price' => 500,
+            'estimated_duration_minutes' => $template->estimated_duration_minutes,
+        ])->assertOk();
+
+        $response = $this->postJson("/api/v1/patient-treatments/{$treatment->id}/retreat")
+            ->assertCreated();
+
+        $this->assertSame(120, (int) $response->json('data.agreed_price'));
+    }
+
+    public function test_retreat_with_explicit_agreed_price_uses_requested_value(): void
+    {
+        $treatment = $this->createTreatment(['agreed_price' => 120]);
+
+        $response = $this->postJson("/api/v1/patient-treatments/{$treatment->id}/retreat", [
+            'agreed_price' => 175,
+        ])->assertCreated();
+
+        $this->assertSame(175, (int) $response->json('data.agreed_price'));
+    }
+
+    public function test_retreat_falls_back_to_template_default_when_parent_has_no_agreed_price(): void
+    {
+        $treatment = $this->createTreatment(['agreed_price' => 120]);
+        $treatment->load('template');
+        $treatment->agreed_price = null;
+
+        $retreatment = app(PatientTreatmentService::class)->retreat($treatment, [], $this->user->id);
+
+        $this->assertSame(250.0, (float) $retreatment->agreed_price);
+    }
+
     public function test_appointment_no_show_does_not_change_clinical_status(): void
     {
         $treatment = $this->createTreatment();
@@ -866,6 +910,94 @@ class TreatmentTrackingTest extends TestCase
         $this->assertSame(PatientTreatmentStatus::PLANNED, $treatment->fresh()->clinical_status);
     }
 
+    public function test_whole_mouth_reopen_clears_completed_at_and_invoice_item_returns_to_planned(): void
+    {
+        $template = $this->createTemplate(TreatmentScope::FULL_MOUTH);
+        $treatment = $this->createTreatment([
+            'treatment_template_id' => $template->id,
+            'agreed_price' => 250,
+            'tooth_numbers' => [],
+        ]);
+
+        $this->patchJson("/api/v1/patient-treatments/{$treatment->id}/status", [
+            'clinical_status' => 'in_progress',
+        ])->assertOk();
+
+        $this->patchJson("/api/v1/patient-treatments/{$treatment->id}/status", [
+            'clinical_status' => 'completed',
+        ])->assertOk();
+
+        $treatment->refresh();
+        $this->assertNotNull($treatment->completed_at);
+
+        $item = $treatment->invoiceItems()->first();
+        $resolver = new InvoiceItemStateResolver;
+        $factsReader = app(InvoiceItemFactsReader::class);
+        $this->assertSame(InvoiceItemState::DONE, $resolver->resolve($factsReader->read($item)));
+
+        $this->patchJson("/api/v1/patient-treatments/{$treatment->id}/status", [
+            'clinical_status' => 'in_progress',
+        ])->assertOk();
+
+        $treatment->refresh();
+        $this->assertSame(PatientTreatmentStatus::IN_PROGRESS, $treatment->clinical_status);
+        $this->assertNull($treatment->completed_at);
+
+        $item->refresh();
+        $item->load(['patientTreatment']);
+        $this->assertSame(InvoiceItemState::IN_PROGRESS, $resolver->resolve($factsReader->read($item)));
+
+        $this->putJson("/api/v1/patient-treatments/{$treatment->id}", [
+            'agreed_price' => 260,
+        ])->assertOk();
+
+        $this->assertEquals(260.0, (float) $treatment->fresh()->agreed_price);
+    }
+
+    public function test_tooth_scoped_treatment_cannot_reopen_via_status_patch(): void
+    {
+        $treatment = $this->createTreatment(['tooth_numbers' => ['16']]);
+
+        $this->patchJson("/api/v1/patient-treatments/{$treatment->id}/teeth", [
+            'teeth' => [['tooth_number' => '16', 'status' => 'in_progress']],
+        ])->assertOk();
+
+        $this->patchJson("/api/v1/patient-treatments/{$treatment->id}/teeth", [
+            'teeth' => [['tooth_number' => '16', 'status' => 'done']],
+        ])->assertOk();
+
+        $treatment->refresh();
+        $this->assertSame(PatientTreatmentStatus::COMPLETED, $treatment->clinical_status);
+
+        $this->patchJson("/api/v1/patient-treatments/{$treatment->id}/status", [
+            'clinical_status' => 'in_progress',
+        ])->assertUnprocessable()
+            ->assertJsonValidationErrors(['clinical_status']);
+
+        $this->assertSame(PatientTreatmentStatus::COMPLETED, $treatment->fresh()->clinical_status);
+    }
+
+    public function test_assistant_cannot_patch_whole_mouth_clinical_status(): void
+    {
+        $template = $this->createTemplate(TreatmentScope::FULL_MOUTH);
+        $treatment = $this->createTreatment([
+            'treatment_template_id' => $template->id,
+            'tooth_numbers' => [],
+        ]);
+
+        $assistant = User::factory()->create([
+            'tenant_id' => $this->tenant->id,
+            'role' => UserRole::ASSISTANT,
+        ]);
+        Sanctum::actingAs($assistant, ['*']);
+
+        $this->patchJson("/api/v1/patient-treatments/{$treatment->id}/status", [
+            'clinical_status' => 'in_progress',
+        ])->assertForbidden();
+
+        $this->assertSame(PatientTreatmentStatus::PLANNED, $treatment->fresh()->clinical_status);
+    }
+
     public function test_changing_a_template_scope_does_not_change_existing_patient_treatments(): void
     {
         $treatment = $this->createTreatment(['tooth_numbers' => ['16']]);
@@ -907,7 +1039,6 @@ class TreatmentTrackingTest extends TestCase
         $payload = array_merge([
             'patient_id' => $patient->id,
             'treatment_template_id' => $template->id,
-            'agreed_price' => 100,
             'tooth_numbers' => ['16'],
         ], $overrides);
 

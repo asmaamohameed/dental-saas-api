@@ -82,9 +82,9 @@ class InvoiceItemControllerTest extends TestCase
             ->assertCreated();
     }
 
-    public function test_receptionist_can_add_an_item_and_total_is_recalculated(): void
+    public function test_owner_can_add_an_item_and_total_is_recalculated(): void
     {
-        $this->actingAsRole(UserRole::RECEPTIONIST);
+        $this->actingAsRole(UserRole::OWNER);
         $invoice = Invoice::factory()->create(['status' => InvoiceStatus::UNPAID, 'total_amount' => 0]);
 
         $this->postJson("/api/v1/invoices/{$invoice->id}/items", $this->manualItemPayload([
@@ -95,13 +95,15 @@ class InvoiceItemControllerTest extends TestCase
         $this->assertEquals(160, $invoice->fresh()->total_amount);
     }
 
-    public function test_cannot_add_an_item_to_a_fully_paid_invoice(): void
+    public function test_owner_can_add_an_item_to_a_fully_paid_invoice(): void
     {
-        $this->actingAsRole(UserRole::RECEPTIONIST);
-        $invoice = Invoice::factory()->create(['status' => InvoiceStatus::PAID]);
+        $this->actingAsRole(UserRole::OWNER);
+        $invoice = Invoice::factory()->create(['status' => InvoiceStatus::PAID, 'total_amount' => 50]);
+        InvoiceItem::factory()->create(['invoice_id' => $invoice->id, 'price' => 50, 'quantity' => 1]);
+        Payment::factory()->create(['invoice_id' => $invoice->id, 'amount' => 50]);
 
         $this->postJson("/api/v1/invoices/{$invoice->id}/items", $this->manualItemPayload())
-            ->assertStatus(403);
+            ->assertCreated();
     }
 
     public function test_update_rejects_a_new_total_lower_than_payments_already_received(): void
@@ -118,7 +120,8 @@ class InvoiceItemControllerTest extends TestCase
 
         $this->putJson("/api/v1/invoices/{$invoice->id}/items/{$item->id}", [
             'quantity' => 1,
-        ])->assertStatus(422)->assertJsonValidationErrors(['quantity']);
+        ])->assertStatus(422)->assertJsonValidationErrors(['quantity'])
+            ->assertJsonPath('errors.quantity.0', __('billing.total_below_settled'));
     }
 
     public function test_update_returns_404_when_item_does_not_belong_to_the_invoice(): void

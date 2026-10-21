@@ -4,45 +4,11 @@ namespace Tests\Feature\Billing;
 
 use App\Enums\UserRole;
 use App\Models\Invoice;
-use App\Models\Patient;
 use App\Models\Payment;
-use App\Models\Tenant;
-use App\Support\Tenancy\CurrentTenant;
 use Tests\TestCase;
 
 class InvoiceCrudTest extends TestCase
 {
-    public function test_invoice_total_uses_submitted_price_for_manual_line(): void
-    {
-        $tenant = Tenant::factory()->create();
-        app(CurrentTenant::class)->set($tenant->id);
-        $patient = Patient::factory()->create();
-
-        $this->actingAsTenantUser($tenant, UserRole::RECEPTIONIST);
-
-        $this->postJson('/api/v1/invoices', [
-            'patient_id' => $patient->id,
-            'items' => [
-                ['price' => 200, 'description' => 'Custom billing line item', 'quantity' => 2],
-            ],
-        ])->assertCreated();
-
-        $this->assertDatabaseHas('invoices', ['patient_id' => $patient->id, 'total_amount' => 400]);
-    }
-
-    public function test_doctor_cannot_create_an_invoice(): void
-    {
-        $this->actingAsTenantUser(role: UserRole::DOCTOR);
-        $patient = Patient::factory()->create();
-
-        $this->postJson('/api/v1/invoices', [
-            'patient_id' => $patient->id,
-            'items' => [
-                ['price' => 100, 'description' => 'Manual charge line', 'quantity' => 1],
-            ],
-        ])->assertCreated();
-    }
-
     public function test_receptionist_cannot_delete_an_invoice(): void
     {
         $this->actingAsTenantUser(role: UserRole::RECEPTIONIST);

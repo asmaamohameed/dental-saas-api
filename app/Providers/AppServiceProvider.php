@@ -5,6 +5,7 @@ namespace App\Providers;
 use App\Auth\TenantAwareUserProvider;
 use App\Models\PersonalAccessToken;
 use App\Models\User;
+use App\Support\Roles\ClinicPermissionCatalog;
 use App\Support\Roles\ClinicPermissionGate;
 use App\Support\Tenancy\CurrentTenant;
 use Illuminate\Cache\RateLimiting\Limit;
@@ -35,7 +36,25 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        Gate::define('canChangePrice', fn (User $_user): bool => true);
+        Gate::define('canChangePrice', function (User $user): bool {
+            if ($user->isOwner()) {
+                return true;
+            }
+
+            foreach ($user->currentClinicRoleNames() as $role) {
+                if (! isset(ClinicPermissionCatalog::baseline()[$role])) {
+                    continue;
+                }
+
+                $baseline = ClinicPermissionCatalog::baseline()[$role]['treatment:change_price'] ?? false;
+
+                if ($user->clinicCan('treatment:change_price', $baseline)) {
+                    return true;
+                }
+            }
+
+            return false;
+        });
 
         Model::preventLazyLoading(! app()->isProduction());
 

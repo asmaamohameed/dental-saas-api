@@ -33,7 +33,7 @@ class InvoiceItemPolicy
 
     public function create(User $user, Invoice $invoice): bool
     {
-        if (in_array($invoice->status, [InvoiceStatus::PAID, InvoiceStatus::REFUNDED, InvoiceStatus::CANCELLED], true)) {
+        if (in_array($invoice->status, [InvoiceStatus::REFUNDED, InvoiceStatus::CANCELLED], true)) {
             return false;
         }
 
@@ -48,7 +48,7 @@ class InvoiceItemPolicy
 
     public function update(User $user, InvoiceItem $invoiceItem): bool
     {
-        if (in_array($invoiceItem->invoice->status, [InvoiceStatus::PAID, InvoiceStatus::REFUNDED, InvoiceStatus::CANCELLED], true)) {
+        if (in_array($invoiceItem->invoice->status, [InvoiceStatus::REFUNDED, InvoiceStatus::CANCELLED], true)) {
             return false;
         }
 
@@ -63,7 +63,7 @@ class InvoiceItemPolicy
 
     public function delete(User $user, InvoiceItem $invoiceItem): bool
     {
-        if (in_array($invoiceItem->invoice->status, [InvoiceStatus::PAID, InvoiceStatus::REFUNDED, InvoiceStatus::CANCELLED], true)) {
+        if (in_array($invoiceItem->invoice->status, [InvoiceStatus::REFUNDED, InvoiceStatus::CANCELLED], true)) {
             return false;
         }
 

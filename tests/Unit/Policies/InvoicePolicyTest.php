@@ -59,11 +59,11 @@ class InvoicePolicyTest extends TestCase
         $this->assertTrue($this->policy->updateItems($receptionist, $this->invoice(InvoiceStatus::UNPAID)));
     }
 
-    public function test_update_items_denies_receptionist_on_partial_invoice(): void
+    public function test_update_items_allows_receptionist_on_partial_invoice(): void
     {
         $receptionist = $this->user(UserRole::RECEPTIONIST);
 
-        $this->assertFalse($this->policy->updateItems($receptionist, $this->invoice(InvoiceStatus::PARTIAL)));
+        $this->assertTrue($this->policy->updateItems($receptionist, $this->invoice(InvoiceStatus::PARTIAL)));
     }
 
     public function test_update_items_allows_owner_on_partial_invoice_via_direct_call(): void
@@ -82,20 +82,28 @@ class InvoicePolicyTest extends TestCase
         ]);
     }
 
-    public function test_update_items_ability_now_explicitly_denies_doctor_independent_of_middleware(): void
+    public function test_update_items_ability_allows_doctor_on_partial_invoice(): void
     {
         $doctor = User::factory()->create(['tenant_id' => $this->tenant->id, 'role' => UserRole::DOCTOR]);
         $invoice = $this->persistedInvoice(InvoiceStatus::PARTIAL);
 
-        $this->assertFalse(Gate::forUser($doctor)->allows('updateItems', $invoice));
+        $this->assertTrue(Gate::forUser($doctor)->allows('updateItems', $invoice));
     }
 
-    public function test_update_items_ability_still_denies_receptionist_on_partial_invoice(): void
+    public function test_update_items_ability_allows_receptionist_on_partial_invoice(): void
     {
         $receptionist = User::factory()->create(['tenant_id' => $this->tenant->id, 'role' => UserRole::RECEPTIONIST]);
         $invoice = $this->persistedInvoice(InvoiceStatus::PARTIAL);
 
-        $this->assertFalse(Gate::forUser($receptionist)->allows('updateItems', $invoice));
+        $this->assertTrue(Gate::forUser($receptionist)->allows('updateItems', $invoice));
+    }
+
+    public function test_update_items_denies_refunded_and_cancelled(): void
+    {
+        $receptionist = User::factory()->create(['tenant_id' => $this->tenant->id, 'role' => UserRole::RECEPTIONIST]);
+
+        $this->assertFalse(Gate::forUser($receptionist)->allows('updateItems', $this->persistedInvoice(InvoiceStatus::REFUNDED)));
+        $this->assertFalse(Gate::forUser($receptionist)->allows('updateItems', $this->persistedInvoice(InvoiceStatus::CANCELLED)));
     }
 
     public function test_update_items_ability_still_allows_owner_regardless_of_status(): void

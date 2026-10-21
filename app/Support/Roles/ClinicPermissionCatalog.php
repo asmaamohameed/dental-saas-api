@@ -32,8 +32,8 @@ class ClinicPermissionCatalog
             'treatment:edit' => 'Edit treatments',
             'treatment:delete' => 'Delete treatments',
             'treatment:toggleActive' => 'Activate or deactivate treatments',
+            'treatment:change_price' => 'Change treatment and manual invoice line prices',
             'invoice:view' => 'View invoices',
-            'invoice:create' => 'Create invoices',
             'invoice:edit' => 'Edit invoices',
             'invoice:delete' => 'Delete invoices',
             'invoice:refund' => 'Refund invoices',
@@ -122,6 +122,8 @@ class ClinicPermissionCatalog
         $assistant['inventory:transact'] = false;
         $clinical['inventory:alerts'] = false;
         $assistant['inventory:alerts'] = false;
+        $receptionist['treatment:change_price'] = false;
+        $assistant['treatment:change_price'] = false;
 
         return [
             'owner' => $owner,
@@ -188,6 +190,9 @@ class ClinicPermissionCatalog
         $assistant['dashboard:financials'] = false;
         $assistant['expense:view'] = false;
         $assistant['expense:create'] = false;
+
+        $assistant['treatment:change_price'] = false;
+        $receptionist['treatment:change_price'] = false;
 
         return [
             'owner' => $allow,

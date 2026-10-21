@@ -15,7 +15,9 @@ use App\Http\Requests\V1\Appointment\UpdateAppointmentStatusRequest;
 use App\Http\Resources\V1\AppointmentResource;
 use App\Http\Resources\V1\UnresolvedAppointmentResource;
 use App\Models\Appointment;
+use App\Models\User;
 use App\Services\AppointmentService;
+use App\Services\InvoiceService;
 use App\Services\PatientTreatmentService;
 use App\Traits\ApiResponse;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
@@ -31,6 +33,7 @@ class AppointmentController extends Controller
     public function __construct(
         private readonly PatientTreatmentService $patientTreatmentService,
         private readonly AppointmentService $appointmentService,
+        private readonly InvoiceService $invoiceService,
     ) {}
 
     public function index(Request $request)
@@ -318,7 +321,10 @@ class AppointmentController extends Controller
             $doctorChanged = true;
         }
 
-        DB::transaction(function () use ($appointment, $doctorChanged): void {
+        /** @var User $actor */
+        $actor = $request->user();
+
+        DB::transaction(function () use ($appointment, $doctorChanged, $newStatus, $previousStatus, $actor): void {
             $appointment->save();
 
             if ($doctorChanged) {
@@ -326,6 +332,14 @@ class AppointmentController extends Controller
                     $appointment->id,
                     (string) $appointment->doctor_id
                 );
+            }
+
+            if ($newStatus === AppointmentStatus::CHECKED_IN && $previousStatus !== AppointmentStatus::CHECKED_IN) {
+                $this->invoiceService->createVisitFeeInvoiceAtCheckIn($appointment, $actor);
+            }
+
+            if (in_array($newStatus, [AppointmentStatus::CANCELLED, AppointmentStatus::NO_SHOW], true)) {
+                $this->invoiceService->removeVisitFeeInvoiceWhenAppointmentCancelled($appointment, $actor);
             }
         });
 

@@ -3,6 +3,7 @@ name: Deploy and Migrate to Namecheap
 on:
   push:
     branches: [main]
+  workflow_dispatch:
 
 jobs:
   deploy:

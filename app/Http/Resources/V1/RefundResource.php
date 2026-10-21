@@ -21,6 +21,7 @@ class RefundResource extends JsonResource
             'invoice_id' => $this->invoice_id,
             'invoice_item_id' => $this->invoice_item_id,
             'amount' => (float) $this->amount,
+            'type' => $this->type->value,
             'reason_code' => $this->reason_code->value,
             'reason_note' => $this->reason_note,
             'method' => $this->method,

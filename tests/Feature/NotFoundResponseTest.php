@@ -31,7 +31,7 @@ class NotFoundResponseTest extends TestCase
         $response = $this->getJson("/api/v1/patients/{$nonExistentId}");
 
         $response->assertStatus(404);
-        $response->assertJsonPath('message', 'Resource not found.');
+        $response->assertJsonPath('message', __('errors.not_found'));
 
         $body = $response->getContent();
         $this->assertStringNotContainsString('App\\Models\\Patient', $body);

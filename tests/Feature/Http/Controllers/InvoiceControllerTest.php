@@ -174,7 +174,7 @@ class InvoiceControllerTest extends TestCase
 
         $this->deleteJson("/api/v1/invoices/{$invoice->id}")
             ->assertStatus(422)
-            ->assertJsonPath('message', 'Cannot cancel an invoice that has recorded payments.');
+            ->assertJsonPath('message', __('billing.invoice_has_payments'));
 
         $this->assertDatabaseHas('invoices', ['id' => $invoice->id, 'deleted_at' => null]);
     }

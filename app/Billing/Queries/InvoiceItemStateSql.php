@@ -126,6 +126,7 @@ SQL;
 
         $performedPredicate = '('.$this->countsAsPerformedSql().') = 1';
         $cancelled = InvoiceStatus::CANCELLED->value;
+        $refunded = InvoiceStatus::REFUNDED->value;
 
         $sql = 'SELECT COALESCE(SUM(GREATEST(0::numeric, '
             .'COALESCE(performed.performed_total, 0::numeric) - ('
@@ -138,7 +139,8 @@ SQL;
             .'COALESCE(SUM(CASE WHEN '.$performedPredicate.' THEN (ii.price * ii.quantity) ELSE 0 END), 0) AS performed_total '
             .$this->fromSql()
             .' INNER JOIN invoices inner_inv ON inner_inv.id = ii.invoice_id '
-            .'AND inner_inv.tenant_id = ? AND inner_inv.deleted_at IS NULL AND inner_inv.status <> ? '
+            .'AND inner_inv.tenant_id = ? AND inner_inv.deleted_at IS NULL '
+            .'AND inner_inv.status NOT IN (?, ?) '
             .'GROUP BY ii.invoice_id'
             .') performed ON performed.invoice_id = inv.id '
             .'LEFT JOIN ('
@@ -148,9 +150,9 @@ SQL;
             .'LEFT JOIN ('
             .'SELECT invoice_id, SUM(amount) AS refunded FROM refunds GROUP BY invoice_id'
             .') refunds ON refunds.invoice_id = inv.id '
-            .'WHERE inv.deleted_at IS NULL AND inv.status <> ? AND inv.tenant_id = ?';
+            .'WHERE inv.deleted_at IS NULL AND inv.status NOT IN (?, ?) AND inv.tenant_id = ?';
 
-        $record = DB::selectOne($sql, [$tenantId, $cancelled, $cancelled, $tenantId]);
+        $record = DB::selectOne($sql, [$tenantId, $cancelled, $refunded, $cancelled, $refunded, $tenantId]);
 
         if (! is_object($record)) {
             return 0.0;

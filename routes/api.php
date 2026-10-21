@@ -18,6 +18,9 @@ use App\Http\Controllers\Api\V1\InventoryItemController;
 use App\Http\Controllers\Api\V1\InventoryTransactionController;
 use App\Http\Controllers\Api\V1\InvoiceController;
 use App\Http\Controllers\Api\V1\InvoiceItemController;
+use App\Http\Controllers\Api\V1\LabController;
+use App\Http\Controllers\Api\V1\LabWorkController;
+use App\Http\Controllers\Api\V1\LabWorkTypeController;
 use App\Http\Controllers\Api\V1\PatientController;
 use App\Http\Controllers\Api\V1\PatientTreatmentController;
 use App\Http\Controllers\Api\V1\PaymentController;
@@ -62,6 +65,7 @@ Route::prefix('v1')->group(function () {
         Route::post('patients/{patient}/tooth-records', [ToothRecordController::class, 'store']);
         Route::get('patients/{patient}/odontogram', [ToothRecordController::class, 'odontogram']);
         Route::get('patients/{patient}/treatments', [PatientTreatmentController::class, 'forPatient']);
+        Route::get('patients/{patient}/lab-works', [LabWorkController::class, 'forPatient']);
         Route::get('patients/{patient}/next-treatment', [PatientTreatmentController::class, 'next']);
         Route::get('patients/{patient}/treatment-plans', [TreatmentPlanController::class, 'index'])->middleware('clinic.permission:patient:view');
         Route::get('patients/{patient}/xray-attachments', [XrayAttachmentController::class, 'index']);
@@ -109,6 +113,19 @@ Route::prefix('v1')->group(function () {
 
         // Inventory
         Route::apiResource('inventory-items', InventoryItemController::class)->parameters(['inventory-items' => 'inventoryItem']);
+
+        // External labs and cases sent to them
+        Route::get('lab-works/summary', [LabWorkController::class, 'summary']);
+        Route::apiResource('labs', LabController::class);
+        Route::get('lab-work-types', [LabWorkTypeController::class, 'index']);
+        Route::post('lab-work-types', [LabWorkTypeController::class, 'store']);
+        Route::delete('lab-work-types/{labWorkType}', [LabWorkTypeController::class, 'destroy']);
+        Route::patch('labs/{lab}/deactivate', [LabController::class, 'deactivate']);
+        Route::patch('labs/{lab}/reactivate', [LabController::class, 'reactivate']);
+        Route::apiResource('lab-works', LabWorkController::class)
+            ->parameters(['lab-works' => 'labWork'])
+            ->except(['destroy']);
+        Route::patch('lab-works/{labWork}/status', [LabWorkController::class, 'updateStatus']);
         Route::get('inventory-items/{inventoryItem}/transactions', [InventoryTransactionController::class, 'index']);
         Route::post('inventory-items/{inventoryItem}/transactions', [InventoryTransactionController::class, 'store']);
         Route::patch('inventory-items/{inventoryItem}/restore', [InventoryItemController::class, 'restore']);

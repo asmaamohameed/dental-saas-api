@@ -11,7 +11,7 @@ use Tests\TestCase;
 
 class InvoiceFinancialsTest extends TestCase
 {
-    public function test_remaining_uses_ledger_even_when_status_is_refunded(): void
+    public function test_refunded_invoice_has_zero_remaining_and_is_not_refundable(): void
     {
         $this->actingAsTenantUser();
         $invoice = Invoice::factory()->refunded()->create(['total_amount' => 200]);
@@ -19,8 +19,8 @@ class InvoiceFinancialsTest extends TestCase
 
         $fresh = $invoice->fresh(['payments', 'refunds']);
 
-        $this->assertSame(150.0, InvoiceFinancials::remainingAmount($fresh));
-        $this->assertTrue(InvoiceFinancials::isRefundable($fresh));
+        $this->assertSame(0.0, InvoiceFinancials::remainingAmount($fresh));
+        $this->assertFalse(InvoiceFinancials::isRefundable($fresh));
     }
 
     public function test_cancelled_invoice_has_zero_remaining_and_is_not_refundable(): void

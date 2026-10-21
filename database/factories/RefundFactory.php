@@ -3,6 +3,7 @@
 namespace Database\Factories;
 
 use App\Enums\RefundReasonCode;
+use App\Enums\RefundType;
 use App\Models\Invoice;
 use App\Models\Refund;
 use App\Models\User;
@@ -20,6 +21,7 @@ class RefundFactory extends Factory
         return [
             'invoice_id' => Invoice::factory(),
             'amount' => 50,
+            'type' => RefundType::PARTIAL,
             'reason_code' => RefundReasonCode::DUPLICATE_PAYMENT,
             'reason_note' => null,
             'method' => 'cash',

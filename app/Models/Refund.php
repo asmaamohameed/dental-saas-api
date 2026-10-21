@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\RefundReasonCode;
+use App\Enums\RefundType;
 use App\Models\Concerns\Auditable;
 use App\Models\Concerns\BelongsToTenant;
 use Illuminate\Database\Eloquent\Builder;
@@ -18,6 +19,7 @@ use Illuminate\Support\Carbon;
  * @property string $invoice_id
  * @property string|null $invoice_item_id
  * @property string $amount
+ * @property RefundType $type
  * @property RefundReasonCode $reason_code
  * @property string|null $reason_note
  * @property string $method
@@ -35,6 +37,7 @@ class Refund extends Model
         'invoice_id',
         'invoice_item_id',
         'amount',
+        'type',
         'reason_code',
         'reason_note',
         'method',
@@ -46,6 +49,7 @@ class Refund extends Model
     {
         return [
             'amount' => 'decimal:2',
+            'type' => RefundType::class,
             'reason_code' => RefundReasonCode::class,
             'refunded_at' => 'datetime',
         ];

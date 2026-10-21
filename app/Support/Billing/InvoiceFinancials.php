@@ -60,7 +60,7 @@ final class InvoiceFinancials
 
     public static function remainingAmount(Invoice $invoice): float
     {
-        if ($invoice->status === InvoiceStatus::CANCELLED) {
+        if ($invoice->status === InvoiceStatus::CANCELLED || $invoice->status === InvoiceStatus::REFUNDED) {
             return 0.0;
         }
 
@@ -74,7 +74,7 @@ final class InvoiceFinancials
 
     public static function isRefundable(Invoice $invoice): bool
     {
-        if ($invoice->status === InvoiceStatus::CANCELLED) {
+        if ($invoice->status === InvoiceStatus::CANCELLED || $invoice->status === InvoiceStatus::REFUNDED) {
             return false;
         }
 
@@ -101,6 +101,12 @@ final class InvoiceFinancials
         if ($invoice->status === InvoiceStatus::CANCELLED) {
             throw ValidationException::withMessages([
                 'invoice' => 'A cancelled invoice cannot be modified.',
+            ]);
+        }
+
+        if ($invoice->status === InvoiceStatus::REFUNDED) {
+            throw ValidationException::withMessages([
+                'invoice' => 'A refunded invoice cannot be modified.',
             ]);
         }
     }

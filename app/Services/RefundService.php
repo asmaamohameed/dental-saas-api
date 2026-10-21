@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Enums\InvoiceStatus;
 use App\Enums\RefundReasonCode;
+use App\Enums\RefundType;
 use App\Models\Invoice;
 use App\Models\InvoiceItem;
 use App\Models\Refund;
@@ -94,6 +95,12 @@ class RefundService
                 ]);
             }
 
+            if ($lockedInvoice->status === InvoiceStatus::REFUNDED) {
+                throw ValidationException::withMessages([
+                    'invoice' => 'A refunded invoice cannot be modified.',
+                ]);
+            }
+
             $netPaid = bcadd((string) InvoiceFinancials::netPaid($lockedInvoice), '0', 2);
 
             if (bccomp($netPaid, '0', 2) !== 1) {
@@ -102,7 +109,15 @@ class RefundService
                 ]);
             }
 
-            $amount = bcadd((string) ($data['amount'] ?? '0'), '0', 2);
+            $requestedType = isset($data['type'])
+                ? RefundType::tryFrom((string) $data['type'])
+                : null;
+
+            if ($requestedType === RefundType::FULL) {
+                $amount = $netPaid;
+            } else {
+                $amount = bcadd((string) ($data['amount'] ?? '0'), '0', 2);
+            }
 
             if (bccomp($amount, '0', 2) !== 1) {
                 throw ValidationException::withMessages([
@@ -115,6 +130,10 @@ class RefundService
                     'amount' => "The refund amount ({$amount}) cannot exceed net paid ({$netPaid}).",
                 ]);
             }
+
+            $type = $requestedType === RefundType::FULL
+                ? RefundType::FULL
+                : RefundType::PARTIAL;
 
             $invoiceItemId = $data['invoice_item_id'] ?? null;
             if ($invoiceItemId !== null) {
@@ -163,6 +182,7 @@ class RefundService
             /** @var Refund $refund */
             $refund = $lockedInvoice->refunds()->create([
                 'amount' => $amount,
+                'type' => $type,
                 'invoice_item_id' => $invoiceItemId,
                 'reason_code' => $reasonCode,
                 'reason_note' => $reasonNote,

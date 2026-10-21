@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Billing\Queries\InvoiceItemStateSql;
 use App\Enums\AppointmentStatus;
 use App\Enums\ExpenseCategory;
 use App\Enums\InvoiceStatus;
@@ -86,10 +87,7 @@ class DashboardService
         $netProfitMtd = $netCollectedMtd - $totalExpensesMtd;
         $collectionRateMtd = $totalInvoicedMtd > 0 ? round(($netCollectedMtd / $totalInvoicedMtd) * 100, 1) : 0.0;
 
-        $outstandingAllTime = (float) Invoice::query()
-            ->whereIn('status', [InvoiceStatus::UNPAID->value, InvoiceStatus::PARTIAL->value])
-            ->get()
-            ->sum(fn (Invoice $invoice) => InvoiceFinancials::remainingAmount($invoice));
+        $outstandingPerformedAllTime = app(InvoiceItemStateSql::class)->sumOutstandingPerformedAllTime();
 
         $overdueAmount = (float) Invoice::whereIn('status', [InvoiceStatus::UNPAID->value, InvoiceStatus::PARTIAL->value])
             ->where('created_at', '<', $now->copy()->startOfDay())
@@ -149,7 +147,7 @@ class DashboardService
                 'total_expenses_mtd' => $totalExpensesMtd,
                 'net_profit_mtd' => $netProfitMtd,
                 'collection_rate_mtd' => $collectionRateMtd,
-                'outstanding_balance_all_time' => $outstandingAllTime,
+                'outstanding_performed_all_time' => $outstandingPerformedAllTime,
                 'overdue_amount_all_time' => $overdueAmount,
             ],
             'refunds_by_reason_mtd' => $this->refundsByReason($startMtd, $endMtd),

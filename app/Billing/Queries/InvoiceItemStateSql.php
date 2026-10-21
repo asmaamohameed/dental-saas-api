@@ -2,6 +2,8 @@
 
 namespace App\Billing\Queries;
 
+use App\Enums\InvoiceStatus;
+use App\Support\Tenancy\CurrentTenant;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -109,6 +111,54 @@ SQL;
             'total' => $this->numericString($values['total'] ?? null),
             'performed_total' => $this->numericString($values['performed_total'] ?? null),
         ];
+    }
+
+    /**
+     * Sum max(0, performed_total - settled) over non-cancelled tenant invoices.
+     * Performed lines use countsAsPerformedSql(); settled matches InvoiceBalance (net paid + deduct).
+     */
+    public function sumOutstandingPerformedAllTime(): float
+    {
+        $tenantId = app(CurrentTenant::class)->id();
+        if ($tenantId === null || $tenantId === '') {
+            throw new \RuntimeException('Cannot sum outstanding performed work without a tenant context.');
+        }
+
+        $performedPredicate = '('.$this->countsAsPerformedSql().') = 1';
+        $cancelled = InvoiceStatus::CANCELLED->value;
+
+        $sql = 'SELECT COALESCE(SUM(GREATEST(0::numeric, '
+            .'COALESCE(performed.performed_total, 0::numeric) - ('
+            .'GREATEST(0::numeric, COALESCE(payments.gross_paid, 0::numeric) - COALESCE(refunds.refunded, 0::numeric))'
+            .'+ COALESCE(payments.deducted, 0::numeric)'
+            .'))), 0::numeric) AS outstanding '
+            .'FROM invoices inv '
+            .'LEFT JOIN ('
+            .'SELECT ii.invoice_id, '
+            .'COALESCE(SUM(CASE WHEN '.$performedPredicate.' THEN (ii.price * ii.quantity) ELSE 0 END), 0) AS performed_total '
+            .$this->fromSql()
+            .' INNER JOIN invoices inner_inv ON inner_inv.id = ii.invoice_id '
+            .'AND inner_inv.tenant_id = ? AND inner_inv.deleted_at IS NULL AND inner_inv.status <> ? '
+            .'GROUP BY ii.invoice_id'
+            .') performed ON performed.invoice_id = inv.id '
+            .'LEFT JOIN ('
+            .'SELECT invoice_id, SUM(amount) AS gross_paid, SUM(deduct_amount) AS deducted '
+            .'FROM payments GROUP BY invoice_id'
+            .') payments ON payments.invoice_id = inv.id '
+            .'LEFT JOIN ('
+            .'SELECT invoice_id, SUM(amount) AS refunded FROM refunds GROUP BY invoice_id'
+            .') refunds ON refunds.invoice_id = inv.id '
+            .'WHERE inv.deleted_at IS NULL AND inv.status <> ? AND inv.tenant_id = ?';
+
+        $record = DB::selectOne($sql, [$tenantId, $cancelled, $cancelled, $tenantId]);
+
+        if (! is_object($record)) {
+            return 0.0;
+        }
+
+        $values = get_object_vars($record);
+
+        return (float) $this->numericString($values['outstanding'] ?? null);
     }
 
     private function numericString(mixed $value): string

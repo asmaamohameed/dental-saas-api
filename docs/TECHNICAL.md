@@ -129,6 +129,8 @@ Enums live in `app/Enums/UserRole.php`:
 | Key | Owner | Doctor | Assistant | Receptionist | Routes |
 |-----|-------|--------|-----------|--------------|--------|
 | `dashboard:financials` | yes | no | no | yes | All seven `GET /dashboard/*` analytics routes: `financial-analytics`, `income-expense`, `patients`, `cashflow`, `expense-breakdown`, `invoice-status`, `refund-breakdown` |
+
+`GET /dashboard/financial-analytics` includes `kpis.outstanding_performed_all_time`: the sum over non-cancelled tenant invoices of `max(0, performed_total − settled)`, where performed lines use the same SQL as `InvoiceItemStateSql::countsAsPerformedSql()` (done treatment/visit lines and live manual lines; voided lines are not performed). `kpis.overdue_amount_all_time` is unchanged (remaining on unpaid/partial invoices created before today).
 | `expense:view` | yes | no | no | yes | `GET /expenses` |
 | `expense:create` | yes | no | no | yes | `POST /expenses` |
 | `treatment:view` | yes | yes | yes | yes | `GET /treatment-templates`, `GET /treatment-templates/{id}` |

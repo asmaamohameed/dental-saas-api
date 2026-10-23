@@ -65,7 +65,7 @@ class LoadTestSeeder extends Seeder
                 DB::table($table)->whereIn('tenant_id', $loadTestTenantIds)->delete();
             }
             DB::table('tenants')->whereIn('id', $loadTestTenantIds)->delete();
-            $this->command->info('Cleanup complete: removed '.count($loadTestTenantIds).' previous tenants.');
+            $this->command->info('Cleanup complete: removed ' . count($loadTestTenantIds) . ' previous tenants.');
         }
 
         /*
@@ -74,10 +74,11 @@ class LoadTestSeeder extends Seeder
         |--------------------------------------------------------------------------
         */
 
-        $tenantCount = 1; // Set to 1 for testing, 10 for full run
-        $patientsPerTenant = 1_00;
-        $appointmentsPerTenant = 50;
-        $chunkSize = 2_0;
+
+        $tenantCount = 3;
+        $patientsPerTenant = 20_000;
+        $appointmentsPerTenant = 60_000;
+        $chunkSize = 1_000;
         $passwordHash = Hash::make('password');
 
         // Appointment status distribution: 60% completed, 20% scheduled, 10% cancelled, 10% no_show
@@ -156,7 +157,7 @@ class LoadTestSeeder extends Seeder
                     'tenant_id' => $tenantId,
                     'name' => "Owner {$t}",
                     'email' => $ownerEmail,
-                    'phone' => '+200'.random_int(1000000, 9999999),
+                    'phone' => '+200' . random_int(1000000, 9999999),
                     'password_hash' => $passwordHash,
                     'role' => 'owner',
                     'is_active' => true,
@@ -177,7 +178,7 @@ class LoadTestSeeder extends Seeder
                         'tenant_id' => $tenantId,
                         'name' => "Dr. Doctor {$t}-{$d}",
                         'email' => $doctorEmail,
-                        'phone' => '+200'.random_int(1000000, 9999999),
+                        'phone' => '+200' . random_int(1000000, 9999999),
                         'password_hash' => $passwordHash,
                         'role' => 'doctor',
                         'is_active' => true,
@@ -200,7 +201,7 @@ class LoadTestSeeder extends Seeder
                         'tenant_id' => $tenantId,
                         'name' => "Receptionist {$t}-{$r}",
                         'email' => $recEmail,
-                        'phone' => '+200'.random_int(1000000, 9999999),
+                        'phone' => '+200' . random_int(1000000, 9999999),
                         'password_hash' => $passwordHash,
                         'role' => 'receptionist',
                         'is_active' => true,
@@ -232,7 +233,7 @@ class LoadTestSeeder extends Seeder
                         'id' => Str::uuid()->toString(),
                         'tenant_id' => $tenantId,
                         'full_name' => "Patient {$t}-{$num}",
-                        'phone' => '+200'.str_pad((string) $num, 9, '0', STR_PAD_LEFT),
+                        'phone' => '+200' . str_pad((string) $num, 9, '0', STR_PAD_LEFT),
                         'date_of_birth' => Carbon::now()
                             ->subYears(20 + ($num % 50))
                             ->subDays($num % 365)
@@ -252,7 +253,7 @@ class LoadTestSeeder extends Seeder
                 ->pluck('id')
                 ->toArray();
 
-            $this->command->info("[Tenant {$t}] Patients done: ".count($patientIds));
+            $this->command->info("[Tenant {$t}] Patients done: " . count($patientIds));
 
             /*
             |------------------------------------------------------------------
@@ -346,7 +347,7 @@ class LoadTestSeeder extends Seeder
 
             $completedAppointments = $allAppointments->where('status', 'completed')->values();
 
-            $this->command->info("[Tenant {$t}] Completed appointments for invoicing: ".$completedAppointments->count());
+            $this->command->info("[Tenant {$t}] Completed appointments for invoicing: " . $completedAppointments->count());
 
             /*
             |------------------------------------------------------------------
@@ -418,7 +419,7 @@ class LoadTestSeeder extends Seeder
                 ->pluck('id')
                 ->toArray();
 
-            $this->command->info("[Tenant {$t}] Invoices done: ".count($invoiceIds));
+            $this->command->info("[Tenant {$t}] Invoices done: " . count($invoiceIds));
 
             /*
             |------------------------------------------------------------------
@@ -498,7 +499,7 @@ class LoadTestSeeder extends Seeder
             $invoiceService = app(InvoiceService::class);
             Invoice::query()
                 ->where('tenant_id', $tenantId)
-                ->each(fn (Invoice $invoice) => $invoiceService->recalculateStatus($invoice));
+                ->each(fn(Invoice $invoice) => $invoiceService->recalculateStatus($invoice));
 
             $this->command->info("[Tenant {$t}] Payments done.");
 

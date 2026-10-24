@@ -12,8 +12,9 @@ use App\Models\Expense;
 use App\Models\Invoice;
 use App\Models\Payment;
 use App\Models\Refund;
-use App\Support\Billing\InvoiceFinancials;
+use App\Support\Tenancy\CurrentTenant;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 
 class DashboardService
 {
@@ -91,10 +92,7 @@ class DashboardService
 
         $outstandingPerformedAllTime = app(InvoiceItemStateSql::class)->sumOutstandingPerformedAllTime();
 
-        $overdueAmount = (float) Invoice::whereIn('status', [InvoiceStatus::UNPAID->value, InvoiceStatus::PARTIAL->value])
-            ->where('created_at', '<', $now->copy()->startOfDay())
-            ->get()
-            ->sum(fn (Invoice $invoice) => InvoiceFinancials::remainingAmount($invoice));
+        $overdueAmount = $this->overdueAmountAllTime($now);
 
         // 2. Invoices summary MTD
         $invoicesMtd = Invoice::whereBetween('created_at', [$startMtd, $endMtd])->get();
@@ -339,6 +337,39 @@ class DashboardService
             'total_count' => $count,
             'by_reason' => $breakdown,
         ];
+    }
+
+    private function overdueAmountAllTime(Carbon $now): float
+    {
+        $tenantId = app(CurrentTenant::class)->id();
+
+        $sql = 'SELECT COALESCE(SUM(GREATEST(0::numeric, '
+            .'inv.total_amount - ('
+            .'GREATEST(0::numeric, COALESCE(p.gross_paid, 0::numeric) - COALESCE(r.refunded, 0::numeric))'
+            .' + COALESCE(p.deducted, 0::numeric)'
+            .'))), 0::numeric) AS overdue '
+            .'FROM invoices inv '
+            .'LEFT JOIN ('
+            .'SELECT invoice_id, SUM(amount) AS gross_paid, SUM(deduct_amount) AS deducted '
+            .'FROM payments WHERE tenant_id = ? AND deleted_at IS NULL GROUP BY invoice_id'
+            .') p ON p.invoice_id = inv.id '
+            .'LEFT JOIN ('
+            .'SELECT invoice_id, SUM(amount) AS refunded '
+            .'FROM refunds WHERE tenant_id = ? GROUP BY invoice_id'
+            .') r ON r.invoice_id = inv.id '
+            .'WHERE inv.tenant_id = ? AND inv.deleted_at IS NULL '
+            .'AND inv.status IN (?, ?) AND inv.created_at < ?';
+
+        $record = DB::selectOne($sql, [
+            $tenantId,
+            $tenantId,
+            $tenantId,
+            InvoiceStatus::UNPAID->value,
+            InvoiceStatus::PARTIAL->value,
+            $now->copy()->startOfDay(),
+        ]);
+
+        return round((float) ($record->overdue ?? 0), 2);
     }
 
     private function netCollectedBetween(Carbon $start, Carbon $end): float

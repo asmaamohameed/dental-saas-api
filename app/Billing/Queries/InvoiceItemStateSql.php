@@ -163,6 +163,73 @@ SQL;
         return (float) $this->numericString($values['outstanding'] ?? null);
     }
 
+    /**
+     * Sum of invoice total_amount for open billing (excludes cancelled and fully refunded status).
+     * Refunds on partial/unpaid invoices do not change total_amount; only status REFUNDED excludes the row.
+     */
+    public function sumTotalInvoicedAllTime(): float
+    {
+        $tenantId = app(CurrentTenant::class)->id();
+        if ($tenantId === null || $tenantId === '') {
+            throw new \RuntimeException('Cannot sum total invoiced without a tenant context.');
+        }
+
+        $cancelled = InvoiceStatus::CANCELLED->value;
+        $refunded = InvoiceStatus::REFUNDED->value;
+
+        $record = DB::table('invoices')
+            ->where('tenant_id', $tenantId)
+            ->whereNull('deleted_at')
+            ->whereNotIn('status', [$cancelled, $refunded])
+            ->selectRaw('COALESCE(SUM(total_amount), 0) AS total')
+            ->first();
+
+        if ($record === null) {
+            return 0.0;
+        }
+
+        return (float) $this->numericString($record->total ?? null);
+    }
+
+    /**
+     * Sum of remaining balance on non-cancelled, non-refunded invoices.
+     * Matches InvoiceBalance: total - (max(0, gross_paid - refunded) + deducted).
+     */
+    public function sumOutstandingInvoiceBalanceAllTime(): float
+    {
+        $tenantId = app(CurrentTenant::class)->id();
+        if ($tenantId === null || $tenantId === '') {
+            throw new \RuntimeException('Cannot sum outstanding invoice balance without a tenant context.');
+        }
+
+        $cancelled = InvoiceStatus::CANCELLED->value;
+        $refunded = InvoiceStatus::REFUNDED->value;
+
+        $sql = 'SELECT COALESCE(SUM(GREATEST(0::numeric, inv.total_amount::numeric - ('
+            .'GREATEST(0::numeric, COALESCE(payments.gross_paid, 0::numeric) - COALESCE(refunds.refunded, 0::numeric))'
+            .'+ COALESCE(payments.deducted, 0::numeric)'
+            .'))), 0::numeric) AS outstanding '
+            .'FROM invoices inv '
+            .'LEFT JOIN ('
+            .'SELECT invoice_id, SUM(amount) AS gross_paid, SUM(deduct_amount) AS deducted '
+            .'FROM payments GROUP BY invoice_id'
+            .') payments ON payments.invoice_id = inv.id '
+            .'LEFT JOIN ('
+            .'SELECT invoice_id, SUM(amount) AS refunded FROM refunds GROUP BY invoice_id'
+            .') refunds ON refunds.invoice_id = inv.id '
+            .'WHERE inv.deleted_at IS NULL AND inv.status NOT IN (?, ?) AND inv.tenant_id = ?';
+
+        $record = DB::selectOne($sql, [$cancelled, $refunded, $tenantId]);
+
+        if (! is_object($record)) {
+            return 0.0;
+        }
+
+        $values = get_object_vars($record);
+
+        return (float) $this->numericString($values['outstanding'] ?? null);
+    }
+
     private function numericString(mixed $value): string
     {
         if (is_int($value) || is_float($value)) {

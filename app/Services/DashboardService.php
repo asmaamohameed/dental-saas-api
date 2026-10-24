@@ -7,13 +7,22 @@ use App\Enums\AppointmentStatus;
 use App\Enums\ExpenseCategory;
 use App\Enums\InvoiceStatus;
 use App\Enums\RefundReasonCode;
+use App\Enums\UserRole;
+use App\Http\Resources\V1\AppointmentResource;
+use App\Http\Resources\V1\InventoryItemResource;
+use App\Http\Resources\V1\InvoiceListResource;
 use App\Models\Appointment;
 use App\Models\Expense;
+use App\Models\InventoryItem;
 use App\Models\Invoice;
+use App\Models\Patient;
 use App\Models\Payment;
 use App\Models\Refund;
+use App\Models\User;
 use App\Support\Billing\InvoiceFinancials;
+use App\Support\Roles\ClinicPermissionGate;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Gate;
 
 class DashboardService
 {
@@ -372,5 +381,104 @@ class DashboardService
         }
 
         return $breakdown;
+    }
+
+    /**
+     * One round-trip payload for the clinic dashboard overview.
+     * Permission checks stay the same as the individual endpoints; denied
+     * sections are empty rather than 403 so one request can serve every role.
+     *
+     * @return array<string, mixed>
+     */
+    public function getClinicOverview(User $user, ?string $dateFrom, ?string $dateTo): array
+    {
+        $user->loadMissing('clinicMembers.roles');
+        $gate = app(ClinicPermissionGate::class);
+
+        $appointmentsQuery = Appointment::query()->with([
+            'patient',
+            'doctor',
+            'service:id,name_ar,name_en,category',
+            'treatmentSessions.treatment.template',
+        ]);
+
+        if (is_string($dateFrom) && $dateFrom !== '') {
+            $appointmentsQuery->where('scheduled_at', '>=', $dateFrom);
+        } else {
+            $appointmentsQuery->where('scheduled_at', '>=', now()->startOfDay());
+        }
+
+        if (is_string($dateTo) && $dateTo !== '') {
+            $appointmentsQuery->where('scheduled_at', '<=', $dateTo);
+        } else {
+            $appointmentsQuery->where('scheduled_at', '<=', now()->endOfDay());
+        }
+
+        if ($user->hasClinicRole(UserRole::DOCTOR) && ! $user->isOwner()) {
+            $appointmentsQuery->where('doctor_id', $user->id);
+        }
+
+        $todayAppointments = $appointmentsQuery
+            ->latest('scheduled_at')
+            ->limit(100)
+            ->get();
+
+        $canFinancials = $user->clinicCan(
+            'dashboard:financials',
+            $gate->baselineAllows($user, 'dashboard:financials')
+        ) && $user->clinicCan(
+            'invoice:view',
+            $gate->baselineAllows($user, 'invoice:view')
+        );
+
+        $invoices = [];
+        $totalInvoicedAllTime = null;
+        $outstandingBalanceAllTime = null;
+
+        if ($canFinancials) {
+            $invoiceRows = Invoice::query()
+                ->with(['patient', 'creator'])
+                ->newestFirst()
+                ->limit(50)
+                ->get();
+            $invoices = InvoiceListResource::collection($invoiceRows)->resolve();
+            $itemStateSql = app(InvoiceItemStateSql::class);
+            $totalInvoicedAllTime = $itemStateSql->sumTotalInvoicedAllTime();
+            $outstandingBalanceAllTime = $itemStateSql->sumOutstandingInvoiceBalanceAllTime();
+        }
+
+        $canInventoryAlerts = Gate::allows('viewAny', InventoryItem::class)
+            && $user->clinicCan(
+                'inventory:alerts',
+                $gate->baselineAllows($user, 'inventory:alerts')
+            );
+
+        $lowStockItems = [];
+        $expiryAlertItems = [];
+
+        if ($canInventoryAlerts) {
+            $lowStockItems = InventoryItemResource::collection(
+                InventoryItem::query()->where('is_active', true)->lowStock()->latest()->limit(50)->get()
+            )->resolve();
+            $expiryAlertItems = InventoryItemResource::collection(
+                InventoryItem::query()
+                    ->where('is_active', true)
+                    ->where('current_quantity', '>', 0)
+                    ->expiryAlert()
+                    ->orderBy('expiry_date')
+                    ->limit(50)
+                    ->get()
+            )->resolve();
+        }
+
+        return [
+            'today_appointments' => AppointmentResource::collection($todayAppointments)->resolve(),
+            'total_patients' => Patient::query()->count(),
+            'invoices' => $invoices,
+            'total_invoiced_all_time' => $totalInvoicedAllTime,
+            'outstanding_balance_all_time' => $outstandingBalanceAllTime,
+            'low_stock_items' => $lowStockItems,
+            'expiry_alert_items' => $expiryAlertItems,
+        ];
     }
 }

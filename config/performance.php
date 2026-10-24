@@ -13,7 +13,7 @@ return [
     |
     */
 
-    'request_timing_enabled' => filter_var(env('REQUEST_TIMING_ENABLED', true), FILTER_VALIDATE_BOOLEAN),
+    'request_timing_enabled' => filter_var(env('REQUEST_TIMING_ENABLED', false), FILTER_VALIDATE_BOOLEAN),
 
     'slow_request_threshold_ms' => (int) env('SLOW_REQUEST_THRESHOLD_MS', 500),
 

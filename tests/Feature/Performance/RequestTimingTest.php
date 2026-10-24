@@ -13,6 +13,8 @@ class RequestTimingTest extends TestCase
 {
     public function test_api_response_includes_server_timing_header(): void
     {
+        config(['performance.request_timing_enabled' => true]);
+
         $this->actingAsTenantUser(role: UserRole::DOCTOR);
 
         $response = $this->getJson('/api/v1/appointments');
@@ -27,6 +29,8 @@ class RequestTimingTest extends TestCase
 
     public function test_slow_request_logs_route_pattern_without_id_or_query_string(): void
     {
+        config(['performance.request_timing_enabled' => true]);
+
         $doctor = $this->actingAsTenantUser(role: UserRole::DOCTOR);
         $appointment = Appointment::factory()->create([
             'doctor_id' => $doctor->id,
@@ -80,6 +84,8 @@ class RequestTimingTest extends TestCase
 
     public function test_slow_query_log_never_includes_bindings(): void
     {
+        config(['performance.request_timing_enabled' => true]);
+
         Log::spy();
 
         $connection = DB::connection();

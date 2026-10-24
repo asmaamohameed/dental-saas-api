@@ -3,13 +3,32 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
+use App\Models\Appointment;
+use App\Models\Patient;
 use App\Services\DashboardService;
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 class DashboardController extends Controller
 {
+    use AuthorizesRequests;
+
     public function __construct(private readonly DashboardService $dashboardService) {}
+
+    public function overview(Request $request): JsonResponse
+    {
+        $this->authorize('viewAny', Appointment::class);
+        $this->authorize('viewAny', Patient::class);
+
+        $data = $this->dashboardService->getClinicOverview(
+            $request->user(),
+            $request->query('date_from'),
+            $request->query('date_to'),
+        );
+
+        return $this->successResponse($data, 'Dashboard overview retrieved successfully.');
+    }
 
     public function financialAnalytics(): JsonResponse
     {

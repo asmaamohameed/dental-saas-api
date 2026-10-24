@@ -76,20 +76,18 @@ class AppServiceProvider extends ServiceProvider
             return Limit::perMinute(20)->by('admin-mutations|'.$actor);
         });
 
-        if (config('performance.request_timing_enabled')) {
-            DB::whenQueryingForLongerThan(
-                (int) config('performance.slow_query_threshold_ms', 500),
-                function ($connection, $event): void {
-                    if (! config('performance.request_timing_enabled')) {
-                        return;
-                    }
-
-                    Log::warning('Slow query', [
-                        'sql' => $event->sql,
-                        'duration_ms' => $event->time,
-                    ]);
+        DB::whenQueryingForLongerThan(
+            (int) config('performance.slow_query_threshold_ms', 500),
+            function ($connection, $event): void {
+                if (! config('performance.request_timing_enabled')) {
+                    return;
                 }
-            );
-        }
+
+                Log::warning('Slow query', [
+                    'sql' => $event->sql,
+                    'duration_ms' => $event->time,
+                ]);
+            }
+        );
     }
 }

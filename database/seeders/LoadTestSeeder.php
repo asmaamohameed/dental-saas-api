@@ -2,18 +2,19 @@
 
 namespace Database\Seeders;
 
-use App\Models\Invoice;
-use App\Services\InvoiceService;
 use App\Support\Roles\ClinicMembershipSync;
 use App\Support\Tenancy\CurrentTenant;
 use Carbon\Carbon;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 
 class LoadTestSeeder extends Seeder
 {
+    private const INSERT_CHUNK = 1_000;
+
     public function run(): void
     {
         if (! app()->environment(['local', 'staging'])) {
@@ -24,49 +25,7 @@ class LoadTestSeeder extends Seeder
 
         $this->command->info('Starting load test data seeding...');
 
-        /*
-        |--------------------------------------------------------------------------
-        | Destructive cleanup of any existing loadtest-* tenant data
-        |--------------------------------------------------------------------------
-        | invoice_items has tenant_id (added via later migration), but we also
-        | clean via invoice_id to be safe. All other child tables use tenant_id.
-        */
-
-        $this->command->info('Cleaning up previous load test data...');
-        $loadTestTenantIds = DB::table('tenants')
-            ->where('subdomain', 'like', 'loadtest-%')
-            ->pluck('id')
-            ->toArray();
-
-        if (! empty($loadTestTenantIds)) {
-            // invoice_items: delete via invoice_id (join through invoices)
-            $loadTestInvoiceIds = DB::table('invoices')
-                ->whereIn('tenant_id', $loadTestTenantIds)
-                ->pluck('id')
-                ->toArray();
-            if (! empty($loadTestInvoiceIds)) {
-                foreach (array_chunk($loadTestInvoiceIds, 5000) as $chunk) {
-                    DB::table('invoice_items')->whereIn('invoice_id', $chunk)->delete();
-                }
-            }
-
-            // All other child tables have tenant_id directly
-            $childTables = [
-                'payments',
-                'invoices',
-                'appointments',
-                'tooth_records',
-                'xray_attachments',
-                'patients',
-                'users',
-                'subscriptions',
-            ];
-            foreach ($childTables as $table) {
-                DB::table($table)->whereIn('tenant_id', $loadTestTenantIds)->delete();
-            }
-            DB::table('tenants')->whereIn('id', $loadTestTenantIds)->delete();
-            $this->command->info('Cleanup complete: removed '.count($loadTestTenantIds).' previous tenants.');
-        }
+        $this->cleanup();
 
         /*
         |--------------------------------------------------------------------------
@@ -74,204 +33,174 @@ class LoadTestSeeder extends Seeder
         |--------------------------------------------------------------------------
         */
 
-        $tenantCount = 1; // Set to 1 for testing, 10 for full run
-        $patientsPerTenant = 1_00;
-        $appointmentsPerTenant = 50;
-        $chunkSize = 2_0;
+        $tenantCount = 1;
+        $patientsPerTenant = 20_000;
+        $appointmentsPerTenant = 60_000;
+        $expensesPerTenant = 5_000;
         $passwordHash = Hash::make('password');
-
-        // Appointment status distribution: 60% completed, 20% scheduled, 10% cancelled, 10% no_show
-        $statusDistribution = array_merge(
-            array_fill(0, 6, 'completed'),
-            array_fill(0, 2, 'scheduled'),
-            array_fill(0, 1, 'cancelled'),
-            array_fill(0, 1, 'no_show'),
-        );
 
         for ($t = 1; $t <= $tenantCount; $t++) {
             $tenantStart = microtime(true);
-            $subdomain = "loadtest-clinic-{$t}";
+            $now = Carbon::now();
 
             /*
             |------------------------------------------------------------------
             | Tenant + Subscription
-            | Using firstOrCreate-style: check existence, only generate UUID
-            | for new rows to avoid overwriting valid IDs on re-runs.
             |------------------------------------------------------------------
             */
 
-            $existingTenant = DB::table('tenants')->where('subdomain', $subdomain)->first();
-            if ($existingTenant) {
-                $tenantId = $existingTenant->id;
-                DB::table('tenants')->where('id', $tenantId)->update([
-                    'name' => "LoadTest Clinic {$t}",
-                    'status' => 'active',
-                ]);
-            } else {
-                $tenantId = Str::uuid()->toString();
-                DB::table('tenants')->insert([
-                    'id' => $tenantId,
-                    'subdomain' => $subdomain,
-                    'name' => "LoadTest Clinic {$t}",
-                    'status' => 'active',
-                ]);
-            }
+            $tenantId = Str::uuid()->toString();
+            DB::table('tenants')->insert([
+                'id' => $tenantId,
+                'subdomain' => "loadtest-clinic-{$t}",
+                'name' => "LoadTest Clinic {$t}",
+                'status' => 'active',
+            ]);
             app(CurrentTenant::class)->set($tenantId);
 
-            // Subscription: firstOrCreate-style
-            $existingSub = DB::table('subscriptions')->where('tenant_id', $tenantId)->first();
-            if (! $existingSub) {
-                DB::table('subscriptions')->insert([
-                    'id' => Str::uuid()->toString(),
-                    'tenant_id' => $tenantId,
-                    'plan_type' => 'Premium',
-                    'start_date' => Carbon::now()->subDays(10)->toDateString(),
-                    'end_date' => Carbon::now()->addYear()->toDateString(),
-                    'status' => 'active',
-                ]);
-            }
+            DB::table('subscriptions')->insert([
+                'id' => Str::uuid()->toString(),
+                'tenant_id' => $tenantId,
+                'plan_type' => 'Premium',
+                'start_date' => $now->copy()->subDays(10)->toDateString(),
+                'end_date' => $now->copy()->addYear()->toDateString(),
+                'status' => 'active',
+            ]);
 
             /*
             |------------------------------------------------------------------
-            | Users (5-15 staff: 1 owner, 3-5 doctors, rest receptionists)
+            | Users: 1 owner, 3-5 doctors, 1 assistant, 2 receptionists
             |------------------------------------------------------------------
             */
 
             $this->command->info("[Tenant {$t}] Creating staff users...");
 
-            $staffCount = random_int(5, 15);
-            $doctorCount = random_int(3, min(5, $staffCount - 2)); // at least 1 owner + 1 receptionist
-            $receptionistCount = $staffCount - 1 - $doctorCount; // 1 is the owner
-
-            $userIds = [];
-            $doctorIds = [];
-
-            // Owner
-            $ownerEmail = "owner{$t}@loadtest.com";
-            $existing = DB::table('users')->where('email', $ownerEmail)->first();
-            if (! $existing) {
-                $ownerId = Str::uuid()->toString();
+            $phoneCounter = 0;
+            $makeUser = function (string $email, string $name, string $role) use ($tenantId, $passwordHash, $t, &$phoneCounter): string {
+                $id = Str::uuid()->toString();
                 DB::table('users')->insert([
-                    'id' => $ownerId,
+                    'id' => $id,
                     'tenant_id' => $tenantId,
-                    'name' => "Owner {$t}",
-                    'email' => $ownerEmail,
-                    'phone' => '+200'.random_int(1000000, 9999999),
+                    'name' => $name,
+                    'email' => $email,
+                    'phone' => '+2011'.str_pad((string) (($t * 1000) + (++$phoneCounter)), 8, '0', STR_PAD_LEFT),
                     'password_hash' => $passwordHash,
-                    'role' => 'owner',
+                    'role' => $role,
                     'is_active' => true,
                 ]);
-            } else {
-                $ownerId = $existing->id;
-            }
-            $userIds[] = $ownerId;
 
-            // Doctors
+                return $id;
+            };
+
+            $ownerId = $makeUser("owner{$t}@loadtest.com", "Owner {$t}", 'owner');
+            $userIds = [$ownerId];
+
+            $doctorCount = random_int(3, 5);
+            $doctorIds = [];
             for ($d = 1; $d <= $doctorCount; $d++) {
-                $doctorEmail = "doctor{$t}_{$d}@loadtest.com";
-                $existing = DB::table('users')->where('email', $doctorEmail)->first();
-                if (! $existing) {
-                    $docId = Str::uuid()->toString();
-                    DB::table('users')->insert([
-                        'id' => $docId,
-                        'tenant_id' => $tenantId,
-                        'name' => "Dr. Doctor {$t}-{$d}",
-                        'email' => $doctorEmail,
-                        'phone' => '+200'.random_int(1000000, 9999999),
-                        'password_hash' => $passwordHash,
-                        'role' => 'doctor',
-                        'is_active' => true,
-                    ]);
-                } else {
-                    $docId = $existing->id;
-                }
-                $userIds[] = $docId;
-                $doctorIds[] = $docId;
+                $id = $makeUser("doctor{$t}_{$d}@loadtest.com", "Dr. Doctor {$t}-{$d}", 'doctor');
+                $doctorIds[] = $id;
+                $userIds[] = $id;
             }
 
-            // Receptionists
-            for ($r = 1; $r <= $receptionistCount; $r++) {
-                $recEmail = "receptionist{$t}_{$r}@loadtest.com";
-                $existing = DB::table('users')->where('email', $recEmail)->first();
-                if (! $existing) {
-                    $recId = Str::uuid()->toString();
-                    DB::table('users')->insert([
-                        'id' => $recId,
-                        'tenant_id' => $tenantId,
-                        'name' => "Receptionist {$t}-{$r}",
-                        'email' => $recEmail,
-                        'phone' => '+200'.random_int(1000000, 9999999),
-                        'password_hash' => $passwordHash,
-                        'role' => 'receptionist',
-                        'is_active' => true,
-                    ]);
-                } else {
-                    $recId = $existing->id;
-                }
-                $userIds[] = $recId;
-            }
+            $userIds[] = $makeUser("assistant{$t}_1@loadtest.com", "Assistant {$t}-1", 'assistant');
+            $userIds[] = $makeUser("receptionist{$t}_1@loadtest.com", "Receptionist {$t}-1", 'receptionist');
+            $userIds[] = $makeUser("receptionist{$t}_2@loadtest.com", "Receptionist {$t}-2", 'receptionist');
 
-            $this->command->info("[Tenant {$t}] Created {$staffCount} staff ({$doctorCount} doctors).");
+            $this->command->info("[Tenant {$t}] Staff done ({$doctorCount} doctors).");
 
             /*
             |------------------------------------------------------------------
-            | Patients (5,000 per tenant, chunked)
+            | Patients
             |------------------------------------------------------------------
             */
 
             $this->command->info("[Tenant {$t}] Creating {$patientsPerTenant} patients...");
 
-            $existingPatientCount = DB::table('patients')->where('tenant_id', $tenantId)->count();
-            $remainingPatients = max(0, $patientsPerTenant - $existingPatientCount);
-            for ($offset = 0; $offset < $remainingPatients; $offset += $chunkSize) {
-                $batchSize = min($chunkSize, $remainingPatients - $offset);
-                $batch = [];
-                for ($p = 1; $p <= $batchSize; $p++) {
-                    $num = $existingPatientCount + $offset + $p;
-                    $batch[] = [
-                        'id' => Str::uuid()->toString(),
-                        'tenant_id' => $tenantId,
-                        'full_name' => "Patient {$t}-{$num}",
-                        'phone' => '+200'.str_pad((string) $num, 9, '0', STR_PAD_LEFT),
-                        'date_of_birth' => Carbon::now()
-                            ->subYears(20 + ($num % 50))
-                            ->subDays($num % 365)
-                            ->toDateString(),
-                        'gender' => ($num % 2 === 0) ? 'male' : 'female',
-                        'medical_history' => json_encode([
-                            'allergies' => [],
-                            'notes' => 'Load test patient',
-                        ]),
-                    ];
-                }
-                DB::table('patients')->insert($batch);
+            $patientRows = [];
+            $patientIds = [];
+            for ($n = 1; $n <= $patientsPerTenant; $n++) {
+                $id = Str::uuid()->toString();
+                $patientIds[] = $id;
+                $patientRows[] = [
+                    'id' => $id,
+                    'tenant_id' => $tenantId,
+                    'full_name' => "Patient {$t}-{$n}",
+                    'phone' => '+200'.str_pad((string) $n, 9, '0', STR_PAD_LEFT),
+                    'date_of_birth' => $now->copy()->subYears(20 + ($n % 50))->subDays($n % 365)->toDateString(),
+                    'gender' => ($n % 2 === 0) ? 'male' : 'female',
+                    'medical_history' => json_encode(['allergies' => [], 'notes' => 'Load test patient']),
+                ];
             }
-            $patientIds = DB::table('patients')
-                ->where('tenant_id', $tenantId)
-                ->orderBy('id')
-                ->pluck('id')
-                ->toArray();
+            $this->insertChunked('patients', $patientRows);
+            unset($patientRows);
 
-            $this->command->info("[Tenant {$t}] Patients done: ".count($patientIds));
+            $patientCount = count($patientIds);
+            $this->command->info("[Tenant {$t}] Patients done: {$patientCount}");
 
             /*
             |------------------------------------------------------------------
-            | Appointments (20,000 per tenant, Mon-Thu 9-5, rotating doctors,
-            | status distribution: 60% completed, 20% scheduled, 10% cancelled, 10% no_show)
+            | Treatment templates: visit services + clinical treatments
             |------------------------------------------------------------------
             */
 
-            $this->command->info("[Tenant {$t}] Creating {$appointmentsPerTenant} appointments...");
+            $this->command->info("[Tenant {$t}] Creating treatment templates...");
 
-            $existingApptCount = DB::table('appointments')->where('tenant_id', $tenantId)->count();
-            $remainingAppts = max(0, $appointmentsPerTenant - $existingApptCount);
-            $doctorIdCount = count($doctorIds);
+            $templateDefs = [
+                'exam' => ['Exam', 'فحص', 'visit', 'full_mouth', 200, 30],
+                'consultation' => ['Consultation', 'استشارة', 'visit', 'full_mouth', 300, 30],
+                'follow_up' => ['Follow-up', 'متابعة', 'visit', 'full_mouth', 150, 15],
+                'filling' => ['Filling', 'حشوة', 'medical', 'tooth', 350, 45],
+                'root_canal' => ['Root canal', 'علاج عصب', 'medical', 'tooth', 1500, 90],
+                'crown' => ['Crown', 'تاج', 'medical', 'tooth', 2500, 60],
+                'extraction' => ['Extraction', 'خلع', 'surgical', 'tooth', 500, 30],
+            ];
+            $tpl = [];
+            $templateRows = [];
+            foreach ($templateDefs as $key => [$nameEn, $nameAr, $category, $scope, $price, $duration]) {
+                $id = Str::uuid()->toString();
+                $tpl[$key] = ['id' => $id, 'name' => $nameEn, 'price' => $price, 'duration' => $duration];
+                $templateRows[] = [
+                    'id' => $id,
+                    'tenant_id' => $tenantId,
+                    'name_ar' => $nameAr,
+                    'name_en' => $nameEn,
+                    'category' => $category,
+                    'scope' => $scope,
+                    'description' => $nameEn,
+                    'default_price' => $price,
+                    'estimated_duration_minutes' => $duration,
+                    'is_active' => true,
+                    'created_at' => $now,
+                    'updated_at' => $now,
+                ];
+            }
+            DB::table('treatment_templates')->insert($templateRows);
 
-            // Precompute enough working days (skip Fri/Sat) so no doctor ever needs
-            // the same day+slot twice — avoids violating the DB overlap constraint.
+            $visitKeys = ['exam', 'consultation', 'follow_up'];
+            $toothKeys = ['filling', 'root_canal', 'crown', 'extraction'];
+            $fdi = [];
+            foreach ([1, 2, 3, 4] as $quadrant) {
+                for ($i = 1; $i <= 8; $i++) {
+                    $fdi[] = (string) ($quadrant * 10 + $i);
+                }
+            }
+
+            /*
+            |------------------------------------------------------------------
+            | Full visit lifecycle (all appointments in the past, Sun-Thu 9:00-16:30,
+            | unique slot per doctor so the overlap constraint never fires)
+            |   0-1  no_show          2-3  cancelled
+            |   4-11 visit fee only   12-17 treatment (no plan)
+            |   18   plan (2 treatments + visit line merged)   19 paid then refunded
+            |------------------------------------------------------------------
+            */
+
+            $this->command->info("[Tenant {$t}] Creating {$appointmentsPerTenant} appointments with billing + treatments...");
+
             $workingDaysCache = [];
-            $cursor = Carbon::now()->copy();
-            $neededDays = (int) ceil($appointmentsPerTenant / max(1, $doctorIdCount) / 16) + 30;
+            $cursor = $now->copy();
+            $neededDays = (int) ceil($appointmentsPerTenant / $doctorCount / 16) + 30;
             while (count($workingDaysCache) < $neededDays) {
                 if (! in_array($cursor->dayOfWeek, [Carbon::FRIDAY, Carbon::SATURDAY])) {
                     $workingDaysCache[] = $cursor->copy();
@@ -279,246 +208,414 @@ class LoadTestSeeder extends Seeder
                 $cursor->subDay();
             }
 
-            // Each doctor gets its own ever-incrementing slot counter (continues from
-            // existing appointment count on re-runs), guaranteeing unique day+time per doctor.
-            $doctorApptIndex = [];
-            foreach ($doctorIds as $docId) {
-                $doctorApptIndex[$docId] = DB::table('appointments')
-                    ->where('tenant_id', $tenantId)
-                    ->where('doctor_id', $docId)
-                    ->count();
-            }
+            $doctorSlot = array_fill_keys($doctorIds, 0);
+            $planRows = $appointmentRows = $treatmentRows = $teethRows = [];
+            $sessionRows = $invoiceRows = $itemRows = $paymentRows = $refundRows = [];
 
-            for ($offset = 0; $offset < $remainingAppts; $offset += $chunkSize) {
-                $batchSize = min($chunkSize, $remainingAppts - $offset);
-                $batch = [];
-                for ($a = 0; $a < $batchSize; $a++) {
-                    $num = $existingApptCount + $offset + $a;
-                    $patientId = $patientIds[$num % count($patientIds)];
+            for ($num = 0; $num < $appointmentsPerTenant; $num++) {
+                $apptId = Str::uuid()->toString();
+                $patientId = $patientIds[$num % $patientCount];
+                $doctorId = $doctorIds[$num % $doctorCount];
 
-                    // Rotate doctors round-robin
-                    $doctorId = $doctorIds[$num % $doctorIdCount];
+                $slotIndex = $doctorSlot[$doctorId]++;
+                $slotInDay = $slotIndex % 16;
+                $scheduledAt = $workingDaysCache[intdiv($slotIndex, 16)]
+                    ->copy()
+                    ->setHour(9 + intdiv($slotInDay, 2))
+                    ->setMinute(($slotInDay % 2) * 30)
+                    ->setSecond(0);
+                $startedAt = $scheduledAt->copy()->addMinutes(5);
+                $completedAt = $scheduledAt->copy()->addMinutes(30);
 
-                    // Unique slot per doctor: 16 slots/day (9AM-4PM x :00/:30)
-                    $slotIndex = $doctorApptIndex[$doctorId]++;
-                    $dayIndex = intdiv($slotIndex, 16);
-                    $slotInDay = $slotIndex % 16;
-                    $hour = 9 + intdiv($slotInDay, 2);
-                    $minute = ($slotInDay % 2) * 30;
+                $kind = $num % 20;
+                $round = intdiv($num, 20);
+                $visitKey = $visitKeys[$round % 3];
+                $visit = $tpl[$visitKey];
 
-                    $scheduledAt = $workingDaysCache[$dayIndex]
-                        ->copy()
-                        ->setHour($hour)
-                        ->setMinute($minute)
-                        ->setSecond(0);
+                $appt = [
+                    'id' => $apptId,
+                    'tenant_id' => $tenantId,
+                    'patient_id' => $patientId,
+                    'doctor_id' => $doctorId,
+                    'created_by' => $userIds[array_rand($userIds)],
+                    'scheduled_at' => $scheduledAt,
+                    'duration_minutes' => $visit['duration'],
+                    'status' => 'completed',
+                    'appointment_type' => $visitKey === 'follow_up' ? 'follow_up' : 'consultation',
+                    'service_id' => $visit['id'],
+                    'fee' => $visit['price'],
+                    'treatment_plan_id' => null,
+                    'checked_in_at' => $scheduledAt,
+                    'started_at' => $startedAt,
+                    'completed_at' => $completedAt,
+                    'notes' => 'Load test appointment',
+                    'created_at' => $scheduledAt,
+                    'updated_at' => $completedAt,
+                ];
 
-                    $status = $statusDistribution[$num % 10];
+                if ($kind < 4) {
+                    // a) no_show / e) cancelled before check-in: appointment only
+                    $appt['status'] = $kind < 2 ? 'no_show' : 'cancelled';
+                    $appt['checked_in_at'] = $appt['started_at'] = $appt['completed_at'] = null;
+                } elseif ($kind < 12 || $kind === 19) {
+                    // b) visit fee only (and f: same, then fully paid + refunded)
+                    $invoiceId = Str::uuid()->toString();
+                    $fee = (float) $visit['price'];
+                    [$invStatus, $paid] = $kind === 19 ? ['refunded', $fee] : $this->payState($round, $fee);
 
-                    $batch[] = [
-                        'id' => Str::uuid()->toString(),
-                        'tenant_id' => $tenantId,
-                        'patient_id' => $patientId,
-                        'doctor_id' => $doctorId,
-                        'created_by' => $userIds[array_rand($userIds)],
-                        'scheduled_at' => $scheduledAt,
-                        'duration_minutes' => 30,
-                        'status' => $status,
-                        'notes' => 'Load test appointment',
+                    $invoiceRows[] = [
+                        'id' => $invoiceId, 'tenant_id' => $tenantId, 'patient_id' => $patientId,
+                        'appointment_id' => $apptId, 'treatment_plan_id' => null,
+                        'created_by' => $doctorId, 'total_amount' => $fee, 'status' => $invStatus,
+                        'created_at' => $scheduledAt, 'updated_at' => $completedAt,
                     ];
-                }
-                DB::table('appointments')->insert($batch);
-            }
-
-            $this->command->info("[Tenant {$t}] Appointments done.");
-
-            /*
-            |------------------------------------------------------------------
-            | Build appointment lookup: id -> {patient_id, doctor_id, status}
-            | Only completed appointments get invoices; all get tooth records.
-            |------------------------------------------------------------------
-            */
-
-            $allAppointments = DB::table('appointments')
-                ->where('tenant_id', $tenantId)
-                ->orderBy('id')
-                ->select(['id', 'patient_id', 'doctor_id', 'status'])
-                ->get();
-
-            $completedAppointments = $allAppointments->where('status', 'completed')->values();
-
-            $this->command->info("[Tenant {$t}] Completed appointments for invoicing: ".$completedAppointments->count());
-
-            /*
-            |------------------------------------------------------------------
-            | X-ray Attachments (5,000 per tenant)
-            | Schema: file_url, file_type, uploaded_by, appointment_id
-            |------------------------------------------------------------------
-            */
-
-            $this->command->info("[Tenant {$t}] Creating X-ray attachments...");
-
-            $xrayBatch = [];
-            for ($x = 0; $x < 5000; $x++) {
-                $appt = $allAppointments[$x % count($allAppointments)];
-                $xrayBatch[] = [
-                    'id' => Str::uuid()->toString(),
-                    'tenant_id' => $tenantId,
-                    'patient_id' => $appt->patient_id,
-                    'appointment_id' => $appt->id,
-                    'file_url' => "https://storage.loadtest.local/xrays/tenant-{$t}/xray_{$x}.png",
-                    'file_type' => 'image/png',
-                    'uploaded_by' => $appt->doctor_id,
-                ];
-                if (count($xrayBatch) >= $chunkSize) {
-                    DB::table('xray_attachments')->insert($xrayBatch);
-                    $xrayBatch = [];
-                }
-            }
-            if (! empty($xrayBatch)) {
-                DB::table('xray_attachments')->insert($xrayBatch);
-            }
-
-            $this->command->info("[Tenant {$t}] X-ray attachments done.");
-
-            /*
-            |------------------------------------------------------------------
-            | Invoices (only from completed appointments)
-            | CRITICAL: patient_id is derived FROM the appointment, not independently
-            |------------------------------------------------------------------
-            */
-
-            $this->command->info("[Tenant {$t}] Creating invoices from completed appointments...");
-
-            $invoiceBatch = [];
-            $completedCount = $completedAppointments->count();
-            for ($inv = 0; $inv < $completedCount; $inv++) {
-                $appt = $completedAppointments[$inv];
-                $price = 150 + (($inv % 10) * 25);
-                $invoiceBatch[] = [
-                    'id' => Str::uuid()->toString(),
-                    'tenant_id' => $tenantId,
-                    'patient_id' => $appt->patient_id, // derived from appointment
-                    'appointment_id' => $appt->id,
-                    'created_by' => $appt->doctor_id,
-                    'total_amount' => $price,
-                    'status' => 'unpaid',
-                ];
-                if (count($invoiceBatch) >= $chunkSize) {
-                    DB::table('invoices')->insert($invoiceBatch);
-                    $invoiceBatch = [];
-                }
-            }
-            if (! empty($invoiceBatch)) {
-                DB::table('invoices')->insert($invoiceBatch);
-            }
-
-            $invoiceIds = DB::table('invoices')
-                ->where('tenant_id', $tenantId)
-                ->orderBy('id')
-                ->pluck('id')
-                ->toArray();
-
-            $this->command->info("[Tenant {$t}] Invoices done: ".count($invoiceIds));
-
-            /*
-            |------------------------------------------------------------------
-            | Invoice Items (1-4 per invoice, chunked)
-            |------------------------------------------------------------------
-            */
-
-            $this->command->info("[Tenant {$t}] Creating invoice items...");
-
-            $itemBatch = [];
-            foreach ($invoiceIds as $idx => $invoiceId) {
-                $invoiceRow = DB::table('invoices')->where('id', $invoiceId)->first();
-                $price = (float) ($invoiceRow->total_amount ?? 0);
-                $itemBatch[] = [
-                    'id' => Str::uuid()->toString(),
-                    'tenant_id' => $tenantId,
-                    'invoice_id' => $invoiceId,
-                    'description' => 'Load test line item',
-                    'quantity' => 1,
-                    'price' => $price,
-                ];
-                if (count($itemBatch) >= $chunkSize) {
-                    DB::table('invoice_items')->insert($itemBatch);
-                    $itemBatch = [];
-                }
-            }
-            if (! empty($itemBatch)) {
-                DB::table('invoice_items')->insert($itemBatch);
-            }
-
-            $this->command->info("[Tenant {$t}] Invoice items done.");
-
-            /*
-            |------------------------------------------------------------------
-            | Payments (0-3 per invoice, BATCHED in chunks of 2000)
-            | Schema: tenant_id, invoice_id, amount, paid_at, method,
-            |         received_by (nullable), notes (nullable)
-            |------------------------------------------------------------------
-            */
-
-            $this->command->info("[Tenant {$t}] Creating payments...");
-
-            $paymentBatch = [];
-            foreach ($invoiceIds as $idx => $invoiceId) {
-                $invoiceRow = DB::table('invoices')->where('id', $invoiceId)->first();
-                $total = (float) ($invoiceRow->total_amount ?? 0);
-                $targetStatus = ($idx % 3 === 0) ? 'paid' : (($idx % 3 === 1) ? 'unpaid' : 'partial');
-                $amount = match ($targetStatus) {
-                    'paid' => $total,
-                    'partial' => round($total / 2, 2),
-                    default => 0.0,
-                };
-
-                if ($amount > 0) {
-                    $paymentBatch[] = [
-                        'id' => Str::uuid()->toString(),
-                        'tenant_id' => $tenantId,
-                        'invoice_id' => $invoiceId,
-                        'amount' => $amount,
-                        'paid_at' => Carbon::now()->subDays(random_int(0, 30)),
-                        'method' => ['cash', 'transfer', 'card'][random_int(0, 2)],
-                        'received_by' => $userIds[array_rand($userIds)],
-                        'notes' => null,
+                    $itemRows[] = [
+                        'id' => Str::uuid()->toString(), 'tenant_id' => $tenantId, 'invoice_id' => $invoiceId,
+                        'patient_treatment_id' => null, 'patient_treatment_tooth_id' => null,
+                        'appointment_id' => $apptId, 'description' => $visit['name'],
+                        'price' => $fee, 'quantity' => 1,
+                        'created_at' => $scheduledAt, 'updated_at' => $scheduledAt,
                     ];
+                    if ($paid > 0) {
+                        $paymentRows[] = $this->paymentRow($tenantId, $invoiceId, $paid, $completedAt, $userIds);
+                    }
+                    if ($kind === 19) {
+                        $refundRows[] = [
+                            'id' => Str::uuid()->toString(), 'tenant_id' => $tenantId, 'invoice_id' => $invoiceId,
+                            'amount' => $fee, 'type' => 'full', 'invoice_item_id' => null,
+                            'reason_code' => 'other', 'reason_note' => 'Load test refund',
+                            'method' => 'cash', 'refunded_by' => $ownerId,
+                            'refunded_at' => $completedAt, 'created_at' => $completedAt, 'updated_at' => $completedAt,
+                        ];
+                    }
+                } elseif ($kind < 18) {
+                    // c) doctor adds a tooth treatment, no plan, no visit fee
+                    $appt['appointment_type'] = 'treatment_visit';
+                    $appt['service_id'] = null;
+                    $appt['fee'] = null;
+                    $appt['duration_minutes'] = 30;
+
+                    $clinical = ($round % 10) < 7 ? 'completed' : 'in_progress';
+                    $g = $this->treatmentGraph(
+                        $tenantId, $patientId, $doctorId, null, $apptId,
+                        $tpl[$toothKeys[$num % 4]], 1 + ($round % 3), $clinical, $fdi, $num, $scheduledAt
+                    );
+                    $treatmentRows[] = $g['treatment'];
+                    array_push($teethRows, ...$g['teeth']);
+                    $sessionRows[] = $g['session'];
+
+                    [$invStatus, $paid] = $clinical === 'completed' ? $this->payState($round, $g['total']) : ['unpaid', 0.0];
+                    $treatmentRows[array_key_last($treatmentRows)]['financial_status'] = $invStatus;
+
+                    $invoiceId = Str::uuid()->toString();
+                    $invoiceRows[] = [
+                        'id' => $invoiceId, 'tenant_id' => $tenantId, 'patient_id' => $patientId,
+                        'appointment_id' => null, 'treatment_plan_id' => null,
+                        'created_by' => $doctorId, 'total_amount' => $g['total'], 'status' => $invStatus,
+                        'created_at' => $scheduledAt, 'updated_at' => $completedAt,
+                    ];
+                    $itemRows[] = $this->treatmentItemRow($tenantId, $invoiceId, $g, $scheduledAt);
+                    if ($paid > 0) {
+                        $paymentRows[] = $this->paymentRow($tenantId, $invoiceId, $paid, $completedAt, $userIds);
+                    }
+                } else {
+                    // d) plan with 2 treatments + visit line merged into the plan invoice
+                    $planId = Str::uuid()->toString();
+                    $planRows[] = [
+                        'id' => $planId, 'tenant_id' => $tenantId, 'patient_id' => $patientId,
+                        'title' => "Load test plan {$num}", 'status' => 'active',
+                        'created_at' => $scheduledAt, 'updated_at' => $scheduledAt,
+                    ];
+                    $appt['treatment_plan_id'] = $planId;
+
+                    $fee = (float) $visit['price'];
+                    $invoiceId = Str::uuid()->toString();
+                    $planItems = [[
+                        'id' => Str::uuid()->toString(), 'tenant_id' => $tenantId, 'invoice_id' => $invoiceId,
+                        'patient_treatment_id' => null, 'patient_treatment_tooth_id' => null,
+                        'appointment_id' => $apptId, 'description' => $visit['name'],
+                        'price' => $fee, 'quantity' => 1,
+                        'created_at' => $scheduledAt, 'updated_at' => $scheduledAt,
+                    ]];
+                    $grandTotal = $fee;
+                    $graphs = [];
+
+                    for ($k = 0; $k < 2; $k++) {
+                        $g = $this->treatmentGraph(
+                            $tenantId, $patientId, $doctorId, $planId, $apptId,
+                            $tpl[$toothKeys[($num + $k) % 4]], 1 + $k, 'completed', $fdi, $num + $k, $scheduledAt
+                        );
+                        $graphs[] = $g;
+                        $grandTotal += $g['total'];
+                        $planItems[] = $this->treatmentItemRow($tenantId, $invoiceId, $g, $scheduledAt);
+                    }
+
+                    [$invStatus, $paid] = $this->payState($round, $grandTotal);
+                    foreach ($graphs as $g) {
+                        $g['treatment']['financial_status'] = $invStatus;
+                        $treatmentRows[] = $g['treatment'];
+                        array_push($teethRows, ...$g['teeth']);
+                        $sessionRows[] = $g['session'];
+                    }
+
+                    $invoiceRows[] = [
+                        'id' => $invoiceId, 'tenant_id' => $tenantId, 'patient_id' => $patientId,
+                        'appointment_id' => null, 'treatment_plan_id' => $planId,
+                        'created_by' => $doctorId, 'total_amount' => $grandTotal, 'status' => $invStatus,
+                        'created_at' => $scheduledAt, 'updated_at' => $completedAt,
+                    ];
+                    array_push($itemRows, ...$planItems);
+                    if ($paid > 0) {
+                        $paymentRows[] = $this->paymentRow($tenantId, $invoiceId, $paid, $completedAt, $userIds);
+                    }
                 }
 
-                if (count($paymentBatch) >= $chunkSize) {
-                    DB::table('payments')->insert($paymentBatch);
-                    $paymentBatch = [];
-                }
+                $appointmentRows[] = $appt;
             }
-            if (! empty($paymentBatch)) {
-                DB::table('payments')->insert($paymentBatch);
+            unset($workingDaysCache);
+
+            // FK order: templates (done) -> plans -> appointments -> treatments -> teeth
+            //           -> sessions -> invoices -> items -> payments -> refunds
+            $this->insertChunked('treatment_plans', $planRows);
+            $this->insertChunked('appointments', $appointmentRows);
+            $this->insertChunked('patient_treatments', $treatmentRows);
+            $this->insertChunked('patient_treatment_teeth', $teethRows);
+            $this->insertChunked('treatment_sessions', $sessionRows);
+            $this->insertChunked('invoices', $invoiceRows);
+            $this->insertChunked('invoice_items', $itemRows);
+            $this->insertChunked('payments', $paymentRows);
+            $this->insertChunked('refunds', $refundRows);
+
+            $this->command->info(sprintf(
+                '[Tenant %d] Appointments %d, treatments %d, invoices %d, payments %d, refunds %d',
+                $t, count($appointmentRows), count($treatmentRows), count($invoiceRows), count($paymentRows), count($refundRows)
+            ));
+            unset($planRows, $appointmentRows, $treatmentRows, $teethRows, $sessionRows, $invoiceRows, $itemRows, $paymentRows, $refundRows);
+
+            /*
+            |------------------------------------------------------------------
+            | Expenses (spread over the last 12 months)
+            |------------------------------------------------------------------
+            */
+
+            $this->command->info("[Tenant {$t}] Creating {$expensesPerTenant} expenses...");
+
+            $categories = ['electricity', 'internet', 'rent', 'water', 'salary', 'lab', 'other'];
+            $expenseRows = [];
+            for ($i = 0; $i < $expensesPerTenant; $i++) {
+                $date = $now->copy()->subDays($i % 365);
+                $expenseRows[] = [
+                    'id' => Str::uuid()->toString(),
+                    'tenant_id' => $tenantId,
+                    'category' => $categories[$i % count($categories)],
+                    'title' => "Load test expense {$i}",
+                    'amount' => 50 + (($i % 40) * 25),
+                    'expense_date' => $date->toDateString(),
+                    'created_by' => $ownerId,
+                    'notes' => null,
+                    'created_at' => $date,
+                    'updated_at' => $date,
+                ];
             }
-
-            /** @var InvoiceService $invoiceService */
-            $invoiceService = app(InvoiceService::class);
-            Invoice::query()
-                ->where('tenant_id', $tenantId)
-                ->each(fn (Invoice $invoice) => $invoiceService->recalculateStatus($invoice));
-
-            $this->command->info("[Tenant {$t}] Payments done.");
+            $this->insertChunked('expenses', $expenseRows);
+            unset($expenseRows);
 
             $elapsed = round(microtime(true) - $tenantStart, 1);
-            $this->command->info("[Tenant {$t}] ✅ Complete in {$elapsed}s");
+            $this->command->info("[Tenant {$t}] Complete in {$elapsed}s");
         }
 
-        /*
-        |--------------------------------------------------------------------------
-        | Clear tenant context
-        |--------------------------------------------------------------------------
-        */
+        if (DB::getDriverName() === 'pgsql') {
+            $this->command->info('Running ANALYZE...');
+            DB::statement('ANALYZE');
+        }
 
         ClinicMembershipSync::backfillMissing();
 
         app(CurrentTenant::class)->clear();
 
-        $this->command->info('');
-        $this->command->info('==========================================');
         $this->command->info('Load test data seeded successfully.');
-        $this->command->info('==========================================');
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $rows
+     */
+    private function insertChunked(string $table, array $rows): void
+    {
+        foreach (array_chunk($rows, self::INSERT_CHUNK) as $chunk) {
+            DB::table($table)->insert($chunk);
+        }
+    }
+
+    /** @return array{0: string, 1: float} [invoice status, paid amount] */
+    private function payState(int $i, float $total): array
+    {
+        return match ($i % 3) {
+            0 => ['paid', $total],
+            1 => ['partial', round($total / 2, 2)],
+            default => ['unpaid', 0.0],
+        };
+    }
+
+    private function paymentRow(string $tenantId, string $invoiceId, float $amount, Carbon $at, array $userIds): array
+    {
+        return [
+            'id' => Str::uuid()->toString(),
+            'tenant_id' => $tenantId,
+            'invoice_id' => $invoiceId,
+            'amount' => $amount,
+            'deduct_amount' => 0,
+            'paid_at' => $at,
+            'method' => ['cash', 'transfer', 'card'][random_int(0, 2)],
+            'received_by' => $userIds[array_rand($userIds)],
+            'notes' => null,
+            'created_at' => $at,
+            'updated_at' => $at,
+        ];
+    }
+
+    private function treatmentItemRow(string $tenantId, string $invoiceId, array $g, Carbon $at): array
+    {
+        return [
+            'id' => Str::uuid()->toString(),
+            'tenant_id' => $tenantId,
+            'invoice_id' => $invoiceId,
+            'patient_treatment_id' => $g['treatment']['id'],
+            'patient_treatment_tooth_id' => null,
+            'appointment_id' => null,
+            'description' => $g['label'],
+            'price' => $g['total'],
+            'quantity' => 1,
+            'created_at' => $at,
+            'updated_at' => $at,
+        ];
+    }
+
+    /**
+     * One tooth-scope treatment: treatment + teeth + one completed session linked to the appointment.
+     * agreed_price is the PER-TOOTH price (total = agreed_price x teeth), same as the app.
+     */
+    private function treatmentGraph(
+        string $tenantId, string $patientId, string $doctorId, ?string $planId, string $appointmentId,
+        array $tpl, int $toothCount, string $clinical, array $fdi, int $seed, Carbon $at
+    ): array {
+        $treatmentId = Str::uuid()->toString();
+        $done = $clinical === 'completed';
+        $teeth = [];
+        $numbers = [];
+        for ($k = 0; $k < $toothCount; $k++) {
+            $number = $fdi[($seed + $k) % 32];
+            $numbers[] = $number;
+            $teeth[] = [
+                'id' => Str::uuid()->toString(),
+                'tenant_id' => $tenantId,
+                'patient_treatment_id' => $treatmentId,
+                'tooth_number' => $number,
+                'status' => $done ? 'done' : 'in_progress',
+                'price' => $tpl['price'],
+                'completed_at' => $done ? $at : null,
+                'created_at' => $at,
+                'updated_at' => $at,
+            ];
+        }
+
+        return [
+            'total' => (float) ($tpl['price'] * $toothCount),
+            'label' => $tpl['name'].' ('.implode(', ', $numbers).')',
+            'teeth' => $teeth,
+            'treatment' => [
+                'id' => $treatmentId,
+                'tenant_id' => $tenantId,
+                'patient_id' => $patientId,
+                'treatment_plan_id' => $planId,
+                'treatment_template_id' => $tpl['id'],
+                'scope' => 'tooth',
+                'agreed_price' => $tpl['price'],
+                'clinical_status' => $clinical,
+                'financial_status' => 'unpaid',
+                'treatment_type' => 'original',
+                'priority' => 'routine',
+                'dentist_id' => $doctorId,
+                'created_by' => $doctorId,
+                'notes' => 'Load test treatment',
+                'started_at' => $at,
+                'completed_at' => $done ? $at : null,
+                'created_at' => $at,
+                'updated_at' => $at,
+            ],
+            'session' => [
+                'id' => Str::uuid()->toString(),
+                'tenant_id' => $tenantId,
+                'patient_treatment_id' => $treatmentId,
+                'appointment_id' => $appointmentId,
+                'dentist_id' => $doctorId,
+                'session_date' => $at,
+                'status' => 'completed',
+                'notes' => 'Load test session',
+                'tooth_numbers' => json_encode($numbers),
+                'created_at' => $at,
+                'updated_at' => $at,
+            ],
+        ];
+    }
+
+    /**
+     * Destructive cleanup of every loadtest-* tenant and its data.
+     */
+    private function cleanup(): void
+    {
+        $this->command->info('Cleaning up previous load test data...');
+
+        $tenantIds = DB::table('tenants')
+            ->where('subdomain', 'like', 'loadtest-%')
+            ->pluck('id')
+            ->toArray();
+
+        if (empty($tenantIds)) {
+            return;
+        }
+
+        $memberIds = DB::table('clinic_members')->whereIn('clinic_id', $tenantIds)->pluck('id')->toArray();
+        if (! empty($memberIds)) {
+            DB::table('clinic_member_role')->whereIn('clinic_member_id', $memberIds)->delete();
+            DB::table('clinic_members')->whereIn('id', $memberIds)->delete();
+        }
+
+        // Order matters (children first). appointments.service_id and
+        // appointments.treatment_plan_id are RESTRICT, so appointments must go
+        // before treatment_plans and treatment_templates.
+        $tables = [
+            'refunds',
+            'invoice_items',
+            'payments',
+            'invoices',
+            'treatment_sessions',
+            'patient_treatment_teeth',
+            'patient_treatments',
+            'tooth_records',
+            'xray_attachments',
+            'expenses',
+            'lab_works',
+            'labs',
+            'lab_work_types',
+            'inventory_transactions',
+            'inventory_items',
+            'audit_logs',
+            'appointments',
+            'treatment_plans',
+            'treatment_templates',
+            'patients',
+            'users',
+            'subscriptions',
+        ];
+
+        foreach ($tables as $table) {
+            if (Schema::hasTable($table) && Schema::hasColumn($table, 'tenant_id')) {
+                DB::table($table)->whereIn('tenant_id', $tenantIds)->delete();
+            }
+        }
+
+        DB::table('tenants')->whereIn('id', $tenantIds)->delete();
+
+        $this->command->info('Cleanup complete: removed '.count($tenantIds).' previous tenants.');
     }
 }

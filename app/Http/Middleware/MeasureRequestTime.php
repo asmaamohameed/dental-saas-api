@@ -49,6 +49,6 @@ class MeasureRequestTime
 
     private function enabled(): bool
     {
-        return (bool) config('performance.request_timing_enabled', true);
+        return (bool) config('performance.request_timing_enabled', false);
     }
 }

@@ -131,6 +131,7 @@ Route::prefix('v1')->group(function () {
         Route::patch('inventory-items/{inventoryItem}/restore', [InventoryItemController::class, 'restore']);
 
         // Dashboard Analytics
+        Route::get('dashboard/overview', [DashboardController::class, 'overview']);
         Route::middleware('clinic.permission:dashboard:financials')->group(function () {
             Route::get('dashboard/financial-analytics', [DashboardController::class, 'financialAnalytics']);
             Route::get('dashboard/income-expense', [DashboardController::class, 'incomeExpense']);
